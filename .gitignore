@@ -62,3 +62,7 @@ DumpMethods.java
 fix_encoding*.py
 config/*.ps1
 config/*.txt
+*.class
+.github/
+mc-sources/
+odin_src/
