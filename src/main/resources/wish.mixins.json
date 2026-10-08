@@ -1,0 +1,21 @@
+{
+	"required": true,
+	"package": "com.wish.client.mixin",
+	"compatibilityLevel": "JAVA_17",
+	"mixins": [
+		"EntityRendererMixin",
+		"EntityRenderDispatcherMixin",
+		"PlayerRendererMixin",
+		"AvatarRenderStateMixin",
+		"RenderSectionRegionMixin",
+		"SodiumLevelSliceMixin",
+		"GuiMixin",
+		"ChatComponentMixin",
+		"EntityMixin",
+		"ItemModelResolverMixin",
+		"ModelManagerAccessor"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

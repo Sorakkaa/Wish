@@ -1,8 +1,8 @@
 {
 	"schemaVersion": 1,
-	"id": "songgka",
+	"id": "wish",
 	"version": "${version}",
-	"name": "Songgka Mod",
+	"name": "Wish Mod",
 	"description": "Mod pour afficher la musique dans le chat !",
 	"authors": [
 		"Sorakkaa"
@@ -12,21 +12,20 @@
 		"sources": "https://github.com/FabricMC/fabric-example-mod"
 	},
 	"license": "CC0-1.0",
-	"icon": "assets/songgka/icon.png",
+	"icon": "assets/wish/icon.png",
 	"environment": "*",
 	"entrypoints": {
 		"client": [
-			"com.songgka.client.SonggkaClient"
+			"com.wish.client.WishClient"
 		]
 	},
 	"mixins": [
-		"songgka.mixins.json"
+		"wish.mixins.json"
 	],
 	"depends": {
 		"fabricloader": ">=0.19.3",
 		"minecraft": [
-			"~26.1.2",
-			"~26.2"
+			"26.2"
 		],
 		"java": ">=25",
 		"fabric-api": "*"

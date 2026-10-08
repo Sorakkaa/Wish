@@ -22,7 +22,7 @@ loom {
 	splitEnvironmentSourceSets()
 
 	mods {
-		"songgka" {
+		"wish" {
 			sourceSet sourceSets.main
 			sourceSet sourceSets.client
 		}
@@ -66,8 +66,9 @@ java {
 	// If you remove this line, sources will not be generated.
 	withSourcesJar()
 
-	sourceCompatibility = JavaVersion.VERSION_25
-	targetCompatibility = JavaVersion.VERSION_25
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(25)
+	}
 }
 
 jar {
@@ -95,3 +96,5 @@ publishing {
 		// retrieving dependencies.
 	}
 }
+
+

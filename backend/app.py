@@ -23,7 +23,7 @@ def save_data(data):
 
 @app.route("/", methods=["GET"])
 def index():
-    return "Songkkaa Backend is running!"
+    return "Wish Backend is running!"
 
 @app.route("/colors", methods=["GET"])
 def get_colors():

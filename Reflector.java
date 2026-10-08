@@ -1,1 +1,0 @@
-import java.lang.reflect.Method; public class Reflector { public static void main(String[] args) throws Exception { Class<?> clazz = Class.forName("net.minecraft.client.renderer.entity.LivingEntityRenderer"); for (Method m : clazz.getDeclaredMethods()) { System.out.println(m.getName() + " : " + m.toString()); } } }
