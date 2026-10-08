@@ -41,20 +41,20 @@ public class ModConfig {
 	public boolean enableYuri = true;
 	public boolean enableNameColor = true; // couleur du pseudo activée
 	public boolean enableF5NameTag = true; // afficher notre propre nametag en f5
-	public String customPrefix = "";
-	public String customSuffix = "";
-	public int pseudoFont = 0; // 0=gras, 1=normal, 2=italique
-	public int pseudoAnimation = 0; // 0=none, 1=chroma
-	public float pseudoAnimationSpeed = 1.0f; // Multiplier for animation speed
-	public float playerSizeX = 1.0f;
-	public float playerSizeY = 1.0f;
-	public float playerSizeZ = 1.0f;
+	public String customPrefix = "˚˖❀";
+	public String customSuffix = "The Mistress";
+	public int pseudoFont = 1; // 1=gras (bit 0)
+	public int pseudoAnimation = 3; // 3=Wave
+	public float pseudoAnimationSpeed = 0.50f; // Multiplier for animation speed
+	public float playerSizeX = 1.00f;
+	public float playerSizeY = 0.30f;
+	public float playerSizeZ = 0.01f;
 	public boolean playerSizeEnabled = true;
 	public int cosmeticVisibility = 0; // 0 = Show All, 1 = Mine Only, 2 = Hide All
 	
 	public boolean enablePlayerSpin = false;
 	public float playerSpinSpeedX = 0.0f;
-	public float playerSpinSpeedY = 1.0f;
+	public float playerSpinSpeedY = 0.00f;
 	public float playerSpinSpeedZ = 0.0f;
 	
 	public boolean enableCustomBlocksF7M7 = true;
@@ -64,9 +64,9 @@ public class ModConfig {
 	public int lagHudY = 10;
 	public float lagHudScale = 1.0f;
 	public boolean enableUpdateCheck = true;
-	public String customHexColor = "#FF55AA"; // couleur Hex personnalisée (ex: #FF55AA)
-	public String customHexColor2 = "#55FFFF"; // deuxième couleur pour le dégradé
-	public boolean enableGradient = false; // activer le dégradé à 2 couleurs
+	public String customHexColor = "#FFC6F9"; // couleur Hex personnalisée
+	public String customHexColor2 = "#7B0000"; // deuxième couleur pour le dégradé
+	public boolean enableGradient = true; // activer le dégradé à 2 couleurs
 	public boolean enableSlayerCarry = true;
 	public boolean enableBossSpawnHud = true;
 	public String slayerGlowColor = "#FF55AA";

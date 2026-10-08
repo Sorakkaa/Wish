@@ -16,4 +16,10 @@ public interface ISizeableState {
 
     boolean wish$isMairuy();
     void wish$setMairuy(boolean isMairuy);
+
+    boolean wish$isFi4sk0();
+    void wish$setFi4sk0(boolean isFi4sk0);
+
+    boolean wish$isNotsley();
+    void wish$setNotsley(boolean isNotsley);
 }

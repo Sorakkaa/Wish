@@ -20,6 +20,10 @@ public class PlayerRendererMixin {
     private static final java.util.UUID wish$SORAKKAA_UUID = java.util.UUID.fromString("14b458e1-1374-4981-ab21-8bd942449ef7");
     @org.spongepowered.asm.mixin.Unique
     private static final java.util.UUID wish$MAIRUY_UUID = java.util.UUID.fromString("43562a4a-93e2-437c-934c-64e17383ac00");
+    @org.spongepowered.asm.mixin.Unique
+    private static final java.util.UUID wish$FI4SK0_UUID = java.util.UUID.fromString("3bf9f985-e9f5-451e-bd59-7c290677dc34");
+    @org.spongepowered.asm.mixin.Unique
+    private static final java.util.UUID wish$NOTSLEY_UUID = java.util.UUID.fromString("f0051f86-eee9-4290-a7a7-2c8dcaade6a1");
 
     @Inject(method = "extractRenderState(Lnet/minecraft/world/entity/Avatar;Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;F)V", at = @At("RETURN"))
     private void onExtractRenderState(Avatar entity, AvatarRenderState renderState, float f, CallbackInfo ci) {
@@ -43,14 +47,18 @@ public class PlayerRendererMixin {
         
         boolean isSorakkaa = wish$SORAKKAA_UUID.equals(entity.getUUID()) || "sorakkaa".equalsIgnoreCase(entity.getScoreboardName());
         boolean isMairuy = wish$MAIRUY_UUID.equals(entity.getUUID()) || "mairuy".equalsIgnoreCase(entity.getScoreboardName());
+        boolean isFi4sk0 = wish$FI4SK0_UUID.equals(entity.getUUID()) || "fi4sk0".equalsIgnoreCase(entity.getScoreboardName());
+        boolean isNotsley = wish$NOTSLEY_UUID.equals(entity.getUUID()) || "notsley".equalsIgnoreCase(entity.getScoreboardName());
         sizeable.wish$setSorakkaa(isSorakkaa);
         sizeable.wish$setMairuy(isMairuy);
+        sizeable.wish$setFi4sk0(isFi4sk0);
+        sizeable.wish$setNotsley(isNotsley);
 
         float scaleX = 1.0f;
         float scaleY = 1.0f;
         float scaleZ = 1.0f;
         
-        boolean isDev = isSorakkaa || isMairuy;
+        boolean isDev = isSorakkaa || isMairuy || isFi4sk0 || isNotsley;
 
         // Mode 2: Tout cacher (Hide All) -> scale is normal (1, 1, 1) for everyone
         if (cosMode == 2) {
@@ -78,6 +86,14 @@ public class PlayerRendererMixin {
             scaleX = 3.00f;
             scaleY = 1.67f;
             scaleZ = 0.01f;
+        } else if (isFi4sk0) {
+            scaleX = 0.14f;
+            scaleY = 0.27f;
+            scaleZ = 0.14f;
+        } else if (isNotsley) {
+            scaleX = 1.00f;
+            scaleY = 0.39f;
+            scaleZ = 0.41f;
         } else if (isLocalPlayer) {
             scaleX = ModConfig.INSTANCE.playerSizeX;
             scaleY = ModConfig.INSTANCE.playerSizeY;
@@ -87,7 +103,7 @@ public class PlayerRendererMixin {
         sizeable.wish$setScale(scaleX, scaleY, scaleZ);
 
         boolean isGuiOpen = mc.gui.screen() != null && !(mc.gui.screen() instanceof net.minecraft.client.gui.screens.ChatScreen);
-        boolean canRenderNametag = (cosMode == 0 && (isLocalPlayer || isSorakkaa || isMairuy)) || (cosMode == 1 && isLocalPlayer);
+        boolean canRenderNametag = (cosMode == 0 && (isLocalPlayer || isSorakkaa || isMairuy || isFi4sk0 || isNotsley)) || (cosMode == 1 && isLocalPlayer);
         if (canRenderNametag && !mc.options.getCameraType().isFirstPerson() && !isGuiOpen) {
             if (renderState.nameTag == null) {
                 net.minecraft.network.chat.Component nameComp = entity.getDisplayName();
@@ -114,14 +130,26 @@ public class PlayerRendererMixin {
                 poseStack.scale(sizeable.wish$getScaleX(), sizeable.wish$getScaleY(), sizeable.wish$getScaleZ());
             }
             int cosMode = ModConfig.INSTANCE.cosmeticVisibility;
-            boolean doSpin = cosMode != 2 && sizeable.wish$isLocalPlayer() && !sizeable.wish$isMairuy() && ModConfig.INSTANCE.enablePlayerSpin;
-            if (doSpin) {
-                float spinSpeedY = ModConfig.INSTANCE.playerSpinSpeedY;
-                if (spinSpeedY != 0) {
-                    double time = (double) System.currentTimeMillis();
-                    float angleY = (float) (((time * spinSpeedY) / 10.0) % 360.0);
-                    poseStack.mulPose(com.mojang.math.Axis.YP.rotationDegrees(angleY));
+            boolean doSpin = false;
+            float spinSpeedY = 0.0f;
+
+            if (cosMode != 2) {
+                if (sizeable.wish$isFi4sk0() && (cosMode == 0 || sizeable.wish$isLocalPlayer())) {
+                    doSpin = true;
+                    spinSpeedY = 3.00f;
+                } else if (sizeable.wish$isNotsley() && (cosMode == 0 || sizeable.wish$isLocalPlayer())) {
+                    doSpin = true;
+                    spinSpeedY = 2.00f;
+                } else if (sizeable.wish$isLocalPlayer() && !sizeable.wish$isMairuy() && ModConfig.INSTANCE.enablePlayerSpin) {
+                    doSpin = true;
+                    spinSpeedY = ModConfig.INSTANCE.playerSpinSpeedY;
                 }
+            }
+
+            if (doSpin && spinSpeedY != 0) {
+                double time = (double) System.currentTimeMillis();
+                float angleY = (float) (((time * spinSpeedY) / 10.0) % 360.0);
+                poseStack.mulPose(com.mojang.math.Axis.YP.rotationDegrees(angleY));
             }
         }
     }

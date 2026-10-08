@@ -128,6 +128,11 @@ public class WishClient implements ClientModInitializer {
 							sendModelEmptyHandWarning();
 							return 0;
 						}
+						String sbId = com.wish.client.features.CustomModelManager.getSkyblockId(mc.player.getMainHandItem());
+						if (sbId == null || sbId.isEmpty()) {
+							sendModelNoSkyblockIdWarning();
+							return 0;
+						}
 						mc.execute(() -> mc.gui.setScreen(new com.wish.client.gui.WishModelScreen(mc.gui.screen())));
 						return 1;
 					})
@@ -168,6 +173,11 @@ public class WishClient implements ClientModInitializer {
 					Minecraft mc = Minecraft.getInstance();
 					if (mc.player == null || mc.player.getMainHandItem().isEmpty()) {
 						sendModelEmptyHandWarning();
+						return 0;
+					}
+					String sbId = com.wish.client.features.CustomModelManager.getSkyblockId(mc.player.getMainHandItem());
+					if (sbId == null || sbId.isEmpty()) {
+						sendModelNoSkyblockIdWarning();
 						return 0;
 					}
 					mc.execute(() -> mc.gui.setScreen(new com.wish.client.gui.WishModelScreen(mc.gui.screen())));
@@ -751,6 +761,18 @@ public class WishClient implements ClientModInitializer {
 				.withColor(net.minecraft.network.chat.TextColor.fromRgb(0xffc6f9))
 				.withBold(true))
 			.append(net.minecraft.network.chat.Component.literal("Please hold an item in your main hand to customize its model!")
+				.withStyle(net.minecraft.network.chat.Style.EMPTY
+					.withColor(net.minecraft.network.chat.TextColor.fromRgb(0xff5555))
+					.withBold(false)));
+		sendLocalChatMessage(comp);
+	}
+
+	public static void sendModelNoSkyblockIdWarning() {
+		net.minecraft.network.chat.MutableComponent comp = net.minecraft.network.chat.Component.literal("[Wish] ")
+			.withStyle(net.minecraft.network.chat.Style.EMPTY
+				.withColor(net.minecraft.network.chat.TextColor.fromRgb(0xffc6f9))
+				.withBold(true))
+			.append(net.minecraft.network.chat.Component.literal("This item does not have a Skyblock ID! You must hold a Skyblock item.")
 				.withStyle(net.minecraft.network.chat.Style.EMPTY
 					.withColor(net.minecraft.network.chat.TextColor.fromRgb(0xff5555))
 					.withBold(false)));
