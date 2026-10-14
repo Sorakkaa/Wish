@@ -1,0 +1,130 @@
+package com.wish.client.mixin;
+
+import com.wish.client.util.ISizeableState;
+import net.minecraft.client.renderer.entity.state.AvatarRenderState;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
+
+@Mixin(AvatarRenderState.class)
+public class AvatarRenderStateMixin implements ISizeableState {
+    @Unique
+    private float wish$scaleX = 1.0f;
+    @Unique
+    private float wish$scaleY = 1.0f;
+    @Unique
+    private float wish$scaleZ = 1.0f;
+    @Unique
+    private boolean wish$hasCustomScale = false;
+    @Unique
+    private boolean wish$isLocalPlayer = false;
+    @Unique
+    private boolean wish$isSorakkaa = false;
+    @Unique
+    private boolean wish$isMairuy = false;
+    @Unique
+    private boolean wish$isFi4sk0 = false;
+    @Unique
+    private boolean wish$isSmiss78 = false;
+    @Unique
+    private boolean wish$isNotsley = false;
+    @Unique
+    private boolean wish$isDiamix93 = false;
+
+    @Override
+    public float wish$getScaleX() {
+        return wish$scaleX;
+    }
+
+    @Override
+    public float wish$getScaleY() {
+        return wish$scaleY;
+    }
+
+    @Override
+    public float wish$getScaleZ() {
+        return wish$scaleZ;
+    }
+
+    @Override
+    public boolean wish$hasCustomScale() {
+        return wish$hasCustomScale;
+    }
+
+    @Override
+    public void wish$setScale(float x, float y, float z) {
+        this.wish$scaleX = x;
+        this.wish$scaleY = y;
+        this.wish$scaleZ = z;
+        this.wish$hasCustomScale = (x != 1.0f || y != 1.0f || z != 1.0f);
+    }
+    
+    @Override
+    public boolean wish$isLocalPlayer() {
+        return wish$isLocalPlayer;
+    }
+    
+    @Override
+    public void wish$setLocalPlayer(boolean isLocal) {
+        this.wish$isLocalPlayer = isLocal;
+    }
+    
+    @Override
+    public boolean wish$isSorakkaa() {
+        return wish$isSorakkaa;
+    }
+    
+    @Override
+    public void wish$setSorakkaa(boolean isSorakkaa) {
+        this.wish$isSorakkaa = isSorakkaa;
+    }
+
+    @Override
+    public boolean wish$isMairuy() {
+        return wish$isMairuy;
+    }
+
+    @Override
+    public void wish$setMairuy(boolean isMairuy) {
+        this.wish$isMairuy = isMairuy;
+    }
+
+    @Override
+    public boolean wish$isFi4sk0() {
+        return wish$isFi4sk0;
+    }
+
+    @Override
+    public void wish$setFi4sk0(boolean isFi4sk0) {
+        this.wish$isFi4sk0 = isFi4sk0;
+    }
+
+    @Override
+    public boolean wish$isSmiss78() {
+        return wish$isSmiss78;
+    }
+
+    @Override
+    public void wish$setSmiss78(boolean isSmiss78) {
+        this.wish$isSmiss78 = isSmiss78;
+    }
+
+    @Override
+    public boolean wish$isNotsley() {
+        return wish$isNotsley;
+    }
+
+    @Override
+    public void wish$setNotsley(boolean isNotsley) {
+        this.wish$isNotsley = isNotsley;
+    }
+
+    @Override
+    public boolean wish$isDiamix93() {
+        return wish$isDiamix93;
+    }
+
+    @Override
+    public void wish$setDiamix93(boolean isDiamix93) {
+        this.wish$isDiamix93 = isDiamix93;
+    }
+}

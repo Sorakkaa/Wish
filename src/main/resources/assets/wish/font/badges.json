@@ -1,0 +1,21 @@
+{
+  "providers": [
+    {
+      "type": "bitmap",
+      "file": "wish:font/badge_circle.png",
+      "ascent": 7,
+      "height": 8,
+      "chars": [
+        "\ue001"
+      ]
+    },
+    {
+      "type": "reference",
+      "id": "minecraft:include/space"
+    },
+    {
+      "type": "reference",
+      "id": "minecraft:include/default"
+    }
+  ]
+}

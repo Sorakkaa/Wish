@@ -1,0 +1,68 @@
+# gradle
+.gradle/
+build/
+out/
+classes/
+
+# eclipse
+*.launch
+
+# idea
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# vscode
+.settings/
+.vscode/
+bin/
+.classpath
+.project
+
+# macos
+*.DS_Store
+
+# fabric / run
+run/
+logs/
+
+# java / crash
+hs_err_*.log
+replay_*.log
+*.hprof
+*.jfr
+
+# archives & binaries
+*.tar.gz
+*.zip
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# scratch & dumps
+*dump*.txt
+scratch/
+backup/
+*.bak
+
+# temporary test scripts
+FindMethods.java
+TestCamera.java
+TestComponent.java
+TestTextColor.java
+TestTextColorMethods.java
+patch.py
+patch_ui.py
+test.sh
+check_rp.*
+Test.java
+TestRegex*.java
+Reflector.java
+DumpMethods.java
+fix_encoding*.py
+config/*.ps1
+config/*.txt
+*.class
+.github/
+mc-sources/
+odin_src/
