@@ -1,0 +1,34 @@
+{
+	"schemaVersion": 1,
+	"id": "wish",
+	"version": "${version}",
+	"name": "Wish Mod",
+	"description": "A modern Hypixel Skyblock utility and QoL Fabric mod featuring Automaton farming tracker with live Bazaar pricing, Precursor City locator, performance monitors, custom cosmetics, and music chat integrations.",
+	"authors": [
+		"Sorakkaa"
+	],
+	"contact": {
+		"homepage": "https://github.com/Sorakkaa/Wish",
+		"sources": "https://github.com/Sorakkaa/Wish",
+		"issues": "https://github.com/Sorakkaa/Wish/issues"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/wish/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"client": [
+			"com.wish.client.WishClient"
+		]
+	},
+	"mixins": [
+		"wish.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": [
+			"26.2"
+		],
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}
