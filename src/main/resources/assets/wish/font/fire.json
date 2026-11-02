@@ -3,9 +3,12 @@
     {
       "type": "ttf",
       "file": "wish:fire.ttf",
-      "shift": [0, 0],
+      "shift": [
+        0,
+        0
+      ],
       "size": 11.0,
-      "oversample": 12.0
+      "oversample": 3.0
     },
     {
       "type": "reference",
@@ -14,10 +17,6 @@
     {
       "type": "reference",
       "id": "minecraft:include/default"
-    },
-    {
-      "type": "reference",
-      "id": "minecraft:include/unifont"
     }
   ]
 }

@@ -31,10 +31,17 @@ public class UpdateManager {
 
     public static void onPlayerJoin() {
         if (pendingMsg1 != null && pendingMsg2 != null) {
-            WishClient.sendLocalChatMessage(pendingMsg1);
-            WishClient.sendLocalChatMessage(pendingMsg2);
-            pendingMsg1 = null;
-            pendingMsg2 = null;
+            CompletableFuture.runAsync(() -> {
+                try {
+                    Thread.sleep(2000);
+                } catch (InterruptedException ignored) {}
+                if (pendingMsg1 != null && pendingMsg2 != null) {
+                    WishClient.sendLocalChatMessage(pendingMsg1);
+                    WishClient.sendLocalChatMessage(pendingMsg2);
+                    pendingMsg1 = null;
+                    pendingMsg2 = null;
+                }
+            });
         }
     }
 
