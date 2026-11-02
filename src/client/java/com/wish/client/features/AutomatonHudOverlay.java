@@ -9,12 +9,17 @@ import net.minecraft.sounds.SoundEvents;
 
 public final class AutomatonHudOverlay {
 
-    
     private static float lastModeBtnX = 0;
     private static float lastModeBtnY = 0;
     private static float lastModeBtnW = 0;
     private static float lastModeBtnH = 0;
     private static boolean isModeHovered = false;
+
+    private static float lastResetBtnX = 0;
+    private static float lastResetBtnY = 0;
+    private static float lastResetBtnW = 0;
+    private static float lastResetBtnH = 0;
+    private static boolean isResetHovered = false;
 
     
     private static float lastSellBtnX = 0;
@@ -63,6 +68,19 @@ public final class AutomatonHudOverlay {
         lastModeBtnW = modeBtnW;
         lastModeBtnH = modeBtnH;
 
+        int spaceW = mc.font.width(" ");
+        String resetBadge = "[Reset]";
+        int resetBadgeW = mc.font.width(resetBadge);
+        float resetBtnX = x + (modePrefixW + modeBadgeW + spaceW) * scale;
+        float resetBtnY = y + modeLineY * scale;
+        float resetBtnW = resetBadgeW * scale;
+        float resetBtnH = (mc.font.lineHeight + 1) * scale;
+
+        lastResetBtnX = resetBtnX;
+        lastResetBtnY = resetBtnY;
+        lastResetBtnW = resetBtnW;
+        lastResetBtnH = resetBtnH;
+
         
         int dropLineIndex = Math.max(0, auto.mainLines().size() - 1);
         int dropsLineY = dropLineIndex * (mc.font.lineHeight + 1);
@@ -82,6 +100,7 @@ public final class AutomatonHudOverlay {
         lastSellBtnH = sellBtnH;
 
         isModeHovered = inScreen && (mx >= modeBtnX - 4 && mx <= modeBtnX + modeBtnW + 4 && my >= modeBtnY - 3 && my <= modeBtnY + modeBtnH + 3);
+        isResetHovered = inScreen && (mx >= resetBtnX - 4 && mx <= resetBtnX + resetBtnW + 4 && my >= resetBtnY - 3 && my <= resetBtnY + resetBtnH + 3);
         isSellHovered = inScreen && (mx >= sellBtnX - 4 && mx <= sellBtnX + sellBtnW + 4 && my >= sellBtnY - 3 && my <= sellBtnY + sellBtnH + 3);
 
         
@@ -122,6 +141,14 @@ public final class AutomatonHudOverlay {
                 int ttX = Math.min(screenW - ttW - 4, mx + 10);
                 int ttY = Math.min(screenH - mc.font.lineHeight - 4, my + 10);
                 g.text(mc.font, tooltip, ttX, ttY, 0xFFFF55FF);
+            } else if (isResetHovered) {
+                String tooltip = ModConfig.INSTANCE.automatonShowTotalStats
+                        ? "Click to reset Total stats"
+                        : "Click to reset Session stats";
+                int ttW = mc.font.width(tooltip);
+                int ttX = Math.min(screenW - ttW - 4, mx + 10);
+                int ttY = Math.min(screenH - mc.font.lineHeight - 4, my + 10);
+                g.text(mc.font, tooltip, ttX, ttY, 0xFFFF5555);
             } else if (isSellHovered) {
                 String tooltip = ModConfig.INSTANCE.automatonUseInstaSell
                         ? "Click to switch to Sell Offer"
@@ -153,6 +180,22 @@ public final class AutomatonHudOverlay {
             Minecraft mc = Minecraft.getInstance();
             if (mc.getSoundManager() != null) {
                 mc.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0f));
+            }
+            return true;
+        }
+
+        if (mx >= lastResetBtnX - 4 && mx <= lastResetBtnX + lastResetBtnW + 4
+                && my >= lastResetBtnY - 3 && my <= lastResetBtnY + lastResetBtnH + 3) {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.getSoundManager() != null) {
+                mc.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0f));
+            }
+            if (ModConfig.INSTANCE.automatonShowTotalStats) {
+                AutomatonManager.resetTotalStats();
+                com.wish.client.WishClient.sendLocalChatMessage("§cAutomaton total lifetime stats have been reset!");
+            } else {
+                AutomatonManager.resetSessionStats();
+                com.wish.client.WishClient.sendLocalChatMessage("§aAutomaton session tracker stats have been reset!");
             }
             return true;
         }

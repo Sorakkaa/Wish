@@ -393,7 +393,12 @@ public class CustomModelManager {
 
         
         ItemStack cached = replacementCache.get(stack);
-        if (cached != null) return cached;
+        if (cached != null) {
+            if (cached != stack && cached.getCount() != stack.getCount()) {
+                cached.setCount(stack.getCount());
+            }
+            return cached;
+        }
 
         try {
             String repKey = null;

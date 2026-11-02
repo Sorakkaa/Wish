@@ -238,7 +238,7 @@ public class AutomatonManager {
                 URI uri = URI.create("https://api.hypixel.net/v2/skyblock/bazaar");
                 HttpURLConnection conn = (HttpURLConnection) uri.toURL().openConnection();
                 conn.setRequestMethod("GET");
-                conn.setRequestProperty("User-Agent", "Wish-Client/1.0.0");
+                conn.setRequestProperty("User-Agent", "Wish-Client/" + WishClient.MOD_VERSION);
                 conn.setRequestProperty("Accept-Encoding", "gzip");
                 conn.setConnectTimeout(8000);
                 conn.setReadTimeout(8000);
@@ -1097,7 +1097,8 @@ public class AutomatonManager {
 
         
         if (sessionStartTime > 0 && lastKillTime > 0) {
-            if (now - lastKillTime > 30_000L) {
+            long pauseTimeoutMs = Math.max(1, ModConfig.INSTANCE.automatonPauseTimeout) * 1000L;
+            if (now - lastKillTime > pauseTimeoutMs) {
                 if (!isPaused) {
                     isPaused = true;
                     ModConfig.INSTANCE.save();
@@ -1397,6 +1398,14 @@ public class AutomatonManager {
         } else {
             return String.format(Locale.US, "%.0f", coins);
         }
+    }
+
+    public static long getLastKillTime() {
+        return lastKillTime;
+    }
+
+    public static boolean isSessionActive() {
+        return sessionStartTime > 0 && lastKillTime > 0;
     }
 
     public static String formatTime(long seconds) {

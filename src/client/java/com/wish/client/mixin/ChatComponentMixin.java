@@ -28,8 +28,10 @@ public class ChatComponentMixin {
         if (message == null) return message;
         try {
             String text = message.getString();
-            
-            if (text != null && text.contains("[Wish]")) return message;
+            if (text != null) {
+                String clean = com.wish.client.features.SkyblockDetector.stripColorCodes(text).trim();
+                if (clean.startsWith("[Wish]")) return message;
+            }
             Component colored = NameColorManager.colorizeText(message, true);
             return colored != null ? colored : message;
         } catch (Exception ignored) {}
@@ -49,7 +51,9 @@ public class ChatComponentMixin {
                 
                 if (clean.startsWith("[Sacks]") || clean.contains("[Sacks]")) {
                     com.wish.client.features.AutomatonManager.onChatMessage(message);
-                    ci.cancel();
+                    if (SkyblockDetector.isInPrecursorCity || SkyblockDetector.isInPrecursorZone || ModConfig.INSTANCE.automatonHideSackChat) {
+                        ci.cancel();
+                    }
                 }
             }
         }

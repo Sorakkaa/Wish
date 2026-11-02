@@ -17,6 +17,7 @@ public class SkyblockDetector {
     public static boolean isInCrystalNucleus = false;
     public static boolean isInPrecursorCity = false;
     public static boolean isInPrecursorZone = false;
+    public static boolean isInIsland = false;
     private static int tickCounter = 0;
 
     public static void onClientTick(Minecraft mc) {
@@ -26,6 +27,17 @@ public class SkyblockDetector {
             tickCounter = 0;
             updateStatus(mc);
         }
+    }
+
+    public static void reset() {
+        isInSkyblock = false;
+        isInDungeon = false;
+        isInF7OrM7 = false;
+        isInCrystalHollows = false;
+        isInCrystalNucleus = false;
+        isInPrecursorCity = false;
+        isInPrecursorZone = false;
+        isInIsland = false;
     }
 
     private static final java.util.regex.Pattern F7_M7_PATTERN = java.util.regex.Pattern.compile(".*\\b(f7|m7)\\b.*");
@@ -48,9 +60,7 @@ public class SkyblockDetector {
 
     private static void updateStatus(Minecraft mc) {
         if (mc.level == null || mc.player == null) {
-            isInSkyblock = false;
-            isInDungeon = false;
-            isInF7OrM7 = false;
+            reset();
             return;
         }
 
@@ -61,6 +71,7 @@ public class SkyblockDetector {
         boolean newCrystalNucleus = false;
         boolean newPrecursorCity = false;
         boolean newPrecursorZone = false;
+        boolean newIsland = false;
         
         if (ModConfig.INSTANCE.alwaysInM7F7) {
             newSkyblock = true;
@@ -76,7 +87,6 @@ public class SkyblockDetector {
                     if (cleanTitle.contains("SKYBLOCK") || cleanTitle.contains("SKIBLOCK")) {
                         newSkyblock = true;
                         boolean foundDungeonTimer = false;
-                        boolean foundFloorLine = false;
 
                         for (PlayerScoreEntry entry : scoreboard.listPlayerScores(objective)) {
                             String owner = entry.owner();
@@ -94,6 +104,17 @@ public class SkyblockDetector {
                             }
 
                             String lower = cleanLine.toLowerCase();
+
+                            if (lower.contains("your island") || lower.contains("private island")
+                                    || lower.contains("votre île") || lower.contains("votre ile")
+                                    || lower.contains("île privée") || lower.contains("ile privee")
+                                    || lower.contains("'s island") || lower.contains("’s island")
+                                    || ((lower.contains("⏣") || lower.contains("area:") || lower.contains("zone:"))
+                                        && (lower.contains("island") || lower.contains("île") || lower.contains("ile")))) {
+                                if (!lower.contains("farming island")) {
+                                    newIsland = true;
+                                }
+                            }
 
                             if (lower.contains("crystal hollows") || lower.contains("precursor")
                                     || lower.contains("goblin holdout") || lower.contains("mithril deposits")
@@ -139,6 +160,24 @@ public class SkyblockDetector {
                             }
                         }
 
+                        com.wish.client.features.DungeonLagTracker.onScoreboardParsed(foundDungeonTimer);
+
+                        if (!newIsland && newSkyblock && mc.player != null && mc.player.connection != null) {
+                            try {
+                                for (net.minecraft.client.multiplayer.PlayerInfo info : mc.player.connection.getOnlinePlayers()) {
+                                    if (info != null && info.getTabListDisplayName() != null) {
+                                        String tabText = stripColorCodes(info.getTabListDisplayName().getString()).toLowerCase();
+                                        if (tabText.contains("private island") || tabText.contains("your island")
+                                                || tabText.contains("votre île") || tabText.contains("île privée")
+                                                || ((tabText.contains("area:") || tabText.contains("zone:")) && tabText.contains("island"))) {
+                                            newIsland = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            } catch (Exception ignored) {}
+                        }
+
                         
                         if (newF7M7) {
                             newDungeon = true;
@@ -158,12 +197,17 @@ public class SkyblockDetector {
             newPrecursorZone = false;
         }
 
+        if (newDungeon || newCrystalHollows) {
+            newIsland = false;
+        }
+
         isInSkyblock = newSkyblock;
         isInDungeon = newDungeon;
         isInCrystalHollows = newCrystalHollows;
         isInCrystalNucleus = newCrystalNucleus;
         isInPrecursorCity = newPrecursorCity;
         isInPrecursorZone = newPrecursorZone;
+        isInIsland = newIsland;
 
         if (!newDungeon) {
             com.wish.client.features.DungeonLagTracker.forceEndRun();

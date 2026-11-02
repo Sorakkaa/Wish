@@ -46,6 +46,9 @@ backup/
 *.bak
 
 # temporary test scripts
+*.py
+Test*.java
+*.dump
 FindMethods.java
 TestCamera.java
 TestComponent.java

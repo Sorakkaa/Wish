@@ -1,0 +1,23 @@
+{
+  "providers": [
+    {
+      "type": "ttf",
+      "file": "wish:dreamy.ttf",
+      "shift": [0, 0],
+      "size": 11.0,
+      "oversample": 12.0
+    },
+    {
+      "type": "reference",
+      "id": "minecraft:include/space"
+    },
+    {
+      "type": "reference",
+      "id": "minecraft:include/default"
+    },
+    {
+      "type": "reference",
+      "id": "minecraft:include/unifont"
+    }
+  ]
+}

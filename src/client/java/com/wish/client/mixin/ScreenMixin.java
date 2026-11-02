@@ -15,7 +15,7 @@ public abstract class ScreenMixin {
 
     @Inject(method = "extractRenderStateWithTooltipAndSubtitles", at = @At("TAIL"))
     private void onExtractRenderStateWithTooltipAndSubtitles(GuiGraphicsExtractor g, int mx, int my, float pt, CallbackInfo ci) {
-        if ((Object) this instanceof AbstractContainerScreen) {
+        if ((Object) this instanceof AbstractContainerScreen<?> || (Object) this instanceof net.minecraft.client.gui.screens.ChatScreen) {
             Minecraft mc = Minecraft.getInstance();
             if (mc.getWindow() != null) {
                 int screenW = mc.getWindow().getGuiScaledWidth();

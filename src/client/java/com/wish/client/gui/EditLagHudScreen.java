@@ -14,8 +14,6 @@ public class EditLagHudScreen extends Screen {
     private int dragOffsetX = 0;
     private int dragOffsetY = 0;
     private final String mockText = "1000ms";
-    private String mockBossLine1 = "PlayerName";
-    private String mockBossLine2 = "§lBoss spawn";
     private final String[] mockAutoLines = {
         "Automaton Tracker",
         "Kills: 45 (180/h)",
@@ -31,6 +29,24 @@ public class EditLagHudScreen extends Screen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor g, int mx, int my, float pt) {
         super.extractRenderState(g, mx, my, pt);
+
+        // Process active dragging directly in render loop for instant responsiveness
+        if (draggingId != -1) {
+            long window = Minecraft.getInstance().getWindow().handle();
+            if (org.lwjgl.glfw.GLFW.glfwGetMouseButton(window, org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_LEFT) == org.lwjgl.glfw.GLFW.GLFW_PRESS) {
+                if (draggingId == 0) {
+                    ModConfig.INSTANCE.lagHudX = (int) (mx - dragOffsetX);
+                    ModConfig.INSTANCE.lagHudY = (int) (my - dragOffsetY);
+                } else if (draggingId == 2) {
+                    ModConfig.INSTANCE.automatonHudX = (int) (mx - dragOffsetX);
+                    ModConfig.INSTANCE.automatonHudY = (int) (my - dragOffsetY);
+                }
+            } else {
+                draggingId = -1;
+                setDragging(false);
+                ModConfig.INSTANCE.save();
+            }
+        }
         
         g.fill(0, 0, this.width, this.height, 0x44000000);
 
@@ -52,24 +68,19 @@ public class EditLagHudScreen extends Screen {
         int hintW = font.width(hint);
         g.text(font, hint, (this.width - hintW) / 2, 20, 0xFFFFFF);
 
-        renderHudBox(g, font, mx, my, ModConfig.INSTANCE.lagHudX, ModConfig.INSTANCE.lagHudY, ModConfig.INSTANCE.lagHudScale, mockText, null, 0);
-        renderHudBox(g, font, mx, my, ModConfig.INSTANCE.bossHudX, ModConfig.INSTANCE.bossHudY, ModConfig.INSTANCE.bossHudScale, mockBossLine1, mockBossLine2, 1);
+        renderHudBox(g, font, mx, my, ModConfig.INSTANCE.lagHudX, ModConfig.INSTANCE.lagHudY, ModConfig.INSTANCE.lagHudScale, mockText, 0);
         renderAutoHudBox(g, font, mx, my, ModConfig.INSTANCE.automatonHudX, ModConfig.INSTANCE.automatonHudY, ModConfig.INSTANCE.automatonHudScale);
     }
     
-    private void renderHudBox(GuiGraphicsExtractor g, net.minecraft.client.gui.Font font, int mx, int my, int x, int y, float scale, String text1, String text2, int id) {
+    private void renderHudBox(GuiGraphicsExtractor g, net.minecraft.client.gui.Font font, int mx, int my, int x, int y, float scale, String text, int id) {
         if (scale <= 0.1f) scale = 1.0f;
         
-        int w1 = font.width(text1);
-        int w2 = text2 == null ? 0 : font.width(text2);
-        int cardW = Math.max(w1, w2);
-        int cardH = text2 == null ? font.lineHeight : (font.lineHeight * 2 + 2);
+        int cardW = font.width(text);
+        int cardH = font.lineHeight;
         
         int textW = (int) (cardW * scale);
         int textH = (int) (cardH * scale);
-        
-        boolean centered = (id == 1);
-        int leftX = centered ? x - textW / 2 : x;
+        int leftX = x;
         
         boolean hovering = mx >= leftX - 2 && mx <= leftX + textW + 2 && my >= y - 2 && my <= y + textH + 2;
 
@@ -87,12 +98,7 @@ public class EditLagHudScreen extends Screen {
         g.pose().translate(leftX, y);
         g.pose().scale(scale, scale);
 
-        if (id == 1) {
-            g.text(font, text1, (cardW - w1) / 2, 0, 0xFFFFAA00);
-            g.text(font, text2, (cardW - w2) / 2, font.lineHeight + 2, 0xFFFF5555);
-        } else {
-            g.text(font, text1, 0, 0, 0xFFFF5555);
-        }
+        g.text(font, text, 0, 0, 0xFFFF5555);
         
         g.pose().popMatrix();
 
@@ -121,24 +127,22 @@ public class EditLagHudScreen extends Screen {
             g.fill(leftX + textW, 0, leftX + textW + 1, g.guiHeight(), colHudGuide);
             g.fill(0, y, g.guiWidth(), y + 1, colHudGuide);
             g.fill(0, y + textH, g.guiWidth(), y + textH + 1, colHudGuide);
-            g.fill(leftX - 2, y - 2, leftX + textW + 2, y + textH + 2, 0x33FFFFFF);
+
+            g.fill(leftX - 2, y - 2, leftX + textW + 2, y + textH + 2, 0x44FFFFFF);
         }
 
         g.pose().pushMatrix();
         g.pose().translate(leftX, y);
         g.pose().scale(scale, scale);
 
-        if (hovering || draggingId == 2) {
-            RenderUtils.drawGlassPanel(g, 0, 0, cardW, cardH, 0x22000000, 0x44FFAA00);
-        }
         int curY = 0;
-        g.text(font, mockAutoLines[0], 2, curY, 0xFFFFAA00);
-        curY += font.lineHeight + 2;
-        g.text(font, mockAutoLines[1], 2, curY, 0xFF55FF55);
-        curY += font.lineHeight + 2;
-        g.text(font, mockAutoLines[2], 2, curY, 0xFFFFAA00);
-        curY += font.lineHeight + 2;
-        g.text(font, mockAutoLines[3], 2, curY, 0xFF55FFFF);
+        g.text(font, mockAutoLines[0], 0, curY, 0xFFFFAA00);
+        curY += font.lineHeight + 1;
+        g.text(font, mockAutoLines[1], 0, curY, 0xFF55FF55);
+        curY += font.lineHeight + 1;
+        g.text(font, mockAutoLines[2], 0, curY, 0xFFFFAA00);
+        curY += font.lineHeight + 1;
+        g.text(font, mockAutoLines[3], 0, curY, 0xFF55FFFF);
 
         g.pose().popMatrix();
 
@@ -151,16 +155,12 @@ public class EditLagHudScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (scrollY != 0) {
-            double mx = Minecraft.getInstance().mouseHandler.xpos() * (double)this.width / (double)Minecraft.getInstance().getWindow().getScreenWidth();
-            double my = Minecraft.getInstance().mouseHandler.ypos() * (double)this.height / (double)Minecraft.getInstance().getWindow().getScreenHeight();
-            
             var font = Minecraft.getInstance().font;
-            int hoveredId = getHoveredId(mx, my, font);
+            int hoveredId = getHoveredId(mouseX, mouseY, font);
             
             if (hoveredId != -1) {
                 float scale = 1.0f;
                 if (hoveredId == 0) scale = ModConfig.INSTANCE.lagHudScale;
-                else if (hoveredId == 1) scale = ModConfig.INSTANCE.bossHudScale;
                 else if (hoveredId == 2) scale = ModConfig.INSTANCE.automatonHudScale;
                 
                 if (scale <= 0.1f) scale = 1.0f;
@@ -170,7 +170,6 @@ public class EditLagHudScreen extends Screen {
                 scale = Math.round(scale * 10.0f) / 10.0f;
                 
                 if (hoveredId == 0) ModConfig.INSTANCE.lagHudScale = scale;
-                else if (hoveredId == 1) ModConfig.INSTANCE.bossHudScale = scale;
                 else if (hoveredId == 2) ModConfig.INSTANCE.automatonHudScale = scale;
                 
                 return true;
@@ -188,15 +187,6 @@ public class EditLagHudScreen extends Screen {
         int autoH = (int)((mockAutoLines.length * font.lineHeight + (mockAutoLines.length - 1)) * s2);
         if (mx >= x2 - 2 && mx <= x2 + autoW + 2 && my >= y2 - 2 && my <= y2 + autoH + 2) return 2;
 
-        float s1 = ModConfig.INSTANCE.bossHudScale; if (s1 <= 0.1f) s1 = 1.0f;
-        int x1 = ModConfig.INSTANCE.bossHudX; int y1 = ModConfig.INSTANCE.bossHudY;
-        int w1 = font.width(mockBossLine1);
-        int w2 = font.width(mockBossLine2);
-        int bossW = (int)(Math.max(w1, w2) * s1);
-        int bossH = (int)((font.lineHeight * 2 + 2) * s1);
-        int leftX1 = x1 - bossW / 2;
-        if (mx >= leftX1 - 2 && mx <= leftX1 + bossW + 2 && my >= y1 - 2 && my <= y1 + bossH + 2) return 1;
-        
         float s0 = ModConfig.INSTANCE.lagHudScale; if (s0 <= 0.1f) s0 = 1.0f;
         int x0 = ModConfig.INSTANCE.lagHudX; int y0 = ModConfig.INSTANCE.lagHudY;
         int lagW = (int)(font.width(mockText) * s0);
@@ -208,17 +198,19 @@ public class EditLagHudScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean focused) {
-        double mx = Minecraft.getInstance().mouseHandler.xpos() * (double)this.width / (double)Minecraft.getInstance().getWindow().getScreenWidth();
-        double my = Minecraft.getInstance().mouseHandler.ypos() * (double)this.height / (double)Minecraft.getInstance().getWindow().getScreenHeight();
+        if (event == null || event.button() != 0) return super.mouseClicked(event, focused);
+        double mx = event.x();
+        double my = event.y();
         
         var font = Minecraft.getInstance().font;
         int hoveredId = getHoveredId(mx, my, font);
         
         if (hoveredId != -1) {
             draggingId = hoveredId;
+            setFocused(this);
+            setDragging(true);
             int x = 0; int y = 0;
             if (hoveredId == 0) { x = ModConfig.INSTANCE.lagHudX; y = ModConfig.INSTANCE.lagHudY; }
-            else if (hoveredId == 1) { x = ModConfig.INSTANCE.bossHudX; y = ModConfig.INSTANCE.bossHudY; }
             else if (hoveredId == 2) { x = ModConfig.INSTANCE.automatonHudX; y = ModConfig.INSTANCE.automatonHudY; }
             dragOffsetX = (int) (mx - x);
             dragOffsetY = (int) (my - y);
@@ -229,16 +221,13 @@ public class EditLagHudScreen extends Screen {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
-        if (draggingId != -1) {
-            double mx = Minecraft.getInstance().mouseHandler.xpos() * (double)this.width / (double)Minecraft.getInstance().getWindow().getScreenWidth();
-            double my = Minecraft.getInstance().mouseHandler.ypos() * (double)this.height / (double)Minecraft.getInstance().getWindow().getScreenHeight();
+        if (draggingId != -1 && event != null) {
+            double mx = event.x();
+            double my = event.y();
             
             if (draggingId == 0) {
                 ModConfig.INSTANCE.lagHudX = (int) (mx - dragOffsetX);
                 ModConfig.INSTANCE.lagHudY = (int) (my - dragOffsetY);
-            } else if (draggingId == 1) {
-                ModConfig.INSTANCE.bossHudX = (int) (mx - dragOffsetX);
-                ModConfig.INSTANCE.bossHudY = (int) (my - dragOffsetY);
             } else if (draggingId == 2) {
                 ModConfig.INSTANCE.automatonHudX = (int) (mx - dragOffsetX);
                 ModConfig.INSTANCE.automatonHudY = (int) (my - dragOffsetY);
@@ -252,6 +241,7 @@ public class EditLagHudScreen extends Screen {
     public boolean mouseReleased(MouseButtonEvent event) {
         if (draggingId != -1) {
             draggingId = -1;
+            setDragging(false);
             ModConfig.INSTANCE.save();
             return true;
         }

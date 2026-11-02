@@ -45,8 +45,7 @@ public class ModConfig {
 	public boolean enableYuri = true;
 	public boolean enableNameColor = true; 
 	public boolean enableF5NameTag = true; 
-	public String customPrefix = "";
-	public String customSuffix = "";
+	public String spoofedName = "";
 	public int pseudoFont = 0; 
 	public int pseudoAnimation = 0; 
 	public float pseudoAnimationSpeed = 1.00f; 
@@ -62,6 +61,7 @@ public class ModConfig {
 	public float playerSpinSpeedZ = 0.0f;
 	
 	public boolean enableCustomBlocksF7M7 = true;
+	public boolean enableGlassBlocksF7M7 = true;
 	public boolean enableLagTimeLost = true;
 	public boolean sendLagTimeLost = false;
 	public int lagHudX = 10;
@@ -105,6 +105,19 @@ public class ModConfig {
 	public long automatonTotalActiveMs = 0;
 	public long automatonTotalActiveSeconds = 0;
 	public java.util.Map<String, Integer> automatonTotalDrops = new java.util.HashMap<>();
+	public int automatonPauseTimeout = 10; // Pause timeout in seconds (1 to 20)
+
+	// Environment / Lyrics Settings
+	public boolean enableLyrics = false;
+	public int lyricsDisplayMode = 1; // 1: 3D World / Opponent
+	public int lyricsMode = 0; // 0: Word by word, 1: Line by line
+	public boolean lyricsFollowView = false; // true: Follow view (moves with you), false: In-World (stays where appeared)
+	public String lyricsLook = "Lavender"; // Lavender, Dreamy, Fight, Comic, Script, Fire, Ice, Royal, Clean
+	public String lyricsFont = "Lavender"; // Lavender, Dreamy, Fight, Comic, Script, Fire, Ice, Royal, Clean
+	public String lyricsColor = "#D8B4FE";
+	public float lyricsScale = 3.0f;
+	public int lyricsSyncOffsetMs = -500;
+	public boolean lyricsDemoMode = false;
 
 	private static final java.util.concurrent.ScheduledExecutorService SAVE_EXECUTOR = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
 	private static java.util.concurrent.ScheduledFuture<?> pendingSaveTask = null;
@@ -133,6 +146,24 @@ public class ModConfig {
 					}
 					if (INSTANCE.automatonTotalActiveMs == 0 && INSTANCE.automatonTotalActiveSeconds > 0) {
 						INSTANCE.automatonTotalActiveMs = INSTANCE.automatonTotalActiveSeconds * 1000L;
+					}
+					INSTANCE.lyricsDemoMode = false;
+					INSTANCE.lyricsScale = 3.0f;
+					INSTANCE.lyricsFollowView = false;
+					if (INSTANCE.spoofedName == null) {
+						INSTANCE.spoofedName = "";
+					} else if (INSTANCE.spoofedName.length() > 32) {
+						INSTANCE.spoofedName = INSTANCE.spoofedName.substring(0, 32);
+					}
+					if (INSTANCE.lyricsSyncOffsetMs == 0 || INSTANCE.lyricsSyncOffsetMs == 1000) {
+						INSTANCE.lyricsSyncOffsetMs = -500;
+					}
+					if (INSTANCE.lyricsFont == null || INSTANCE.lyricsFont.equalsIgnoreCase("Minecraft")
+							|| INSTANCE.lyricsFont.equalsIgnoreCase("Poppins")
+							|| INSTANCE.lyricsFont.equalsIgnoreCase("Montserrat")
+							|| INSTANCE.lyricsFont.equalsIgnoreCase("Kanit")
+							|| INSTANCE.lyricsFont.equalsIgnoreCase("Fredoka")) {
+						INSTANCE.lyricsFont = "Lavender";
 					}
 					
 					if (toRead.equals(OLD_CONFIG_FILE)) {

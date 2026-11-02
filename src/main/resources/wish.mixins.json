@@ -18,7 +18,9 @@
 		"MultiPlayerGameModeMixin",
 		"AbstractContainerScreenMixin",
 		"ScreenMixin",
-		"GuiMessageLineMixin"
+		"GuiMessageLineMixin",
+		"FontTextureMixin",
+		"PlayerTabOverlayMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

@@ -26,15 +26,7 @@ public final class ChatUtils {
         String noBrackets = beforeColon.replaceAll("\\[.*?\\]", "").trim();
         String[] words = noBrackets.split("\\s+");
         if (words.length > 0) {
-            String lastWord = words[words.length - 1];
-            if (lastWord.equalsIgnoreCase("Mistress") && words.length > 1) {
-                String secondLast = words[words.length - 2];
-                if (secondLast.equalsIgnoreCase("the") && words.length > 2) {
-                    return words[words.length - 3];
-                }
-                return secondLast;
-            }
-            return lastWord;
+            return words[words.length - 1];
         }
         return null;
     }

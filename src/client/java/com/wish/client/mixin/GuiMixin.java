@@ -18,7 +18,6 @@ public class GuiMixin {
 
     private static final int GLASS_BG = 0x00000000;
     private static final int GLASS_BORDER_LAG = 0x00000000;
-    private static final int GLASS_BORDER_BOSS = 0x00000000;
 
     @Inject(method = "extractRenderState", at = @At("RETURN"))
     private void onExtractRenderState(GuiGraphicsExtractor guiGraphics, DeltaTracker deltaTracker, CallbackInfo ci) {
@@ -53,34 +52,6 @@ public class GuiMixin {
         }
 
         
-        if (ModConfig.INSTANCE.enableBossSpawnHud) {
-            var boss = HudStateContainer.getBossSnapshot();
-            if (boss.isVisible()) {
-                int padX = 8;
-                int padY = 5;
-                int cardW = boss.maxWidth() + padX * 2;
-                int cardH = mc.font.lineHeight * 2 + 2 + padY * 2;
-
-                int x = GuiAnchor.TOP_CENTER.resolveX(ModConfig.INSTANCE.bossHudX, cardW, screenW);
-                int y = GuiAnchor.TOP_CENTER.resolveY(ModConfig.INSTANCE.bossHudY, cardH, screenH);
-                float scale = Math.max(0.2f, ModConfig.INSTANCE.bossHudScale);
-
-                guiGraphics.pose().pushMatrix();
-                guiGraphics.pose().translate(x, y);
-                guiGraphics.pose().scale(scale, scale);
-
-                RenderUtils.drawGlassPanel(guiGraphics, 0, 0, cardW, cardH, GLASS_BG, GLASS_BORDER_BOSS);
-                
-                int w1 = mc.font.width(boss.line1());
-                int w2 = mc.font.width(boss.line2());
-                guiGraphics.text(mc.font, boss.line1(), (cardW - w1) / 2, padY, 0xFFFFAA00);
-                guiGraphics.text(mc.font, boss.line2(), (cardW - w2) / 2, padY + mc.font.lineHeight + 2, 0xFFFF5555);
-
-                guiGraphics.pose().popMatrix();
-            }
-        }
-
-        
         var currentScreen = mc.gui != null ? mc.gui.screen() : null;
         if (currentScreen == null || currentScreen instanceof net.minecraft.client.gui.screens.ChatScreen) {
             com.wish.client.features.AutomatonHudOverlay.render(guiGraphics, mc, screenW, screenH, 0, 0, false);
@@ -89,6 +60,11 @@ public class GuiMixin {
         
         if (ModConfig.INSTANCE.enableMiningAutomaton && ModConfig.INSTANCE.enablePrecursorCityScanner) {
             com.wish.client.features.PrecursorCityLocator.renderWaypoint(guiGraphics, mc, screenW, screenH);
+        }
+
+        // Render 3D Lyrics & Atmosphere
+        if (ModConfig.INSTANCE.enableLyrics) {
+            com.wish.client.features.environment.LyricsRenderer.render(guiGraphics, mc, screenW, screenH);
         }
     }
 }

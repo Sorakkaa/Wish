@@ -24,6 +24,8 @@ public class GhostBlockManager {
     public static boolean isGlassGhostBlocksEnabled = true;
 
     public static void init() {
+        isGhostBlocksEnabled = com.wish.client.config.ModConfig.INSTANCE.enableCustomBlocksF7M7;
+        isGlassGhostBlocksEnabled = com.wish.client.config.ModConfig.INSTANCE.enableGlassBlocksF7M7;
         load();
     }
 

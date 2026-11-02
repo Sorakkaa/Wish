@@ -105,7 +105,17 @@ public final class MusicManager {
         try {
             String os = System.getProperty("os.name").toLowerCase();
             if (os.contains("linux")) {
-                ProcessBuilder pb = new ProcessBuilder("bash", "-c", "playerctl -a metadata --format '{{album}}|||{{title}} - {{artist}}' | grep -v '^|||' | head -n 1");
+                String targetPlayers = "spotify,ytmdesktop,youtube-music,youtubemusic,deezer";
+                String prov = ModConfig.INSTANCE.musicProvider;
+                if ("Spotify".equalsIgnoreCase(prov)) {
+                    targetPlayers = "spotify,spotifyd,spotify_player";
+                } else if ("YTM".equalsIgnoreCase(prov)) {
+                    targetPlayers = "ytmdesktop,youtube-music,youtubemusic,youtube_music";
+                } else if ("Deezer".equalsIgnoreCase(prov)) {
+                    targetPlayers = "deezer,deezer-desktop,deezplayer";
+                }
+
+                ProcessBuilder pb = new ProcessBuilder("bash", "-c", "playerctl -p " + targetPlayers + " metadata --format '{{album}}|||{{title}} - {{artist}}' 2>/dev/null | grep -v '^|||' | head -n 1");
                 Process p = pb.start();
                 try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
                     String line = br.readLine();

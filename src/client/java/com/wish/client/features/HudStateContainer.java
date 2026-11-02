@@ -10,24 +10,16 @@ import java.util.Map;
 public final class HudStateContainer {
 
     public record LagSnapshot(boolean isLagging, Component formattedText, long ms, int textWidth) {}
-    public record BossSnapshot(boolean isVisible, Component line1, Component line2, int maxWidth) {}
     public record AutomatonSnapshot(boolean isVisible, List<Component> mainLines, List<Component> dropLines, int maxWidth, int totalHeight) {}
 
     private static volatile LagSnapshot currentLag = new LagSnapshot(false, Component.empty(), 0, 0);
-    private static volatile BossSnapshot currentBoss = new BossSnapshot(false, Component.empty(), Component.empty(), 0);
     private static volatile AutomatonSnapshot currentAutomaton = new AutomatonSnapshot(false, Collections.emptyList(), Collections.emptyList(), 0, 0);
 
-    private static final Component BOSS_TITLE = Component.literal("Boss spawn")
-            .withStyle(style -> style.withBold(true).withColor(0xFFFF5555));
     private static final Component AUTOMATON_TITLE = Component.literal("Automaton Tracker")
             .withStyle(style -> style.withColor(0xFFFFAA00));
 
     public static LagSnapshot getLagSnapshot() {
         return currentLag;
-    }
-
-    public static BossSnapshot getBossSnapshot() {
-        return currentBoss;
     }
 
     public static AutomatonSnapshot getAutomatonSnapshot() {
@@ -47,21 +39,6 @@ public final class HudStateContainer {
                 .withStyle(style -> style.withColor(0xFFFF5555));
         int width = font != null ? font.width(comp) : 40;
         currentLag = new LagSnapshot(true, comp, lagMs, width);
-    }
-
-    public static void updateBossState(boolean visible, String owner, net.minecraft.client.gui.Font font) {
-        if (!visible || owner == null || owner.isEmpty()) {
-            if (currentBoss.isVisible()) {
-                currentBoss = new BossSnapshot(false, Component.empty(), Component.empty(), 0);
-            }
-            return;
-        }
-
-        Component line1 = Component.literal(owner)
-                .withStyle(style -> style.withColor(0xFFFFAA00).withBold(true));
-        int w1 = font != null ? font.width(line1) : 50;
-        int w2 = font != null ? font.width(BOSS_TITLE) : 60;
-        currentBoss = new BossSnapshot(true, line1, BOSS_TITLE, Math.max(w1, w2));
     }
 
     public static void updateAutomatonState(
@@ -91,6 +68,9 @@ public final class HudStateContainer {
                 .withStyle(s -> s.withColor(0xFFFFAA00))
                 .append(Component.literal(" [").withStyle(s -> s.withColor(0xFF888888)))
                 .append(Component.literal(statModeStr).withStyle(s -> s.withColor(statModeColor)))
+                .append(Component.literal("]").withStyle(s -> s.withColor(0xFF888888)))
+                .append(Component.literal(" [").withStyle(s -> s.withColor(0xFF888888)))
+                .append(Component.literal("Reset").withStyle(s -> s.withColor(0xFFFF5555)))
                 .append(Component.literal("]").withStyle(s -> s.withColor(0xFF888888)));
         mainLines.add(titleLine);
 

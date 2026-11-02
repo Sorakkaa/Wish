@@ -33,7 +33,9 @@ try {
                     } elseif ($provider -eq "Spotify") {
                         if ($appId -like "*spotify*") { $isMatch = $true }
                     } else {
-                        $isMatch = $true
+                        if ($appId -like "*deezer*" -or $appId -like "*youtubemusic*" -or $appId -like "*youtube-music*" -or $appId -like "*spotify*") {
+                            $isMatch = $true
+                        }
                     }
 
                     if ($isMatch) {

@@ -360,13 +360,18 @@ public class NameColorManager {
             st = st.withStrikethrough((f & 8) != 0);
             st = st.withObfuscated((f & 16) != 0);
         } else if (mc.player != null && nameLower.equals(mc.player.getScoreboardName().toLowerCase())) {
-            int f = ModConfig.INSTANCE.pseudoFont;
-            st = st.withBold((f & 1) != 0);
-            st = st.withItalic((f & 2) != 0);
-            st = st.withUnderlined((f & 4) != 0);
-            st = st.withStrikethrough((f & 8) != 0);
-            st = st.withObfuscated((f & 16) != 0);
+            st = getStyleFromBitmask(ModConfig.INSTANCE.pseudoFont);
         }
+        return st;
+    }
+
+    public static net.minecraft.network.chat.Style getStyleFromBitmask(int f) {
+        net.minecraft.network.chat.Style st = net.minecraft.network.chat.Style.EMPTY;
+        if ((f & 1) != 0) st = st.withBold(true);
+        if ((f & 2) != 0) st = st.withItalic(true);
+        if ((f & 4) != 0) st = st.withUnderlined(true);
+        if ((f & 8) != 0) st = st.withStrikethrough(true);
+        if ((f & 16) != 0) st = st.withObfuscated(true);
         return st;
     }
 
@@ -443,10 +448,15 @@ public class NameColorManager {
                 String localColor = "";
                 
                 if (isDev) {
-                    
                     localColor = nameToColor.get(localNameLower);
                 } else {
-                    localColor = ModConfig.INSTANCE.enableNameColor ? getCurrentColorCode() : "";
+                    if (ModConfig.INSTANCE.enableNameColor) {
+                        localColor = getCurrentColorCode();
+                    } else if (ModConfig.INSTANCE.spoofedName != null && !ModConfig.INSTANCE.spoofedName.trim().isEmpty()) {
+                        localColor = "PLAIN";
+                    } else {
+                        localColor = "";
+                    }
                 }
                 
                 if (!targetNames.contains(localName)) targetNames.add(localName);
@@ -554,15 +564,16 @@ public class NameColorManager {
                         boolean isNotsley = "notsley".equalsIgnoreCase(nameLower) || (mc.player != null && "f0051f86-eee9-4290-a7a7-2c8dcaade6a1".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
                         boolean isDiamix93 = "diamix93".equalsIgnoreCase(nameLower) || (mc.player != null && "b41ef54b-a6b5-460f-81a7-c6257e1090c5".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
                         boolean isLocal = mc.player != null && mc.player.getScoreboardName().equalsIgnoreCase(nameLower);
-                        if (colorCode != null && !colorCode.isEmpty()) {
+                        boolean hasSpoof = isLocal && ModConfig.INSTANCE.spoofedName != null && !ModConfig.INSTANCE.spoofedName.trim().isEmpty();
+                        if ((colorCode != null && !colorCode.isEmpty()) || hasSpoof) {
                             selfChanged = true;
-                            String originalCaseName = text.substring(idx, idx + name.length());
+                            String originalCaseName = hasSpoof ? ModConfig.INSTANCE.spoofedName.trim() : text.substring(idx, idx + name.length());
                             String before = text.substring(0, idx);
                             
                             String cleanBefore = before.replaceAll("(\u00A7[0-9a-fA-Fk-rK-R])+$", "");
                             String after = text.substring(idx + name.length());
 
-                            boolean isCustomUser = isSorakkaa || isMairuy || isFi4sk0 || isSmiss78 || isNotsley || isDiamix93 || (isLocal && ModConfig.INSTANCE.enableNameColor);
+                            boolean isCustomUser = isSorakkaa || isMairuy || isFi4sk0 || isSmiss78 || isNotsley || isDiamix93;
                             boolean addBadge = isCustomUser && !isChat;
 
                             cleanBefore = cleanBefore.replace("\uE001 ", "").replace("\uE001", "");
@@ -583,93 +594,44 @@ public class NameColorManager {
                                 cleanBefore = cleanBefore.substring(0, cleanBefore.length() - "☠⚔⚔ Death ".length());
                             } else if (cleanBefore.endsWith("☠⚔⚔ Death")) {
                                 cleanBefore = cleanBefore.substring(0, cleanBefore.length() - "☠⚔⚔ Death".length());
-                            } else if (isLocal && ModConfig.INSTANCE.customPrefix != null && !ModConfig.INSTANCE.customPrefix.isEmpty()) {
-                                String cfgPfx = ModConfig.INSTANCE.customPrefix.replace('&', '\u00A7');
-                                if (cleanBefore.endsWith(cfgPfx + " ")) {
-                                    cleanBefore = cleanBefore.substring(0, cleanBefore.length() - (cfgPfx.length() + 1));
-                                } else if (cleanBefore.endsWith(cfgPfx)) {
-                                    cleanBefore = cleanBefore.substring(0, cleanBefore.length() - cfgPfx.length());
-                                }
+                            }
+
+                            String afterLower = after.toLowerCase();
+                            if (afterLower.startsWith(" the mistress")) {
+                                after = after.substring(" the mistress".length());
+                            } else if (afterLower.startsWith(" the mistres")) {
+                                after = after.substring(" the mistres".length());
+                            } else if (afterLower.startsWith(" the collapser")) {
+                                after = after.substring(" the collapser".length());
+                            } else if (afterLower.startsWith(" the collapse")) {
+                                after = after.substring(" the collapse".length());
+                            } else if (afterLower.startsWith(" the collapse")) {
+                                after = after.substring(" the collapse".length());
+                            } else if (afterLower.startsWith(" les tenebres")) {
+                                after = after.substring(" les tenebres".length());
+                            } else if (afterLower.startsWith("les tenebres")) {
+                                after = after.substring("les tenebres".length());
+                            } else if (afterLower.startsWith(" surgeon ⚔⚔☠")) {
+                                after = after.substring(" surgeon ⚔⚔☠".length());
+                            } else if (afterLower.startsWith("surgeon ⚔⚔☠")) {
+                                after = after.substring("surgeon ⚔⚔☠".length());
+                            } else if (afterLower.startsWith(" fluk")) {
+                                after = after.substring(" fluk".length());
+                            } else if (afterLower.startsWith("fluk")) {
+                                after = after.substring("fluk".length());
+                            } else if (afterLower.startsWith(" ✪")) {
+                                after = after.substring(" ✪".length());
+                            } else if (afterLower.startsWith("✪")) {
+                                after = after.substring("✪".length());
                             }
 
                             String pfx = "";
                             String sfx = "";
-                            if (isSorakkaa) {
-                                pfx = "˚˖❀ ";
-                                if (after.toLowerCase().startsWith(" the mistress")) {
-                                    sfx = " The Mistress";
-                                    after = after.substring(" the mistress".length());
-                                } else if (after.toLowerCase().startsWith(" the mistres")) {
-                                    sfx = " The Mistress";
-                                    after = after.substring(" the mistres".length());
-                                } else {
-                                    sfx = " The Mistress";
-                                }
-                            } else if (isMairuy) {
-                                pfx = "˚˖❀ ";
-                                if (after.toLowerCase().startsWith(" fluk")) {
-                                    sfx = " Fluk";
-                                    after = after.substring(" fluk".length());
-                                } else if (after.toLowerCase().startsWith("fluk")) {
-                                    sfx = " Fluk";
-                                    after = after.substring("fluk".length());
-                                } else {
-                                    sfx = " Fluk";
-                                }
-                            } else if (isFi4sk0) {
-                                pfx = "Bismillah ";
-                                if (after.toLowerCase().startsWith(" les tenebres")) {
-                                    sfx = " Les Tenebres";
-                                    after = after.substring(" les tenebres".length());
-                                } else if (after.toLowerCase().startsWith("les tenebres")) {
-                                    sfx = " Les Tenebres";
-                                    after = after.substring("les tenebres".length());
-                                } else {
-                                    sfx = " Les Tenebres";
-                                }
-                            } else if (isSmiss78) {
-                                pfx = "˚˖❀ ";
-                                if (after.toLowerCase().startsWith(" the collapser")) {
-                                    sfx = " The Collapser";
-                                    after = after.substring(" the collapser".length());
-                                } else if (after.toLowerCase().startsWith("the collapser")) {
-                                    sfx = " The Collapser";
-                                    after = after.substring("the collapser".length());
-                                } else if (after.toLowerCase().startsWith(" the collapse")) {
-                                    sfx = " The Collapser";
-                                    after = after.substring(" the collapse".length());
-                                } else if (after.toLowerCase().startsWith("the collapse")) {
-                                    sfx = " The Collapser";
-                                    after = after.substring("the collapse".length());
-                                } else {
-                                    sfx = " The Collapser";
-                                }
-                            } else if (isNotsley) {
-                                pfx = "✪ ";
-                                if (after.toLowerCase().startsWith(" ✪")) {
-                                    sfx = " ✪";
-                                    after = after.substring(" ✪".length());
-                                } else if (after.toLowerCase().startsWith("✪")) {
-                                    sfx = " ✪";
-                                    after = after.substring("✪".length());
-                                } else {
-                                    sfx = " ✪";
-                                }
-                            } else if (isDiamix93) {
-                                pfx = "☠⚔⚔ Death ";
-                                if (after.toLowerCase().startsWith(" surgeon ⚔⚔☠")) {
-                                    sfx = " Surgeon ⚔⚔☠";
-                                    after = after.substring(" surgeon ⚔⚔☠".length());
-                                } else if (after.toLowerCase().startsWith("surgeon ⚔⚔☠")) {
-                                    sfx = " Surgeon ⚔⚔☠";
-                                    after = after.substring("surgeon ⚔⚔☠".length());
-                                } else {
-                                    sfx = " Surgeon ⚔⚔☠";
-                                }
-                            } else {
-                                pfx = ModConfig.INSTANCE.customPrefix.replace('&', '\u00A7');
-                                sfx = ModConfig.INSTANCE.customSuffix.replace('&', '\u00A7');
-                            }
+                            int pfxLen = 0;
+                            int sfxLen = 0;
+                            int totalLen = originalCaseName.length();
+                            int nameStart = 0; 
+                            int nameEnd = totalLen;
 
                             String normHex = normalizeHex(colorCode);
                             String finalBefore = cleanBefore;
@@ -679,19 +641,14 @@ public class NameColorManager {
                             if (!isSorakkaa && !isMairuy && !isFi4sk0 && !isSmiss78 && !isNotsley && !isDiamix93) finalAfter = finalAfter.replaceAll("\u00A7[lL]", "");
                             if (!isMairuy && !isFi4sk0 && !isSmiss78 && !isNotsley && !isDiamix93) finalAfter = finalAfter.replaceAll("\u00A7[oO]", "");
 
-                            if (!pfx.isEmpty() && !pfx.endsWith(" ")) {
-                                pfx = pfx + " ";
+                            if (colorCode == null || colorCode.isEmpty() || "PLAIN".equalsIgnoreCase(colorCode)) {
+                                net.minecraft.network.chat.MutableComponent builder = net.minecraft.network.chat.Component.literal("");
+                                appendPrefixAndBadge(builder, finalBefore, addBadge);
+                                net.minecraft.network.chat.Style st = getStyleFromBitmask(ModConfig.INSTANCE.pseudoFont);
+                                builder.append(net.minecraft.network.chat.Component.literal(originalCaseName).withStyle(st));
+                                builder.append(net.minecraft.network.chat.Component.literal(finalAfter));
+                                return builder;
                             }
-                            if (!sfx.isEmpty() && !sfx.startsWith(" ")) {
-                                sfx = " " + sfx;
-                            }
-                            originalCaseName = pfx + originalCaseName + sfx;
-
-                            int pfxLen = pfx.length();
-                            int sfxLen = sfx.length();
-                            int totalLen = originalCaseName.length();
-                            int nameStart = 0; 
-                            int nameEnd = totalLen;
 
                             if ("CHROMA".equalsIgnoreCase(colorCode)) {
                                 net.minecraft.network.chat.MutableComponent builder = net.minecraft.network.chat.Component.literal("");
@@ -1001,47 +958,65 @@ public class NameColorManager {
         java.util.List<AnimMatch> matches = new java.util.ArrayList<>();
 
         
-        record Target(String fullPhrase, String shortName, String colorCode, String nameLower) {}
+        record Target(String name, String colorCode, String nameLower) {}
         java.util.List<Target> targets = new java.util.ArrayList<>();
 
         if (ModConfig.INSTANCE.cosmeticVisibility == 0) {
-            targets.add(new Target("˚˖❀ sorakkaa the mistress", "sorakkaa", "WAVE:#FFC6F9:#7B0000", "sorakkaa"));
-            targets.add(new Target("˚˖❀ mairuy fluk", "mairuy", "WAVE:#FFF4FE:#FF5AE6", "mairuy"));
-            targets.add(new Target("bismillah fi4sk0 les tenebres", "fi4sk0", "WAVE:#C6FFDE:#4B537B", "fi4sk0"));
-            targets.add(new Target("˚˖❀ smiss78 the collapser", "smiss78", "WAVE:#FFFFFF:#000000", "smiss78"));
-            targets.add(new Target("✪ notsley ✪", "notsley", "WAVE:#00F9FF:#FFFFFF", "notsley"));
-            targets.add(new Target("☠⚔⚔ death diamix93 surgeon ⚔⚔☠", "diamix93", "WAVE:#DA5D60:#AB0089", "diamix93"));
+            targets.add(new Target("sorakkaa", "WAVE:#FFC6F9:#7B0000", "sorakkaa"));
+            targets.add(new Target("mairuy", "WAVE:#FFF4FE:#FF5AE6", "mairuy"));
+            targets.add(new Target("fi4sk0", "WAVE:#C6FFDE:#4B537B", "fi4sk0"));
+            targets.add(new Target("smiss78", "WAVE:#FFFFFF:#000000", "smiss78"));
+            targets.add(new Target("notsley", "WAVE:#00F9FF:#FFFFFF", "notsley"));
+            targets.add(new Target("diamix93", "WAVE:#DA5D60:#AB0089", "diamix93"));
         }
 
         if (mc.player != null) {
             String localName = mc.player.getScoreboardName();
             if (localName != null && !localName.isEmpty()) {
                 String localLower = localName.toLowerCase();
-                String localColor = null;
-                boolean isDev = "sorakkaa".equals(localLower) || "mairuy".equals(localLower) || "fi4sk0".equals(localLower)
-                        || "smiss78".equals(localLower) || "notsley".equals(localLower) || "diamix93".equals(localLower);
-                if (!isDev && ModConfig.INSTANCE.enableNameColor && ModConfig.INSTANCE.pseudoAnimation > 0) {
-                    localColor = getCurrentColorCode();
+                String targetName = (ModConfig.INSTANCE.spoofedName != null && !ModConfig.INSTANCE.spoofedName.trim().isEmpty())
+                        ? ModConfig.INSTANCE.spoofedName.trim()
+                        : localName;
+                String targetLower = targetName.toLowerCase();
+                
+                String localColor = getColorForPlayer(mc.player.getUUID(), localName);
+                if (localColor == null || localColor.isEmpty()) {
+                    if (ModConfig.INSTANCE.enableNameColor && ModConfig.INSTANCE.pseudoAnimation > 0) {
+                        localColor = getCurrentColorCode();
+                    } else if (ModConfig.INSTANCE.spoofedName != null && !ModConfig.INSTANCE.spoofedName.trim().isEmpty()) {
+                        localColor = "PLAIN";
+                    }
                 }
                 if (localColor != null && !localColor.isEmpty()) {
-                    String pfx = ModConfig.INSTANCE.customPrefix != null ? ModConfig.INSTANCE.customPrefix.replace('&', '§') : "";
-                    String sfx = ModConfig.INSTANCE.customSuffix != null ? ModConfig.INSTANCE.customSuffix.replace('&', '§') : "";
-                    String full = (pfx + localName + sfx).trim().toLowerCase();
-                    targets.add(new Target(full, localLower, localColor, localLower));
+                    targets.add(new Target(targetLower, localColor, localLower));
                 }
             }
         }
 
         for (Target t : targets) {
-            int idx = lineLower.indexOf(t.fullPhrase());
-            String matched = t.fullPhrase();
-            if (idx == -1) {
-                idx = lineLower.indexOf(t.shortName());
-                matched = t.shortName();
-            }
-            if (idx != -1) {
-                int matchEnd = idx + matched.length();
-                matches.add(new AnimMatch(idx, matchEnd, Math.max(1, matched.length() - 1), t.colorCode(), t.nameLower()));
+            int searchPos = 0;
+            while (searchPos < lineLower.length()) {
+                int candidate = lineLower.indexOf(t.name(), searchPos);
+                int idx = -1;
+                while (candidate != -1) {
+                    char charBefore = candidate > 0 ? lineText.charAt(candidate - 1) : ' ';
+                    boolean isColorCodeBefore = candidate >= 2 && lineText.charAt(candidate - 2) == '\u00A7';
+                    boolean beforeOk = (candidate == 0) || isColorCodeBefore || !isUsernameChar(charBefore);
+                    int afterPos = candidate + t.name().length();
+                    boolean afterOk = (afterPos >= lineText.length()) || !isUsernameChar(lineText.charAt(afterPos));
+                    if (beforeOk && afterOk) {
+                        idx = candidate;
+                        break;
+                    }
+                    candidate = lineLower.indexOf(t.name(), candidate + t.name().length());
+                }
+                if (idx != -1) {
+                    int matchEnd = idx + t.name().length();
+                    matches.add(new AnimMatch(idx, matchEnd, Math.max(1, t.name().length() - 1), t.colorCode(), t.nameLower()));
+                    searchPos = matchEnd;
+                } else {
+                    break;
+                }
             }
         }
 

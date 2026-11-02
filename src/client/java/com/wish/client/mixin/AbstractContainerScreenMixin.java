@@ -9,13 +9,16 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-@Mixin({AbstractContainerScreen.class, AbstractRecipeBookScreen.class})
+@Mixin({AbstractContainerScreen.class, AbstractRecipeBookScreen.class, net.minecraft.client.gui.screens.ChatScreen.class})
 public abstract class AbstractContainerScreenMixin {
 
     @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
     private void onMouseClicked(MouseButtonEvent event, boolean focused, CallbackInfoReturnable<Boolean> cir) {
-        if (event != null && AutomatonHudOverlay.mouseClicked(event.x(), event.y(), event.button())) {
-            cir.setReturnValue(true);
+        if (event != null) {
+            if (AutomatonHudOverlay.mouseClicked(event.x(), event.y(), event.button())) {
+                cir.setReturnValue(true);
+                return;
+            }
         }
     }
 }

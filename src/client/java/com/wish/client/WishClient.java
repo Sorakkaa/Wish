@@ -8,7 +8,6 @@ import com.wish.client.features.FunChatCommands;
 import com.wish.client.features.GhostBlockManager;
 import com.wish.client.features.PrecursorCityLocator;
 import com.wish.client.features.SkyblockDetector;
-import com.wish.client.features.SlayerCarryManager;
 import com.wish.client.music.MusicManager;
 import com.wish.client.update.UpdateManager;
 import com.wish.client.util.ChatUtils;
@@ -46,6 +45,7 @@ public class WishClient implements ClientModInitializer {
 		com.wish.client.color.NameColorManager.init();
 		GhostBlockManager.init();
 		AutomatonManager.init();
+		com.wish.client.features.environment.LyricsManager.init();
 
 		
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> WishCommands.register(dispatcher));
@@ -54,9 +54,9 @@ public class WishClient implements ClientModInitializer {
 		ClientTickEvents.END_CLIENT_TICK.register(mc -> {
 			SkyblockDetector.onClientTick(mc);
 			DungeonLagTracker.onClientTick();
-			SlayerCarryManager.onClientTick(mc);
 			PrecursorCityLocator.onClientTick(mc);
 			AutomatonManager.onClientTick(mc);
+			com.wish.client.features.environment.LyricsManager.onClientTick(mc);
 		});
 
 		
@@ -67,7 +67,7 @@ public class WishClient implements ClientModInitializer {
 		});
 
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
-			SlayerCarryManager.stopTracking();
+			SkyblockDetector.reset();
 		});
 
 		
@@ -161,10 +161,10 @@ public class WishClient implements ClientModInitializer {
 			}
 
 			if (text != null && text.contains("[Wish]")) return;
-			if (!ModConfig.INSTANCE.enableSong) return;
 
 			String lower = text != null ? text.replace('\u00A0', ' ').toLowerCase().trim() : "";
 			if (lower.contains("!song")) {
+				if (!ModConfig.INSTANCE.enableSong) return;
 				String prefix = ChatUtils.getChatPrefix(lower);
 				if (prefix.equals("/pc ") && ModConfig.INSTANCE.enablePc) {
 					MusicManager.fetchAndSendSongWithDelay("/pc ");
@@ -184,10 +184,14 @@ public class WishClient implements ClientModInitializer {
 	}
 
 	public static void sendLocalChatMessage(String message) {
-		String cleanMsg = message.replaceAll("§[0-9a-fA-Fk-oK-OrR]", "")
+		if (message == null || message.isEmpty()) return;
+		if (message.contains("§")) {
+			sendLocalChatMessage(Component.literal(message));
+			return;
+		}
+		String cleanMsg = message
 			.replace("🎵 WISH » ", "")
 			.replace("[Wish] ", "")
-			.replace("[CarryTracker] ", "")
 			.trim();
 
 		MutableComponent comp = Component.literal("[Wish] ")
