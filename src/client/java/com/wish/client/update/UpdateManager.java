@@ -33,7 +33,7 @@ public class UpdateManager {
         if (pendingMsg1 != null && pendingMsg2 != null) {
             CompletableFuture.runAsync(() -> {
                 try {
-                    Thread.sleep(2000);
+                    Thread.sleep(5000); // 5 secondes de délai à la connexion
                 } catch (InterruptedException ignored) {}
                 if (pendingMsg1 != null && pendingMsg2 != null) {
                     WishClient.sendLocalChatMessage(pendingMsg1);
@@ -107,8 +107,13 @@ public class UpdateManager {
                                         .withHoverEvent(new net.minecraft.network.chat.HoverEvent.ShowText(net.minecraft.network.chat.Component.literal("§7Click to open: \n§b" + finalUrl)))));
 
                             if (net.minecraft.client.Minecraft.getInstance().player != null) {
-                                WishClient.sendLocalChatMessage(msg1);
-                                WishClient.sendLocalChatMessage(msg2);
+                                CompletableFuture.runAsync(() -> {
+                                    try {
+                                        Thread.sleep(5000);
+                                    } catch (InterruptedException ignored) {}
+                                    WishClient.sendLocalChatMessage(msg1);
+                                    WishClient.sendLocalChatMessage(msg2);
+                                });
                             } else {
                                 pendingMsg1 = msg1;
                                 pendingMsg2 = msg2;
