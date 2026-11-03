@@ -40,10 +40,15 @@ replay_*.log
 !gradle/wrapper/gradle-wrapper.jar
 
 # scratch & dumps
-*dump*.txt
+*.txt
+*dump*
+*.dump
+dumps/
 scratch/
 backup/
 *.bak
+*.tmp
+*.temp
 
 # temporary test scripts
 *.py

@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(ChatComponent.class)
+@Mixin(value = ChatComponent.class, priority = 2000)
 public class ChatComponentMixin {
 
     

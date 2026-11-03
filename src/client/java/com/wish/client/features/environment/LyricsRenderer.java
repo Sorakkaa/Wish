@@ -5,9 +5,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.FontDescription;
-import net.minecraft.network.chat.Style;
-import net.minecraft.resources.Identifier;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
@@ -26,36 +23,6 @@ public final class LyricsRenderer {
         "♪", "♫", "✦", "★", "✧", "♩", "♬"
     };
 
-    public static final String[] LOOK_PRESETS = {
-        "Lavender", "Dreamy", "Fight",
-        "Comic",    "Script", "Fire",
-        "Ice",      "Royal",  "Clean"
-    };
-
-    public static final String[] LOOK_COLORS = {
-        "#D8B4FE", "#7DD3FC", "#EF4444",
-        "#FACC15", "#F472B6", "#FB923C",
-        "#67E8F9", "#FBBF24", "#FFFFFF"
-    };
-
-    public static final int[][] LOOK_DOT_COLORS = {
-        {0xFFD8B4FE, 0xFFA855F7}, // Lavender
-        {0xFF7DD3FC, 0xFF38BDF8}, // Dreamy
-        {0xFFEF4444, 0xFF991B1B}, // Fight
-        {0xFFFACC15, 0xFFEAB308}, // Comic
-        {0xFFF472B6, 0xFFEC4899}, // Script
-        {0xFFFB923C, 0xFFEA580C}, // Fire
-        {0xFF67E8F9, 0xFF06B6D4}, // Ice
-        {0xFFFBBF24, 0xFFD97706}, // Royal
-        {0xFFFFFFFF, 0xFF94A3B8}  // Clean
-    };
-
-    public static final String[] FONTS = {
-        "Lavender", "Dreamy", "Fight",
-        "Comic",    "Script", "Fire",
-        "Ice",      "Royal",  "Clean"
-    };
-
     private static int getLyricsColor() {
         String hex = ModConfig.INSTANCE.lyricsColor;
         if (hex != null && hex.length() == 7 && hex.startsWith("#")) {
@@ -64,15 +31,6 @@ public final class LyricsRenderer {
             } catch (Exception ignored) {}
         }
         return 0xFFFFFF;
-    }
-
-    private static Style getLyricsStyle() {
-        String fontChoice = ModConfig.INSTANCE.lyricsFont;
-        if (fontChoice != null && !fontChoice.isEmpty() && !fontChoice.equalsIgnoreCase("Minecraft")) {
-            String fName = fontChoice.toLowerCase();
-            return Style.EMPTY.withFont(new FontDescription.Resource(Identifier.fromNamespaceAndPath("wish", fName)));
-        }
-        return Style.EMPTY;
     }
 
     private static class Sector {
@@ -267,7 +225,6 @@ public final class LyricsRenderer {
         double halfScreenH = screenH / 2.0;
         double halfScreenW = screenW / 2.0;
         double focalLength = halfScreenH / Math.tan(fovRad / 2.0);
-        Style lyricFontStyle = getLyricsStyle();
 
         Iterator<FloatingWord> wit = floatingWords.iterator();
         while (wit.hasNext()) {
@@ -324,16 +281,13 @@ public final class LyricsRenderer {
                 bounce = (float) (Math.sin(popIn * Math.PI) * 4.5f);
             }
 
-            int col = (alpha << 24) | (fw.color & 0x00FFFFFF);
-
-            // Emojis/notes ALWAYS use Style.EMPTY (default font) so custom TTFs never bug them out!
-            Style renderStyle = fw.isCenterSymbol ? Style.EMPTY : lyricFontStyle;
+            int col = (alpha << 24) | (configuredColor & 0x00FFFFFF);
 
             if (fw.lines != null && fw.lines.size() > 1) {
                 int maxLineW = 0;
                 List<Component> lineComps = new ArrayList<>(fw.lines.size());
                 for (String ln : fw.lines) {
-                    Component lc = Component.literal(ln).withStyle(renderStyle);
+                    Component lc = Component.literal(ln);
                     lineComps.add(lc);
                     int lw = font.width(lc);
                     if (lw > maxLineW) maxLineW = lw;
@@ -364,7 +318,7 @@ public final class LyricsRenderer {
 
                 g.pose().popMatrix();
             } else {
-                Component textComp = Component.literal(fw.text).withStyle(renderStyle);
+                Component textComp = Component.literal(fw.text);
                 int wW = font.width(textComp);
 
                 float maxAllowedW = screenW * (fw.isPhrase ? 0.68f : 0.38f);

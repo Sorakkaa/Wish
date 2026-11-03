@@ -3,7 +3,6 @@ package com.wish.client.gui;
 import com.wish.client.config.ModConfig;
 import com.wish.client.features.GhostBlockManager;
 import com.wish.client.features.environment.LyricsManager;
-import com.wish.client.features.environment.LyricsRenderer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
@@ -42,7 +41,7 @@ public class WishConfigScreen extends Screen {
     private int pseudoSubScrollY = 0;
     private int miningScrollY = 0;
     private int environmentScrollY = 0;
-    private static boolean lyricsSectionOpen = false;
+    private static boolean lyricsSectionOpen = true;
     
     
     private static boolean chatChannelsOpen = false;
@@ -1083,10 +1082,10 @@ public class WishConfigScreen extends Screen {
             int hH = 22;
             totalContentH += hH + 4; 
             if (lyricsSectionOpen) {
-                totalContentH += (36 + 6);    // Now Playing mini card
+                totalContentH += (46 + 6);    // Now Playing mini card
                 totalContentH += (ROW_H + 4); // Music Provider
                 totalContentH += (ROW_H + 4); // Show (Word by word / Line by line)
-                totalContentH += 14 + 3 * (22 + 4) + 6; // Font presets (3x3)
+                totalContentH += 22 + 4 + 26 + (10 + 8 + 4) * 3 + 6; // Color Preview + Hex Input + HSB Sliders
                 totalContentH += 24 + 6;      // Info Box
             }
 
@@ -1103,6 +1102,12 @@ public class WishConfigScreen extends Screen {
             RenderUtils.drawGradientOutline(g, cx, hY, cw, hH, 4, lyricsSectionOpen ? colAccent : 0x55888888, 0x22444444);
             g.text(font, (lyricsSectionOpen ? "▼ " : "▶ ") + "3D Lyrics", cx + 8, hY + 7, COL_TEXT);
 
+            if (LyricsManager.hasSyncedLyrics()) {
+                String badge = "• Synced";
+                int badgeW = font.width(badge);
+                g.text(font, badge, cx + cw - 18 - badgeW - 8, hY + 7, 0xFF44EE88);
+            }
+
             boolean lyricsState = ModConfig.INSTANCE.enableLyrics;
             int dotSize = 8;
             int dotX = cx + cw - dotSize - 10;
@@ -1115,7 +1120,7 @@ public class WishConfigScreen extends Screen {
 
             if (lyricsSectionOpen) {
                 // Now Playing Mini Card (Valence style)
-                int cardH = 36;
+                int cardH = 46;
                 int cardY = cy;
                 RenderUtils.fillRoundedRect(g, cx + 10, cardY, cw - 10, cardH, 5, 0x33181822);
                 RenderUtils.drawGradientOutline(g, cx + 10, cardY, cw - 10, cardH, 5, 0x44665588, 0x11000000);
@@ -1134,12 +1139,33 @@ public class WishConfigScreen extends Screen {
                 String timeStr = String.format("%d:%02d / %d:%02d", posMin, posSec, durMin, durSec);
 
                 boolean synced = LyricsManager.hasSyncedLyrics();
-                String syncText = synced ? "• Lyrics synced" : "○ Waiting for lyrics";
-                int syncCol = synced ? 0xFF44EE88 : 0xFFAAAAAA;
+                boolean fetching = LyricsManager.isFetchingLyrics();
+                boolean hasTrack = !nowTitle.equals("No song playing") && !nowTitle.isEmpty();
 
-                g.text(font, "♪  " + nowTitle, cx + 18, cardY + 5, 0xFFFFFFFF);
-                g.text(font, "§7" + nowArtist, cx + 18, cardY + 16, COL_TEXT_DIM);
-                g.text(font, syncText + (dur > 0 ? "  §8" + timeStr : ""), cx + 18, cardY + 26, syncCol);
+                String syncText;
+                int syncCol;
+                if (synced) {
+                    int lines = LyricsManager.getLyricsLineCount();
+                    syncText = "• Lyrics synced" + (lines > 0 ? " (" + lines + " lines)" : "");
+                    syncCol = 0xFF44EE88;
+                } else if (fetching) {
+                    syncText = "○ Searching lyrics...";
+                    syncCol = 0xFFFFAA00;
+                } else if (hasTrack) {
+                    syncText = "○ No synced lyrics found";
+                    syncCol = 0xFFFF6666;
+                } else {
+                    syncText = "○ Waiting for music player";
+                    syncCol = 0xFFAAAAAA;
+                }
+
+                int maxTextW = cw - 30;
+                String dispTitle = font.plainSubstrByWidth("♪  " + nowTitle, maxTextW);
+                String dispArtist = font.plainSubstrByWidth(nowArtist, maxTextW);
+
+                g.text(font, dispTitle, cx + 18, cardY + 5, 0xFFFFFFFF);
+                g.text(font, "§7" + dispArtist, cx + 18, cardY + 16, COL_TEXT_DIM);
+                g.text(font, syncText + (dur > 0 ? "  §8" + timeStr : ""), cx + 18, cardY + 28, syncCol);
 
                 if (dur > 0) {
                     float prog = Math.max(0f, Math.min(1f, (float) pos / dur));
@@ -1195,48 +1221,49 @@ public class WishConfigScreen extends Screen {
                 g.text(font, curMode, mBtnX + (mBtnW - font.width(curMode)) / 2, modeY + 6, 0xFFFFFFFF);
                 cy += ROW_H + 4;
 
-                // Font (lyrics) 3x3 Grid
-                g.text(font, "✦ Font (lyrics)", cx + 14, cy + 2, COL_TEXT);
-                cy += 14;
+                int boxW = 50;
+                int boxH = 22;
+                int previewColor = parseHex(ModConfig.INSTANCE.lyricsColor, 0xFFD8B4FE);
 
-                int gridW = cw - 20;
-                int fntBtnW = (gridW - 8) / 3;
-                int fntBtnH = 22;
+                RenderUtils.fillRoundedRect(g, cx + 10, cy, boxW, boxH, 4, previewColor);
+                RenderUtils.drawGradientOutline(g, cx + 10, cy, boxW, boxH, 4, 0x66FFFFFF, 0x22FFFFFF);
+                g.text(font, "Color Preview", cx + 10 + boxW + 10, cy + 7, COL_TEXT);
+                cy += boxH + 4;
 
-                for (int i = 0; i < LyricsRenderer.FONTS.length; i++) {
-                    String fontName = LyricsRenderer.FONTS[i];
-                    boolean isFSelected = fontName.equalsIgnoreCase(ModConfig.INSTANCE.lyricsFont);
+                cy = renderInput(g, font, cx + 10, cy, cw - 10, "Lyrics Hex", ModConfig.INSTANCE.lyricsColor, hexInputFocused, mx, my);
 
-                    int row = i / 3;
-                    int col = i % 3;
-                    int bx = cx + 10 + col * (fntBtnW + 4);
-                    int by = cy + row * (fntBtnH + 4);
-                    boolean bHover = (mx >= bx && mx < bx + fntBtnW && my >= by && my < by + fntBtnH && my >= clipTop && my <= clipBottom);
+                int hueW = cw - 20;
+                int hueH = 8;
 
-                    int bg = isFSelected ? 0x66553388 : (bHover ? 0x33FFFFFF : 0x22111116);
-                    RenderUtils.fillRoundedRect(g, bx, by, fntBtnW, fntBtnH, 4, bg);
-                    int borderCol = isFSelected ? colAccent : (bHover ? 0x88AAAAAA : 0x33444444);
-                    RenderUtils.drawGradientOutline(g, bx, by, fntBtnW, fntBtnH, 4, borderCol, 0x11000000);
-
-                    net.minecraft.network.chat.Style btnFontStyle = net.minecraft.network.chat.Style.EMPTY.withFont(
-                        new net.minecraft.network.chat.FontDescription.Resource(
-                            net.minecraft.resources.Identifier.fromNamespaceAndPath("wish", fontName.toLowerCase())
-                        )
-                    );
-                    Component fontComp = Component.literal(fontName).withStyle(btnFontStyle);
-                    int tw = font.width(fontComp);
-                    g.text(font, fontComp, bx + (fntBtnW - tw) / 2, by + 4, isFSelected ? 0xFFFFFFFF : 0xDDCCCCCC);
-
-                    int[] dots = LyricsRenderer.LOOK_DOT_COLORS[i];
-                    int dotW = 8;
-                    int dotH = 3;
-                    int spacing = 3;
-                    int totalW = dotW * 2 + spacing;
-                    int startDotX = bx + (fntBtnW - totalW) / 2;
-                    RenderUtils.fillRoundedRect(g, startDotX, by + 15, dotW, dotH, 1, dots[0]);
-                    RenderUtils.fillRoundedRect(g, startDotX + dotW + spacing, by + 15, dotW, dotH, 1, dots[1]);
+                g.text(font, "Hue", cx + 10, cy, COL_TEXT_DIM); cy += 10;
+                for (int i = 0; i < hueW; i++) {
+                    int c = java.awt.Color.HSBtoRGB((float)i / hueW, 1.0f, 1.0f) | 0xFF000000;
+                    g.fill(cx + 10 + i, cy, cx + 10 + i + 1, cy + hueH, c);
                 }
-                cy += 3 * (fntBtnH + 4) + 6;
+                int pickerX = cx + 10 + (int)(selectedHue * hueW);
+                pickerX = Math.max(cx + 10, Math.min(cx + 10 + hueW - 3, pickerX));
+                g.fill(pickerX - 1, cy - 2, pickerX + 2, cy + hueH + 2, 0xFFFFFFFF);
+                cy += hueH + 4;
+
+                g.text(font, "Saturation", cx + 10, cy, COL_TEXT_DIM); cy += 10;
+                for (int i = 0; i < hueW; i++) {
+                    int c = java.awt.Color.HSBtoRGB(selectedHue, (float)i / hueW, selectedVal) | 0xFF000000;
+                    g.fill(cx + 10 + i, cy, cx + 10 + i + 1, cy + hueH, c);
+                }
+                pickerX = cx + 10 + (int)(selectedSat * hueW);
+                pickerX = Math.max(cx + 10, Math.min(cx + 10 + hueW - 3, pickerX));
+                g.fill(pickerX - 1, cy - 2, pickerX + 2, cy + hueH + 2, 0xFFFFFFFF);
+                cy += hueH + 4;
+
+                g.text(font, "Brightness", cx + 10, cy, COL_TEXT_DIM); cy += 10;
+                for (int i = 0; i < hueW; i++) {
+                    int c = java.awt.Color.HSBtoRGB(selectedHue, selectedSat, (float)i / hueW) | 0xFF000000;
+                    g.fill(cx + 10 + i, cy, cx + 10 + i + 1, cy + hueH, c);
+                }
+                pickerX = cx + 10 + (int)(selectedVal * hueW);
+                pickerX = Math.max(cx + 10, Math.min(cx + 10 + hueW - 3, pickerX));
+                g.fill(pickerX - 1, cy - 2, pickerX + 2, cy + hueH + 2, 0xFFFFFFFF);
+                cy += hueH + 6;
 
                 int noteY = cy;
                 RenderUtils.fillRoundedRect(g, cx + 10, noteY, cw - 10, 24, 4, 0x22111116);
@@ -2378,7 +2405,7 @@ public class WishConfigScreen extends Screen {
             cy += hH + 4;
 
             if (lyricsSectionOpen) {
-                cy += 36 + 6; // Now playing mini card offset
+                cy += 46 + 6; // Now playing mini card offset
 
                 int pBtnW = 90;
                 int pBtnX = cx + cw - pBtnW - 10;
@@ -2413,26 +2440,41 @@ public class WishConfigScreen extends Screen {
                 }
                 cy += ROW_H + 4;
 
-                // Font (lyrics) 3x3 Grid clicks
-                cy += 14;
-                int gridW = cw - 20;
-                int fGrdBtnW = (gridW - 8) / 3;
-                int fGrdBtnH = 22;
-
-                for (int i = 0; i < LyricsRenderer.FONTS.length; i++) {
-                    int row = i / 3;
-                    int col = i % 3;
-                    int bx = cx + 10 + col * (fGrdBtnW + 4);
-                    int by = cy + row * (fGrdBtnH + 4);
-                    if (mx >= bx && mx < bx + fGrdBtnW && my >= by && my < by + fGrdBtnH && my >= clipTop && my <= clipBottom) {
-                        ModConfig.INSTANCE.lyricsFont = LyricsRenderer.FONTS[i];
-                        ModConfig.INSTANCE.lyricsLook = LyricsRenderer.FONTS[i];
-                        ModConfig.INSTANCE.lyricsColor = LyricsRenderer.LOOK_COLORS[i];
-                        ModConfig.INSTANCE.save();
-                        return true;
-                    }
+                cy += 22 + 4; // Color Preview box
+                if (mx >= cx + 10 && mx < cx + cw && my >= cy && my < cy + 22 && my >= clipTop && my <= clipBottom) {
+                    hexInputFocused = true;
+                    spoofInputFocused = false;
+                    return true;
                 }
-                cy += 3 * (fGrdBtnH + 4) + 6;
+                cy += 22 + 4;
+
+                cy += 10;
+                int hueW = cw - 20;
+                if (mx >= cx + 10 && mx < cx + 10 + hueW && my >= cy - 2 && my <= cy + 10 && my >= clipTop && my <= clipBottom) {
+                    draggingSlider = 3;
+                    selectedHue = Math.max(0f, Math.min(1f, (float)(mx - (cx + 10)) / hueW));
+                    updateColorFromSliders();
+                    return true;
+                }
+                cy += 12;
+
+                cy += 10;
+                if (mx >= cx + 10 && mx < cx + 10 + hueW && my >= cy - 2 && my <= cy + 10 && my >= clipTop && my <= clipBottom) {
+                    draggingSlider = 4;
+                    selectedSat = Math.max(0f, Math.min(1f, (float)(mx - (cx + 10)) / hueW));
+                    updateColorFromSliders();
+                    return true;
+                }
+                cy += 12;
+
+                cy += 10;
+                if (mx >= cx + 10 && mx < cx + 10 + hueW && my >= cy - 2 && my <= cy + 10 && my >= clipTop && my <= clipBottom) {
+                    draggingSlider = 5;
+                    selectedVal = Math.max(0f, Math.min(1f, (float)(mx - (cx + 10)) / hueW));
+                    updateColorFromSliders();
+                    return true;
+                }
+                cy += 14;
             }
         } else if (activeTab == 4) {
             int clipTop = py + 40;
@@ -2714,10 +2756,10 @@ public class WishConfigScreen extends Screen {
                     int hH = 22;
                     totalContentH += hH + 4;
                     if (lyricsSectionOpen) {
-                        totalContentH += (36 + 6);    // Now Playing mini card
+                        totalContentH += (46 + 6);    // Now Playing mini card
                         totalContentH += (ROW_H + 4); // Music Provider
                         totalContentH += (ROW_H + 4); // Show (Word by word / Line by line)
-                        totalContentH += 14 + 3 * (22 + 4) + 6; // Font presets (3x3)
+                        totalContentH += 22 + 4 + 26 + (10 + 8 + 4) * 3 + 6; // Color Preview + Hex Input + HSB Sliders
                         totalContentH += 24 + 6;      // Info Box
                     }
                     int maxScroll = Math.max(0, totalContentH - clipHeight);

@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-@Mixin(GuiMessage.Line.class)
+@Mixin(value = GuiMessage.Line.class, priority = 2000)
 public class GuiMessageLineMixin {
 
     @Inject(method = "content", at = @At("RETURN"), cancellable = true)

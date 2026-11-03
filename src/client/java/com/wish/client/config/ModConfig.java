@@ -112,11 +112,9 @@ public class ModConfig {
 	public int lyricsDisplayMode = 1; // 1: 3D World / Opponent
 	public int lyricsMode = 0; // 0: Word by word, 1: Line by line
 	public boolean lyricsFollowView = false; // true: Follow view (moves with you), false: In-World (stays where appeared)
-	public String lyricsLook = "Lavender"; // Lavender, Dreamy, Fight, Comic, Script, Fire, Ice, Royal, Clean
-	public String lyricsFont = "Lavender"; // Lavender, Dreamy, Fight, Comic, Script, Fire, Ice, Royal, Clean
 	public String lyricsColor = "#D8B4FE";
 	public float lyricsScale = 3.0f;
-	public int lyricsSyncOffsetMs = -500;
+	public int lyricsSyncOffsetMs = 0;
 	public boolean lyricsDemoMode = false;
 
 	private static final java.util.concurrent.ScheduledExecutorService SAVE_EXECUTOR = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
@@ -155,15 +153,11 @@ public class ModConfig {
 					} else if (INSTANCE.spoofedName.length() > 32) {
 						INSTANCE.spoofedName = INSTANCE.spoofedName.substring(0, 32);
 					}
-					if (INSTANCE.lyricsSyncOffsetMs == 0 || INSTANCE.lyricsSyncOffsetMs == 1000) {
-						INSTANCE.lyricsSyncOffsetMs = -500;
+					if (INSTANCE.lyricsSyncOffsetMs == -500 || INSTANCE.lyricsSyncOffsetMs == 1000) {
+						INSTANCE.lyricsSyncOffsetMs = 0;
 					}
-					if (INSTANCE.lyricsFont == null || INSTANCE.lyricsFont.equalsIgnoreCase("Minecraft")
-							|| INSTANCE.lyricsFont.equalsIgnoreCase("Poppins")
-							|| INSTANCE.lyricsFont.equalsIgnoreCase("Montserrat")
-							|| INSTANCE.lyricsFont.equalsIgnoreCase("Kanit")
-							|| INSTANCE.lyricsFont.equalsIgnoreCase("Fredoka")) {
-						INSTANCE.lyricsFont = "Lavender";
+					if (INSTANCE.lyricsColor == null || !INSTANCE.lyricsColor.startsWith("#") || INSTANCE.lyricsColor.length() != 7) {
+						INSTANCE.lyricsColor = "#D8B4FE";
 					}
 					
 					if (toRead.equals(OLD_CONFIG_FILE)) {

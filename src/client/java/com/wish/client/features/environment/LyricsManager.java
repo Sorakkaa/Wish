@@ -39,17 +39,45 @@ public final class LyricsManager {
 
     public static class LyricLine {
         public final long timeMs;
+        public final long endTimeMs;
         public final String text;
         public final List<String> words;
+        public final float[] wordProgressStarts;
 
         public LyricLine(long timeMs, String text) {
+            this(timeMs, 0L, text);
+        }
+
+        public LyricLine(long timeMs, long endTimeMs, String text) {
             this.timeMs = timeMs;
+            this.endTimeMs = endTimeMs;
             this.text = text != null ? text.trim() : "";
             this.words = new ArrayList<>();
             if (!this.text.isEmpty()) {
                 String[] split = this.text.split("\\s+");
                 for (String w : split) {
                     if (!w.isEmpty()) words.add(w);
+                }
+            }
+            this.wordProgressStarts = new float[this.words.size()];
+            if (!this.words.isEmpty()) {
+                float[] weights = new float[this.words.size()];
+                float totalWeight = 0f;
+                for (int i = 0; i < this.words.size(); i++) {
+                    String w = this.words.get(i);
+                    String clean = w.replaceAll("[^a-zA-Z0-9À-ÿ]", "");
+                    int charLen = Math.max(1, Math.min(10, clean.length()));
+                    float weight = 1.3f + (charLen * 0.25f);
+                    if (w.endsWith(",") || w.endsWith(";") || w.endsWith(":") || w.endsWith(".") || w.endsWith("!") || w.endsWith("?")) {
+                        weight += 0.9f;
+                    }
+                    weights[i] = weight;
+                    totalWeight += weight;
+                }
+                float accum = 0f;
+                for (int i = 0; i < this.words.size(); i++) {
+                    this.wordProgressStarts[i] = totalWeight > 0f ? (accum / totalWeight) : ((float) i / this.words.size());
+                    accum += weights[i];
                 }
             }
         }
@@ -85,6 +113,7 @@ public final class LyricsManager {
     public static volatile long lastKnownProgressMs = 0;
     public static volatile long lastKnownTimeMs = 0;
     public static volatile String lastYtmVideoId = "";
+    public static volatile String currentDetectedPlayer = "";
     private static volatile String lastFetchedVideoId = "";
     private static long demoStartTime = 0;
 
@@ -103,7 +132,7 @@ public final class LyricsManager {
 
     public static void init() {
         demoStartTime = System.currentTimeMillis();
-        EXECUTOR.scheduleWithFixedDelay(LyricsManager::pollMediaSource, 800, 800, TimeUnit.MILLISECONDS);
+        EXECUTOR.scheduleWithFixedDelay(LyricsManager::pollMediaSource, 400, 400, TimeUnit.MILLISECONDS);
     }
 
     public static void onClientTick(Minecraft mc) {
@@ -120,9 +149,21 @@ public final class LyricsManager {
         ModConfig.INSTANCE.save();
     }
 
+    private static volatile boolean isFetchingLyrics = false;
+
+    public static boolean isFetchingLyrics() {
+        return isFetchingLyrics;
+    }
+
+    public static synchronized int getLyricsLineCount() {
+        return ModConfig.INSTANCE.lyricsDemoMode ? demoLyrics.size() : activeLyrics.size();
+    }
+
     private static void pollMediaSource() {
-        if (!ModConfig.INSTANCE.enableLyrics) return;
         if (ModConfig.INSTANCE.lyricsDemoMode) return;
+        Minecraft mc = Minecraft.getInstance();
+        boolean inConfigScreen = mc != null && mc.gui != null && mc.gui.screen() instanceof com.wish.client.gui.WishConfigScreen;
+        if (!ModConfig.INSTANCE.enableLyrics && !inConfigScreen) return;
 
         try {
             String configuredProvider = ModConfig.INSTANCE.musicProvider != null ? ModConfig.INSTANCE.musicProvider.trim() : "";
@@ -299,18 +340,27 @@ public final class LyricsManager {
                 }
                 long durationMs = lenUs / 1000;
 
-                // Extract and decode trackid from MPRIS (e.g. /org/xosms/MediaPlayer2/Track/kMI_2d_5f757Wh8 -> kMI-_757Wh8)
-                if (parts.length >= 7) {
-                    String decoded = decodeMprisTrackId(parts[6]);
-                    if (decoded.length() == 11) {
-                        lastYtmVideoId = decoded;
+                // Only extract YTM videoId when the active player is actually YouTube Music!
+                // When Spotify or Deezer is playing, clear lastYtmVideoId so it never contaminates Spotify lyrics.
+                currentDetectedPlayer = playerName;
+                boolean isYtmPlayer = playerName.contains("ytm") || playerName.contains("youtube") || playerName.contains("th_ch");
+                if (isYtmPlayer) {
+                    String newVid = "";
+                    if (parts.length >= 7) {
+                        String decoded = decodeMprisTrackId(parts[6]);
+                        if (decoded.length() == 11) {
+                            newVid = decoded;
+                        }
                     }
-                }
-                if (lastYtmVideoId.length() != 11 && (playerName.contains("ytm") || playerName.contains("youtube"))) {
-                    String localVid = getLocalYtmDesktopVideoId();
-                    if (localVid != null && localVid.length() == 11) {
-                        lastYtmVideoId = localVid;
+                    if (newVid.length() != 11) {
+                        String localVid = getLocalYtmDesktopVideoId();
+                        if (localVid != null && localVid.length() == 11) {
+                            newVid = localVid;
+                        }
                     }
+                    lastYtmVideoId = newVid;
+                } else {
+                    lastYtmVideoId = "";
                 }
 
                 updateTrackState(title, artist, posMs, durationMs, "Playing".equalsIgnoreCase(status));
@@ -369,6 +419,7 @@ public final class LyricsManager {
                         }
                     }
 
+                    currentDetectedPlayer = "ytm";
                     updateTrackState(title, artist, posMs, durationMs, playing);
                     return true;
                 }
@@ -378,21 +429,86 @@ public final class LyricsManager {
     }
 
     private static void pollWindowsMedia() {
-        String title = currentTitle;
-        String artist = currentArtist;
-        if (title.isEmpty()) {
-            String full = com.wish.client.music.MusicManager.fetchSystemMediaSong();
-            if (full != null && !full.isEmpty()) {
-                if (full.contains(" - ")) {
-                    String[] parts = full.split(" - ", 2);
-                    title = parts[0].trim();
-                    artist = parts[1].trim();
-                } else {
-                    title = full.trim();
+        try {
+            long tStart = System.currentTimeMillis();
+            java.nio.file.Path scriptPath = java.nio.file.Path.of("config", "wish", "get_song.ps1");
+            try (java.io.InputStream in = LyricsManager.class.getResourceAsStream("/assets/wish/scripts/get_song.ps1")) {
+                if (in != null) {
+                    Files.createDirectories(scriptPath.getParent());
+                    Files.copy(in, scriptPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                 }
-                updateTrackState(title, artist, lastKnownProgressMs + 1000, 0, true);
+            } catch (Exception ignored) {}
+
+            if (!Files.exists(scriptPath)) return;
+
+            String providerParam = ModConfig.INSTANCE.musicProvider != null && !ModConfig.INSTANCE.musicProvider.equalsIgnoreCase("None")
+                ? ModConfig.INSTANCE.musicProvider.trim() : "ALL";
+            ProcessBuilder pb = new ProcessBuilder(
+                "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
+                "-File", scriptPath.toAbsolutePath().toString(),
+                "-provider", providerParam, "-detailed"
+            );
+            Process p = pb.start();
+            String line = null;
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+                line = br.readLine();
+            } finally {
+                if (p.isAlive()) p.destroyForcibly();
             }
-        }
+
+            long latency = System.currentTimeMillis() - tStart;
+            if (line != null && !line.trim().isEmpty()) {
+                if (line.contains("|||")) {
+                    String[] parts = line.split("\\|\\|\\|", -1);
+                    if (parts.length >= 6) {
+                        String playerName = parts[0].trim().toLowerCase();
+                        String status = parts[1].trim();
+                        long posMs = -1;
+                        try {
+                            posMs = Long.parseLong(parts[2].trim());
+                        } catch (Exception ignored) {}
+                        if (posMs >= 0) {
+                            posMs += (latency / 2);
+                        }
+                        String artist = parts[3].trim();
+                        String title = parts[4].trim();
+                        long durationMs = 0;
+                        try {
+                            durationMs = Long.parseLong(parts[5].trim());
+                        } catch (Exception ignored) {}
+
+                        currentDetectedPlayer = playerName;
+                        if (!playerName.contains("ytm") && !playerName.contains("youtube")) {
+                            lastYtmVideoId = "";
+                        }
+                        updateTrackState(title, artist, posMs, durationMs, "Playing".equalsIgnoreCase(status));
+                        return;
+                    } else if (parts.length >= 3) {
+                        String playerName = parts[0].trim().toLowerCase();
+                        String artist = parts[1].trim();
+                        String title = parts[2].trim();
+                        currentDetectedPlayer = playerName;
+                        if (!playerName.contains("ytm") && !playerName.contains("youtube")) {
+                            lastYtmVideoId = "";
+                        }
+                        updateTrackState(title, artist, -1, 0, true);
+                        return;
+                    }
+                } else if (line.contains(" - ")) {
+                    String[] parts = line.split(" - ", 2);
+                    currentDetectedPlayer = "windows";
+                    lastYtmVideoId = "";
+                    updateTrackState(parts[1].trim(), parts[0].trim(), -1, 0, true);
+                    return;
+                } else {
+                    currentDetectedPlayer = "windows";
+                    lastYtmVideoId = "";
+                    updateTrackState(line.trim(), "", -1, 0, true);
+                    return;
+                }
+            }
+            isPlaying = false;
+        } catch (Exception ignored) {}
     }
 
     private static synchronized void updateTrackState(String title, String artist, long progressMs, long durationMs, boolean playing) {
@@ -413,23 +529,41 @@ public final class LyricsManager {
         currentDurationMs = durationMs;
         isPlaying = playing;
 
-        long now = System.currentTimeMillis();
-        if (playing && !currentTrackKey.isEmpty()) {
-            long expected = lastKnownProgressMs + (now - lastKnownTimeMs);
-            long diff = Math.abs(progressMs - expected);
-            // If deviation is within normal 350ms, keep smooth continuous time to avoid micro-stutter
-            if (diff > 350) {
-                lastKnownProgressMs = Math.max(0, progressMs);
-                lastKnownTimeMs = now;
-            }
-        } else {
-            lastKnownProgressMs = Math.max(0, progressMs);
-            lastKnownTimeMs = now;
-        }
-
         String newKey = (currentTitle + "|||" + currentArtist).toLowerCase().trim();
         boolean trackChanged = !newKey.isEmpty() && !newKey.equals(currentTrackKey);
         boolean videoChanged = !lastYtmVideoId.isEmpty() && !lastYtmVideoId.equals(lastFetchedVideoId);
+
+        long now = System.currentTimeMillis();
+        if (trackChanged) {
+            lastKnownProgressMs = Math.max(0, progressMs);
+            lastKnownTimeMs = now;
+        } else if (playing) {
+            if (progressMs < 0) {
+                // Position not reported by player fallback: advance smoothly with real time
+                lastKnownProgressMs += Math.max(0, now - lastKnownTimeMs);
+                lastKnownTimeMs = now;
+            } else if (progressMs <= 500 && lastKnownProgressMs > 2500 && (durationMs <= 0 || lastKnownProgressMs < durationMs - 2000)) {
+                // Guard against MPRIS players reporting 0 mid-track
+                lastKnownProgressMs += Math.max(0, now - lastKnownTimeMs);
+                lastKnownTimeMs = now;
+            } else {
+                long expected = lastKnownProgressMs + (now - lastKnownTimeMs);
+                long diff = Math.abs(progressMs - expected);
+                if (diff > 200) {
+                    lastKnownProgressMs = Math.max(0, progressMs);
+                    lastKnownTimeMs = now;
+                } else {
+                    lastKnownProgressMs = Math.max(0, expected + (progressMs - expected) / 2);
+                    lastKnownTimeMs = now;
+                }
+            }
+        } else {
+            if (progressMs >= 0) {
+                lastKnownProgressMs = progressMs;
+            }
+            lastKnownTimeMs = now;
+        }
+
         if (trackChanged || videoChanged) {
             currentTrackKey = newKey;
             lastFetchedVideoId = lastYtmVideoId;
@@ -440,12 +574,12 @@ public final class LyricsManager {
     public static String cleanTrackTitle(String title) {
         if (title == null) return "";
         String s = title;
-        // Strip (speed up), (sped up ver.), (slowed), (official video), (lyrics), [clip], etc.
-        s = s.replaceAll("(?i)\\s*[\\(\\[][^\\]\\)]*(?:speed|sped|slow|official|audio|video|lyrics?|music video|visualizer|clip|remix|prod|feat|hd|4k|version|ver\\.|edit)[^\\]\\)]*[\\)\\]]", "");
-        // Strip trailing ft./feat.
-        s = s.replaceAll("(?i)\\s*(?:ft\\.|feat\\.|featuring)\\s+.*$", "");
-        // Strip trailing dashes like - Single, - EP
-        s = s.replaceAll("(?i)\\s*-\\s*(?:single|ep|album|remastered).*$", "");
+        // Strip parenthesized or bracketed suffixes: (feat. ...), (ft. ...), (with ...), (speed up), (official video), etc.
+        s = s.replaceAll("(?i)\\s*[\\(\\[][^\\]\\)]*(?:speed|sped|slow|official|audio|video|lyrics?|music video|visualizer|clip|remix|prod|feat|ft\\.|with|hd|4k|version|ver\\.|edit|remaster|bonus|explicit|clean|live|from\\s)[^\\]\\)]*[\\)\\]]", "");
+        // Strip trailing ft./feat./with
+        s = s.replaceAll("(?i)\\s*(?:[-–—]\\s*)?(?:ft\\.|feat\\.|featuring|with)\\s+.*$", "");
+        // Strip trailing Spotify suffixes like - Remastered 2020, - 2011 Remaster, - Single, - EP, - Radio Edit, - From "..."
+        s = s.replaceAll("(?i)\\s*[-–—]\\s*(?:\\d{4}\\s+remaster|remastered|remaster|single|ep|album|radio\\s+edit|original\\s+mix|bonus\\s+track|live|mono|stereo|from\\s+|bande\\s+originale|version).*$", "");
         return s.trim();
     }
 
@@ -454,6 +588,16 @@ public final class LyricsManager {
         String s = artist;
         s = s.replaceAll("(?i)\\s*-\\s*topic$", "");
         return s.trim();
+    }
+
+    public static String extractPrimaryArtist(String artist) {
+        String clean = cleanTrackArtist(artist);
+        if (clean.isEmpty()) return "";
+        String[] parts = clean.split("(?i)\\s*(?:,|;|/|&|\\bet\\b|\\bfeat\\.?\\b|\\bft\\.?\\b|\\bwith\\b|\\bx\\b)\\s*");
+        if (parts.length > 0 && !parts[0].trim().isEmpty()) {
+            return parts[0].trim();
+        }
+        return clean;
     }
 
     private static final java.util.Map<String, List<LyricLine>> LYRICS_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
@@ -469,17 +613,23 @@ public final class LyricsManager {
                 activeLyrics.clear();
                 activeLyrics.addAll(cached);
             }
+            isFetchingLyrics = false;
             return;
         }
 
+        isFetchingLyrics = true;
         EXECUTOR.execute(() -> {
-            List<LyricLine> parsed = fetchLyricsFromAllSources(title, artist, durationMs);
-            synchronized (activeLyrics) {
-                activeLyrics.clear();
-                if (parsed != null && !parsed.isEmpty()) {
-                    activeLyrics.addAll(parsed);
-                    LYRICS_CACHE.put(cacheKey, parsed);
+            try {
+                List<LyricLine> parsed = fetchLyricsFromAllSources(title, artist, durationMs);
+                synchronized (activeLyrics) {
+                    activeLyrics.clear();
+                    if (parsed != null && !parsed.isEmpty()) {
+                        activeLyrics.addAll(parsed);
+                        LYRICS_CACHE.put(cacheKey, parsed);
+                    }
                 }
+            } finally {
+                isFetchingLyrics = false;
             }
         });
     }
@@ -489,23 +639,33 @@ public final class LyricsManager {
         List<LyricLine> local = loadLocalLyrics(title, artist);
         if (local != null && !local.isEmpty()) return local;
 
-        // 1. When using YouTube Music: Fetch ONLY official synchronized lyrics from YouTube Music!
-        // If YTM does not have synchronized lyrics for this track, return empty so only floating emojis/notes show!
-        boolean isYtm = "YTM".equalsIgnoreCase(ModConfig.INSTANCE.musicProvider)
+        String detPlayer = currentDetectedPlayer != null ? currentDetectedPlayer.toLowerCase() : "";
+        boolean isSpotifyOrDeezer = "Spotify".equalsIgnoreCase(ModConfig.INSTANCE.musicProvider)
+            || "Deezer".equalsIgnoreCase(ModConfig.INSTANCE.musicProvider)
+            || detPlayer.contains("spotify")
+            || detPlayer.contains("ncspot")
+            || detPlayer.contains("deezer");
+
+        // 1. When using YouTube Music: Try fetching official synchronized lyrics from YouTube Music first
+        boolean isYtm = !isSpotifyOrDeezer && (
+            "YTM".equalsIgnoreCase(ModConfig.INSTANCE.musicProvider)
             || "YouTube Music".equalsIgnoreCase(ModConfig.INSTANCE.musicProvider)
-            || (lastYtmVideoId != null && !lastYtmVideoId.isEmpty());
+            || detPlayer.contains("ytm")
+            || detPlayer.contains("youtube")
+            || (lastYtmVideoId != null && !lastYtmVideoId.isEmpty())
+        );
         if (isYtm) {
-            List<LyricLine> ytmLyrics = fetchLyricsFromYouTubeMusic(lastYtmVideoId, title, artist, durationMs);
+            List<LyricLine> ytmLyrics = fetchLyricsFromYouTubeMusic(lastYtmVideoId, title, artist, durationMs, true);
             if (ytmLyrics != null && !ytmLyrics.isEmpty()) {
                 LOGGER.info("Using official synchronized YouTube Music lyrics for '{}' ({} lines)", title, ytmLyrics.size());
                 return ytmLyrics;
             }
-            LOGGER.info("No official YouTube Music lyrics found for '{}' - displaying only emojis.", title);
-            return Collections.emptyList();
+            LOGGER.info("No official YouTube Music lyrics found for '{}', falling back to LRCLIB and NetEase...", title);
         }
 
         String cleanTitle = cleanTrackTitle(title);
         String cleanArtist = cleanTrackArtist(artist);
+        String primaryArtist = extractPrimaryArtist(artist);
         boolean isRemix = isRemixOrEdit(title);
 
         List<LyricLine> res = null;
@@ -513,28 +673,49 @@ public final class LyricsManager {
         // 2. Primary for speedup / remix: Search LRCLIB with the exact full title first
         // (If a speedup-specific synced .lrc exists, it is timed perfectly to the fast audio)
         if (isRemix) {
-            res = fetchLyricsFromLrclib(title, artist, durationMs);
+            res = fetchLyricsFromLrclib(title, cleanArtist, durationMs);
             if (res != null && !res.isEmpty()) return res;
 
-            res = fetchLyricsFromNetEase(title, artist);
+            if (!primaryArtist.equalsIgnoreCase(cleanArtist)) {
+                res = fetchLyricsFromLrclib(title, primaryArtist, durationMs);
+                if (res != null && !res.isEmpty()) return res;
+            }
+
+            res = fetchLyricsFromNetEase(title, primaryArtist, durationMs);
             if (res != null && !res.isEmpty()) return res;
         }
 
-        // 3. Primary: LRCLIB with clean title & clean artist + duration matching & precise scaling
+        // 3. Primary for Spotify / Deezer: LRCLIB with clean title & artist (and primary artist fallback)
         res = fetchLyricsFromLrclib(cleanTitle, cleanArtist, durationMs);
         if (res != null && !res.isEmpty()) {
             return res;
         }
-
-        // 4. Fallback: NetEase Cloud Music with clean title & clean artist
-        res = fetchLyricsFromNetEase(cleanTitle, cleanArtist);
-        if (res != null && !res.isEmpty()) {
-            return adjustTimingsForRemix(res, title, durationMs, 0);
+        if (!primaryArtist.equalsIgnoreCase(cleanArtist) && !primaryArtist.isEmpty()) {
+            res = fetchLyricsFromLrclib(cleanTitle, primaryArtist, durationMs);
+            if (res != null && !res.isEmpty()) {
+                return res;
+            }
         }
 
-        // 5. Try LRCLIB with raw title & artist
+        // 4. Official Musixmatch / LyricFind timed lyrics via YouTube Music Songs catalog
+        // (Spotify uses Musixmatch, so tracks that have lyrics on Spotify but are missing on LRCLIB are found here!)
+        if (!isRemix) {
+            res = fetchLyricsFromYouTubeMusic(null, cleanTitle, primaryArtist, durationMs, false);
+            if (res != null && !res.isEmpty()) {
+                LOGGER.info("Using official Musixmatch/YTM timed lyrics for Spotify track '{}' ({} lines)", title, res.size());
+                return res;
+            }
+        }
+
+        // 5. Fallback: NetEase Cloud Music with clean title & primary artist + duration matching
+        res = fetchLyricsFromNetEase(cleanTitle, primaryArtist, durationMs);
+        if (res != null && !res.isEmpty()) {
+            return res;
+        }
+
+        // 6. Final fallback: LRCLIB with raw title & primary artist
         if (!cleanTitle.equalsIgnoreCase(title)) {
-            res = fetchLyricsFromLrclib(title, artist, durationMs);
+            res = fetchLyricsFromLrclib(title, primaryArtist, durationMs);
             if (res != null && !res.isEmpty()) {
                 return res;
             }
@@ -609,9 +790,16 @@ public final class LyricsManager {
             LOGGER.info("Adjusting lyrics tempo for '{}' by factor {:.2f}", title, ratio);
             List<LyricLine> scaled = new ArrayList<>();
             for (LyricLine l : lines) {
-                scaled.add(new LyricLine((long) (l.timeMs * ratio), l.text));
+                long scaledEnd = l.endTimeMs > 0 ? (long) (l.endTimeMs * ratio) : 0L;
+                scaled.add(new LyricLine((long) (l.timeMs * ratio), scaledEnd, l.text));
             }
             return scaled;
+        }
+
+        // For non-remix tracks, reject candidates whose duration differs by > 12s (e.g. Music Video with long intro)
+        if (!isSpeedUp && !isSlowed && candidateDurationMs > 0 && actualDurationMs > 0 && Math.abs(candidateDurationMs - actualDurationMs) > 12000) {
+            LOGGER.info("Skipping candidate for '{}': duration gap too large ({}s vs {}s)", title, candidateDurationMs / 1000, actualDurationMs / 1000);
+            return Collections.emptyList();
         }
         return lines;
     }
@@ -669,12 +857,12 @@ public final class LyricsManager {
         "composer", "written by", "arranged by", "mixed by", "mastered by", "op:", "sp:"
     };
 
-    private static List<LyricLine> fetchLyricsFromNetEase(String title, String artist) {
+    private static List<LyricLine> fetchLyricsFromNetEase(String title, String artist, long durationMs) {
         try {
             String query = (title + (artist == null || artist.isEmpty() ? "" : " " + artist)).trim();
             if (query.isEmpty()) return Collections.emptyList();
 
-            String searchUrl = "https://music.163.com/api/search/get/?s=" + URLEncoder.encode(query, StandardCharsets.UTF_8) + "&type=1&limit=4";
+            String searchUrl = "https://music.163.com/api/search/get/?s=" + URLEncoder.encode(query, StandardCharsets.UTF_8) + "&type=1&limit=6";
             String searchJson = httpGet(searchUrl);
             if (searchJson == null || searchJson.isEmpty()) return Collections.emptyList();
 
@@ -682,11 +870,25 @@ public final class LyricsManager {
             if (!root.has("result") || !root.getAsJsonObject("result").has("songs")) return Collections.emptyList();
 
             JsonArray songs = root.getAsJsonObject("result").getAsJsonArray("songs");
+            List<JsonObject> candidates = new ArrayList<>();
             for (JsonElement el : songs) {
-                if (!el.isJsonObject()) continue;
-                JsonObject s = el.getAsJsonObject();
-                if (!s.has("id")) continue;
+                if (el.isJsonObject() && el.getAsJsonObject().has("id")) {
+                    candidates.add(el.getAsJsonObject());
+                }
+            }
+            if (durationMs > 0) {
+                candidates.sort(Comparator.comparingLong(s -> {
+                    long d = s.has("duration") && !s.get("duration").isJsonNull() ? s.get("duration").getAsLong() : 0L;
+                    return d > 0 ? Math.abs(d - durationMs) : Long.MAX_VALUE / 2;
+                }));
+            }
+
+            for (JsonObject s : candidates) {
                 long songId = s.get("id").getAsLong();
+                long candDur = s.has("duration") && !s.get("duration").isJsonNull() ? s.get("duration").getAsLong() : 0L;
+                if (durationMs > 0 && candDur > 0 && !isRemixOrEdit(title) && Math.abs(candDur - durationMs) > 12000) {
+                    continue;
+                }
 
                 String lyricUrl = "https://music.163.com/api/song/lyric?id=" + songId + "&lv=1&kv=1&tv=-1";
                 String lyricJson = httpGet(lyricUrl);
@@ -698,8 +900,11 @@ public final class LyricsManager {
                     if (rawLrc != null && !rawLrc.trim().isEmpty()) {
                         List<LyricLine> lines = parseNetEaseLrc(rawLrc);
                         if (!lines.isEmpty()) {
-                            LOGGER.info("Successfully fetched synced lyrics from NetEase for '{}' (songId={})", query, songId);
-                            return lines;
+                            List<LyricLine> adjusted = adjustTimingsForRemix(lines, title, durationMs, candDur);
+                            if (!adjusted.isEmpty()) {
+                                LOGGER.info("Successfully fetched synced lyrics from NetEase for '{}' (songId={})", query, songId);
+                                return adjusted;
+                            }
                         }
                     }
                 }
@@ -750,9 +955,10 @@ public final class LyricsManager {
             String encodedTitle = URLEncoder.encode(title, StandardCharsets.UTF_8);
             String encodedArtist = URLEncoder.encode(artist, StandardCharsets.UTF_8);
 
-            // 1. Direct get endpoint with duration
+            // 1. Direct get endpoint with rounded duration (exact match within ±2s on LRCLIB)
             if (durationMs > 0) {
-                String directUrl = "https://lrclib.net/api/get?track_name=" + encodedTitle + "&artist_name=" + encodedArtist + "&duration=" + (durationMs / 1000);
+                long roundedSec = Math.round(durationMs / 1000.0);
+                String directUrl = "https://lrclib.net/api/get?track_name=" + encodedTitle + "&artist_name=" + encodedArtist + "&duration=" + roundedSec;
                 String rawJson = httpGet(directUrl);
                 if (rawJson != null) {
                     List<LyricLine> res = parseLyricsFromJson(rawJson, durationMs, title);
@@ -760,49 +966,78 @@ public final class LyricsManager {
                 }
             }
 
-            // 2. Direct get endpoint WITHOUT duration (handles small duration discrepancies)
-            String noDurUrl = "https://lrclib.net/api/get?track_name=" + encodedTitle + "&artist_name=" + encodedArtist;
-            String rawJsonNoDur = httpGet(noDurUrl);
-            if (rawJsonNoDur != null) {
-                List<LyricLine> res = parseLyricsFromJson(rawJsonNoDur, durationMs, title);
-                if (res != null && !res.isEmpty()) return res;
-            }
+            // 2. Search endpoints: first structured search (track_name & artist_name), then general search (q)
+            String[] searchUrls = {
+                "https://lrclib.net/api/search?track_name=" + encodedTitle + (artist.isEmpty() ? "" : "&artist_name=" + encodedArtist),
+                "https://lrclib.net/api/search?q=" + URLEncoder.encode(title + (artist.isEmpty() ? "" : " " + artist), StandardCharsets.UTF_8)
+            };
 
-            // 3. Fallback search endpoint with duration gap matching (proven method from Show The Lyrics)
-            String searchUrl = "https://lrclib.net/api/search?q=" + URLEncoder.encode(title + (artist.isEmpty() ? "" : " " + artist), StandardCharsets.UTF_8);
-            String searchJson = httpGet(searchUrl);
-            if (searchJson != null) {
+            String normTargetTitle = normalizeForMatch(cleanTrackTitle(title));
+            String normTargetArtist = normalizeForMatch(extractPrimaryArtist(artist));
+
+            for (String searchUrl : searchUrls) {
+                String searchJson = httpGet(searchUrl);
+                if (searchJson == null) continue;
+
                 JsonElement root = JsonParser.parseString(searchJson);
-                if (root.isJsonArray()) {
-                    JsonArray arr = root.getAsJsonArray();
-                    // First pass: look for syncedLyrics, prioritizing candidate with closest duration
-                    JsonObject bestSynced = null;
-                    long bestGap = Long.MAX_VALUE;
-                    for (JsonElement el : arr) {
-                        if (el.isJsonObject()) {
-                            JsonObject o = el.getAsJsonObject();
-                            if (o.has("syncedLyrics") && !o.get("syncedLyrics").isJsonNull()) {
-                                long gap = 0L;
-                                if (durationMs > 0 && o.has("duration") && !o.get("duration").isJsonNull()) {
-                                    gap = Math.abs((long) (o.get("duration").getAsDouble() * 1000) - durationMs);
-                                }
-                                if (gap < bestGap) {
-                                    bestGap = gap;
-                                    bestSynced = o;
-                                }
-                            }
+                if (!root.isJsonArray()) continue;
+
+                JsonArray arr = root.getAsJsonArray();
+                JsonObject bestSynced = null;
+                long bestScore = Long.MAX_VALUE;
+                long bestGap = Long.MAX_VALUE;
+
+                for (JsonElement el : arr) {
+                    if (!el.isJsonObject()) continue;
+                    JsonObject o = el.getAsJsonObject();
+                    if (!o.has("syncedLyrics") || o.get("syncedLyrics").isJsonNull()) continue;
+                    String syncedStr = o.get("syncedLyrics").getAsString();
+                    if (syncedStr == null || syncedStr.trim().isEmpty()) continue;
+
+                    String candTrack = o.has("trackName") && !o.get("trackName").isJsonNull() ? o.get("trackName").getAsString() : "";
+                    String candArtist = o.has("artistName") && !o.get("artistName").isJsonNull() ? o.get("artistName").getAsString() : "";
+                    String normCandTrack = normalizeForMatch(cleanTrackTitle(candTrack));
+                    String normCandArtist = normalizeForMatch(candArtist);
+
+                    // Verify title relevance so search never picks an unrelated song
+                    if (!normTargetTitle.isEmpty() && !normCandTrack.isEmpty()) {
+                        if (!normCandTrack.contains(normTargetTitle) && !normTargetTitle.contains(normCandTrack)) {
+                            continue;
                         }
                     }
-                    // Accept matching duration: standard songs within 8s, speedup/remix up to 75s gap
-                    long maxAllowedGap = isRemixOrEdit(title) ? 75000L : 8000L;
-                    if (bestSynced != null && (durationMs <= 0 || bestGap <= maxAllowedGap)) {
-                        List<LyricLine> lines = parseLrcString(bestSynced.get("syncedLyrics").getAsString());
-                        if (!lines.isEmpty()) {
-                            long candDur = 0;
-                            if (bestSynced.has("duration") && !bestSynced.get("duration").isJsonNull()) {
-                                candDur = (long) (bestSynced.get("duration").getAsDouble() * 1000);
-                            }
-                            return adjustTimingsForRemix(lines, title, durationMs, candDur);
+
+                    long gap = 0L;
+                    if (durationMs > 0 && o.has("duration") && !o.get("duration").isJsonNull()) {
+                        gap = Math.abs((long) (o.get("duration").getAsDouble() * 1000) - durationMs);
+                    }
+
+                    // Penalize candidates where artist doesn't match primary artist
+                    long artistPenalty = 0L;
+                    if (!normTargetArtist.isEmpty() && !normCandArtist.isEmpty()
+                            && !normCandArtist.contains(normTargetArtist) && !normTargetArtist.contains(normCandArtist)) {
+                        artistPenalty = 15000L;
+                    }
+
+                    long score = gap + artistPenalty;
+                    if (score < bestScore) {
+                        bestScore = score;
+                        bestGap = gap;
+                        bestSynced = o;
+                    }
+                }
+
+                // Accept matching duration: standard songs within 25s, speedup/remix up to 75s gap
+                long maxAllowedGap = isRemixOrEdit(title) ? 75000L : 25000L;
+                if (bestSynced != null && (durationMs <= 0 || bestGap <= maxAllowedGap)) {
+                    List<LyricLine> lines = parseLrcString(bestSynced.get("syncedLyrics").getAsString());
+                    if (!lines.isEmpty()) {
+                        long candDur = 0;
+                        if (bestSynced.has("duration") && !bestSynced.get("duration").isJsonNull()) {
+                            candDur = (long) (bestSynced.get("duration").getAsDouble() * 1000);
+                        }
+                        List<LyricLine> adjusted = adjustTimingsForRemix(lines, title, durationMs, candDur);
+                        if (!adjusted.isEmpty()) {
+                            return adjusted;
                         }
                     }
                 }
@@ -861,86 +1096,105 @@ public final class LyricsManager {
 
     private static String normalizeForMatch(String text) {
         if (text == null) return "";
-        return text.replaceAll("[^a-zA-Z0-9 ]", "").toLowerCase().trim();
+        // Strip diacritical marks/accents (é -> e, ç -> c) so French and international titles match
+        String norm = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD)
+            .replaceAll("\\p{M}", "");
+        // Retain unicode letters and digits across all alphabets
+        return norm.replaceAll("[^\\p{L}\\p{N} ]", "").toLowerCase().trim();
     }
 
-    private static List<LyricLine> fetchLyricsFromYouTubeMusic(String videoId, String title, String artist, long durationMs) {
+    private static List<LyricLine> fetchLyricsFromYouTubeMusic(String videoId, String title, String artist, long durationMs, boolean allowLocalYtmConfig) {
         try {
-            String vid = videoId;
-            // 0. If videoId is not 11 chars, try reading from local YTM desktop config
-            if (vid == null || vid.length() != 11) {
+            List<String> candidateVids = new ArrayList<>();
+            if (videoId != null && videoId.length() == 11) {
+                candidateVids.add(videoId);
+            } else if (allowLocalYtmConfig) {
                 String localVid = getLocalYtmDesktopVideoId();
                 if (localVid != null && localVid.length() == 11) {
-                    vid = localVid;
+                    candidateVids.add(localVid);
                 }
             }
 
-            // If still not found, search YouTube Music WEB_REMIX API
-            if (vid == null || vid.length() != 11) {
-                String searchBody = "{\"query\":\"" + (title + " " + artist).replace("\"", "\\\"") + "\",\"context\":{\"client\":{\"clientName\":\"WEB_REMIX\",\"clientVersion\":\"1.20240101.01.00\"}}}";
-                String searchJson = httpPostJson("https://music.youtube.com/youtubei/v1/search", searchBody);
+            // Search YouTube Music WEB_REMIX API using the "Songs" filter (EgWKAQIIAWoKEAkQBRAKEAMQBA==)
+            // so we get official album audio tracks (matching Spotify timing) instead of Music Videos!
+            if (candidateVids.isEmpty()) {
+                String query = (title + (artist == null || artist.isEmpty() ? "" : " " + artist)).replace("\"", "\\\"").trim();
+                String searchSongsBody = "{\"query\":\"" + query + "\",\"params\":\"EgWKAQIIAWoKEAkQBRAKEAMQBA==\",\"context\":{\"client\":{\"clientName\":\"WEB_REMIX\",\"clientVersion\":\"1.20240101.01.00\"}}}";
+                String searchJson = httpPostJson("https://music.youtube.com/youtubei/v1/search", searchSongsBody);
                 if (searchJson != null) {
                     Matcher vm = Pattern.compile("\"videoId\":\\s*\"([a-zA-Z0-9_-]{11})\"").matcher(searchJson);
-                    if (vm.find()) {
-                        vid = vm.group(1);
+                    while (vm.find() && candidateVids.size() < 2) {
+                        String found = vm.group(1);
+                        if (!candidateVids.contains(found)) {
+                            candidateVids.add(found);
+                        }
+                    }
+                }
+                if (candidateVids.isEmpty() && allowLocalYtmConfig) {
+                    String searchAnyBody = "{\"query\":\"" + query + "\",\"context\":{\"client\":{\"clientName\":\"WEB_REMIX\",\"clientVersion\":\"1.20240101.01.00\"}}}";
+                    String searchAnyJson = httpPostJson("https://music.youtube.com/youtubei/v1/search", searchAnyBody);
+                    if (searchAnyJson != null) {
+                        Matcher vm = Pattern.compile("\"videoId\":\\s*\"([a-zA-Z0-9_-]{11})\"").matcher(searchAnyJson);
+                        if (vm.find()) {
+                            candidateVids.add(vm.group(1));
+                        }
                     }
                 }
             }
 
-            if (vid == null || vid.length() != 11) return null;
+            if (candidateVids.isEmpty()) return null;
 
-            // 1. Get watch next data to find the lyrics browseId (try ANDROID_MUSIC then WEB_REMIX)
-            String lyricsBrowseId = null;
             String[][] clientPairs = {
                 {"ANDROID_MUSIC", "8.05.50"},
                 {"WEB_REMIX", "1.20240101.01.00"}
             };
 
-            for (String[] client : clientPairs) {
-                String nextBody = "{\"videoId\":\"" + vid + "\",\"context\":{\"client\":{\"clientName\":\"" + client[0] + "\",\"clientVersion\":\"" + client[1] + "\"}}}";
-                String nextJson = httpPostJson("https://music.youtube.com/youtubei/v1/next", nextBody);
-                if (nextJson == null) continue;
+            for (String vid : candidateVids) {
+                String lyricsBrowseId = null;
+                for (String[] client : clientPairs) {
+                    String nextBody = "{\"videoId\":\"" + vid + "\",\"context\":{\"client\":{\"clientName\":\"" + client[0] + "\",\"clientVersion\":\"" + client[1] + "\"}}}";
+                    String nextJson = httpPostJson("https://music.youtube.com/youtubei/v1/next", nextBody);
+                    if (nextJson == null) continue;
 
-                try {
-                    JsonObject nextObj = JsonParser.parseString(nextJson).getAsJsonObject();
-                    JsonArray tabs = nextObj.getAsJsonObject("contents")
-                        .getAsJsonObject("singleColumnMusicWatchNextResultsRenderer")
-                        .getAsJsonObject("tabbedRenderer")
-                        .getAsJsonObject("watchNextTabbedResultsRenderer")
-                        .getAsJsonArray("tabs");
+                    try {
+                        JsonObject nextObj = JsonParser.parseString(nextJson).getAsJsonObject();
+                        JsonArray tabs = nextObj.getAsJsonObject("contents")
+                            .getAsJsonObject("singleColumnMusicWatchNextResultsRenderer")
+                            .getAsJsonObject("tabbedRenderer")
+                            .getAsJsonObject("watchNextTabbedResultsRenderer")
+                            .getAsJsonArray("tabs");
 
-                    for (JsonElement tabEl : tabs) {
-                        JsonObject tabR = tabEl.getAsJsonObject().getAsJsonObject("tabRenderer");
-                        if (tabR != null && tabR.has("title")) {
-                            String tabTitle = tabR.get("title").getAsString();
-                            if ("Lyrics".equalsIgnoreCase(tabTitle) || tabTitle.toLowerCase().contains("lyric")) {
-                                if (tabR.has("endpoint")) {
-                                    lyricsBrowseId = tabR.getAsJsonObject("endpoint").getAsJsonObject("browseEndpoint").get("browseId").getAsString();
-                                    break;
+                        for (JsonElement tabEl : tabs) {
+                            JsonObject tabR = tabEl.getAsJsonObject().getAsJsonObject("tabRenderer");
+                            if (tabR != null && tabR.has("title")) {
+                                String tabTitle = tabR.get("title").getAsString();
+                                if ("Lyrics".equalsIgnoreCase(tabTitle) || tabTitle.toLowerCase().contains("lyric")) {
+                                    if (tabR.has("endpoint")) {
+                                        lyricsBrowseId = tabR.getAsJsonObject("endpoint").getAsJsonObject("browseEndpoint").get("browseId").getAsString();
+                                        break;
+                                    }
                                 }
                             }
                         }
-                    }
-                } catch (Exception ignored) {}
+                    } catch (Exception ignored) {}
 
-                if (lyricsBrowseId != null) break;
-            }
+                    if (lyricsBrowseId != null) break;
+                }
 
-            if (lyricsBrowseId == null) return null;
+                if (lyricsBrowseId == null) continue;
 
-            // 2. Fetch lyrics using browseId: Only use ANDROID_MUSIC timedLyricsData with millisecond accuracy.
-            // If timed lyrics are not available on YTM, return null so only emojis are shown!
-            String browseAndroidBody = "{\"browseId\":\"" + lyricsBrowseId + "\",\"context\":{\"client\":{\"clientName\":\"ANDROID_MUSIC\",\"clientVersion\":\"8.05.50\"}}}";
-            String browseAndroidJson = httpPostJson("https://music.youtube.com/youtubei/v1/browse", browseAndroidBody);
-            if (browseAndroidJson != null) {
-                try {
-                    JsonObject browseObj = JsonParser.parseString(browseAndroidJson).getAsJsonObject();
-                    List<LyricLine> timedLines = parseYouTubeMusicTimedLyrics(browseObj);
-                    if (timedLines != null && !timedLines.isEmpty()) {
-                        LOGGER.info("Using official synchronized YouTube Music lyrics for '{}' ({} lines)", title, timedLines.size());
-                        return timedLines;
-                    }
-                } catch (Exception ignored) {}
+                // Fetch lyrics using browseId with ANDROID_MUSIC timedLyricsData (millisecond accuracy)
+                String browseAndroidBody = "{\"browseId\":\"" + lyricsBrowseId + "\",\"context\":{\"client\":{\"clientName\":\"ANDROID_MUSIC\",\"clientVersion\":\"8.05.50\"}}}";
+                String browseAndroidJson = httpPostJson("https://music.youtube.com/youtubei/v1/browse", browseAndroidBody);
+                if (browseAndroidJson != null) {
+                    try {
+                        JsonObject browseObj = JsonParser.parseString(browseAndroidJson).getAsJsonObject();
+                        List<LyricLine> timedLines = parseYouTubeMusicTimedLyrics(browseObj);
+                        if (timedLines != null && !timedLines.isEmpty()) {
+                            return timedLines;
+                        }
+                    } catch (Exception ignored) {}
+                }
             }
         } catch (Exception e) {
             LOGGER.debug("Failed to fetch lyrics directly from YouTube Music", e);
@@ -1000,11 +1254,20 @@ public final class LyricsManager {
                     JsonObject item = e.getAsJsonObject();
                     if (item.has("lyricLine") && !item.get("lyricLine").isJsonNull()) {
                         String text = item.get("lyricLine").getAsString().trim();
-                        if (!text.isEmpty() && item.has("cueRange") && !item.get("cueRange").isJsonNull()) {
+                        if (text.equals("♪") || text.equals("♫") || text.equals("♬")) {
+                            text = "";
+                        }
+                        if (item.has("cueRange") && !item.get("cueRange").isJsonNull()) {
                             JsonObject cue = item.getAsJsonObject("cueRange");
                             if (cue.has("startTimeMilliseconds")) {
                                 long startMs = Long.parseLong(cue.get("startTimeMilliseconds").getAsString());
-                                list.add(new LyricLine(startMs, text));
+                                long endMs = 0L;
+                                if (cue.has("endTimeMilliseconds")) {
+                                    try {
+                                        endMs = Long.parseLong(cue.get("endTimeMilliseconds").getAsString());
+                                    } catch (Exception ignored) {}
+                                }
+                                list.add(new LyricLine(startMs, endMs, text));
                             }
                         }
                     }
@@ -1122,12 +1385,8 @@ public final class LyricsManager {
 
             if (!source.isEmpty() && progress < source.get(0).timeMs) {
                 LyricLine first = source.get(0);
-                long timeUntil = first.timeMs - progress;
-                // If before the vocal starts, show music note emojis rather than premature lyric
-                if (timeUntil > 800) {
-                    LyricLine introLine = new LyricLine(0, "");
-                    return new LyricState(introLine, first, 0f, 0, isPlaying, currentTitle, currentArtist);
-                }
+                LyricLine introLine = new LyricLine(0, "");
+                return new LyricState(introLine, first, 0f, 0, isDemo || isPlaying, isDemo ? "Chase Me" : currentTitle, isDemo ? "Trapex" : currentArtist);
             }
 
             LyricLine cur = null;
@@ -1145,7 +1404,7 @@ public final class LyricsManager {
                         curEnd = next.timeMs;
                     } else {
                         next = null;
-                        curEnd = curStart + 4000;
+                        curEnd = (line.endTimeMs > curStart) ? line.endTimeMs : (curStart + 4000);
                     }
                 } else {
                     if (cur == null && i == 0) {
@@ -1155,37 +1414,42 @@ public final class LyricsManager {
                 }
             }
 
-            if (cur == null && !source.isEmpty()) {
-                cur = source.get(0);
-                curStart = 0;
-                curEnd = cur.timeMs > 0 ? cur.timeMs : 4000;
-                if (source.size() > 1) {
-                    next = source.get(1);
-                }
-            }
-
             if (cur == null) {
                 return new LyricState(null, null, 0f, 0, isDemo || isPlaying, isDemo ? "Chase Me" : currentTitle, isDemo ? "Trapex" : currentArtist);
             }
 
-            long gap = (next != null) ? (next.timeMs - curStart) : (curEnd - curStart);
-            long wordEstimatedDur = Math.max(1200L, cur.words.size() * 380L);
+            long gap = (next != null) ? Math.max(150L, next.timeMs - curStart) : Math.max(150L, curEnd - curStart);
+            long effectiveGap = (cur.endTimeMs > curStart && cur.endTimeMs - curStart <= gap)
+                ? (cur.endTimeMs - curStart) : gap;
+
+            boolean isFast = isSpeedUpTrack(isDemo ? "" : currentTitle);
+            long perWordMs = isFast ? 210L : 270L;
+            long wordEstimatedDur = Math.max(450L, cur.words.size() * perWordMs);
+
             long vocalDur;
-            if (gap > 4500) {
-                vocalDur = Math.min(gap - 1000L, Math.max(2400L, wordEstimatedDur));
+            if (effectiveGap <= 1100L) {
+                vocalDur = Math.max(120L, (long) (effectiveGap * 0.88));
             } else {
-                vocalDur = Math.max(1000L, gap);
+                vocalDur = Math.min((long) (effectiveGap * 0.85), Math.max(500L, wordEstimatedDur));
             }
 
             // If line singing has completely finished and there's still a noticeable pause until next line, show pauseLine
-            if (next != null && gap > 4200 && (progress - curStart) > (vocalDur + 800)) {
-                LyricLine pauseLine = new LyricLine(curStart + vocalDur + 800, "");
-                return new LyricState(pauseLine, next, 1f, 0, isPlaying, isDemo ? "Chase Me" : currentTitle, isDemo ? "Trapex" : currentArtist);
+            if (next != null && gap > 3800 && (progress - curStart) > (vocalDur + 700)) {
+                LyricLine pauseLine = new LyricLine(curStart + vocalDur + 700, "");
+                return new LyricState(pauseLine, next, 1f, 0, isDemo || isPlaying, isDemo ? "Chase Me" : currentTitle, isDemo ? "Trapex" : currentArtist);
             }
 
             float lineProg = Math.max(0f, Math.min(1f, (float) (progress - curStart) / vocalDur));
             int wordIdx = 0;
-            if (!cur.words.isEmpty()) {
+            if (!cur.words.isEmpty() && cur.wordProgressStarts != null && cur.wordProgressStarts.length == cur.words.size()) {
+                for (int i = 0; i < cur.wordProgressStarts.length; i++) {
+                    if (lineProg >= cur.wordProgressStarts[i]) {
+                        wordIdx = i;
+                    } else {
+                        break;
+                    }
+                }
+            } else if (!cur.words.isEmpty()) {
                 wordIdx = Math.min(cur.words.size() - 1, (int) (lineProg * cur.words.size()));
             }
 

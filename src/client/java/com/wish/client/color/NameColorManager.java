@@ -332,14 +332,14 @@ public class NameColorManager {
 
     private static net.minecraft.network.chat.Style applyCustomFont(net.minecraft.network.chat.Style st, String nameLower) {
         var mc = Minecraft.getInstance();
-        boolean isSorakkaa = "sorakkaa".equals(nameLower) || (mc.player != null && "14b458e1-1374-4981-ab21-8bd942449ef7".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
-        boolean isMairuy = "mairuy".equals(nameLower) || (mc.player != null && "43562a4a-93e2-437c-934c-64e17383ac00".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
-        boolean isFi4sk0 = "fi4sk0".equals(nameLower) || (mc.player != null && "3bf9f985-e9f5-451e-bd59-7c290677dc34".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
-        boolean isSmiss78 = "smiss78".equals(nameLower) || (mc.player != null && "102dc411-1e25-4570-ba52-3e0c774906a2".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
-        boolean isNotsley = "notsley".equals(nameLower) || (mc.player != null && "f0051f86-eee9-4290-a7a7-2c8dcaade6a1".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
-        boolean isDiamix93 = "diamix93".equals(nameLower) || (mc.player != null && "b41ef54b-a6b5-460f-81a7-c6257e1090c5".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
+        boolean isSorakkaa = "sorakkaa".equalsIgnoreCase(nameLower) || (mc.player != null && "14b458e1-1374-4981-ab21-8bd942449ef7".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
+        boolean isMairuy = "mairuy".equalsIgnoreCase(nameLower) || (mc.player != null && "43562a4a-93e2-437c-934c-64e17383ac00".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
+        boolean isFi4sk0 = "fi4sk0".equalsIgnoreCase(nameLower) || (mc.player != null && "3bf9f985-e9f5-451e-bd59-7c290677dc34".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
+        boolean isSmiss78 = "smiss78".equalsIgnoreCase(nameLower) || (mc.player != null && "102dc411-1e25-4570-ba52-3e0c774906a2".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
+        boolean isNotsley = "notsley".equalsIgnoreCase(nameLower) || (mc.player != null && "f0051f86-eee9-4290-a7a7-2c8dcaade6a1".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
+        boolean isDiamix93 = "diamix93".equalsIgnoreCase(nameLower) || (mc.player != null && "b41ef54b-a6b5-460f-81a7-c6257e1090c5".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
         if (isSorakkaa) {
-            int f = ModConfig.INSTANCE.pseudoFont != 0 ? ModConfig.INSTANCE.pseudoFont : 1; 
+            int f = 1; 
             st = st.withBold((f & 1) != 0);
             st = st.withItalic((f & 2) != 0);
             st = st.withUnderlined((f & 4) != 0);
@@ -359,8 +359,13 @@ public class NameColorManager {
             st = st.withUnderlined((f & 4) != 0);
             st = st.withStrikethrough((f & 8) != 0);
             st = st.withObfuscated((f & 16) != 0);
-        } else if (mc.player != null && nameLower.equals(mc.player.getScoreboardName().toLowerCase())) {
-            st = getStyleFromBitmask(ModConfig.INSTANCE.pseudoFont);
+        } else if (mc.player != null && nameLower.equalsIgnoreCase(mc.player.getScoreboardName())) {
+            int f = ModConfig.INSTANCE.pseudoFont;
+            st = st.withBold((f & 1) != 0);
+            st = st.withItalic((f & 2) != 0);
+            st = st.withUnderlined((f & 4) != 0);
+            st = st.withStrikethrough((f & 8) != 0);
+            st = st.withObfuscated((f & 16) != 0);
         }
         return st;
     }
@@ -427,22 +432,22 @@ public class NameColorManager {
                         || mc.player.getUUID().toString().equals("102dc411-1e25-4570-ba52-3e0c774906a2")
                         || mc.player.getUUID().toString().equals("f0051f86-eee9-4290-a7a7-2c8dcaade6a1")
                         || mc.player.getUUID().toString().equals("b41ef54b-a6b5-460f-81a7-c6257e1090c5");
-                if (mc.player.getUUID().toString().equals("14b458e1-1374-4981-ab21-8bd942449ef7") && !nameToColor.containsKey(localNameLower)) {
+                if ((mc.player.getUUID().toString().equals("14b458e1-1374-4981-ab21-8bd942449ef7") || "sorakkaa".equals(localNameLower)) && !nameToColor.containsKey(localNameLower)) {
                     nameToColor.put(localNameLower, "WAVE:#FFC6F9:#7B0000");
                 }
-                if (mc.player.getUUID().toString().equals("43562a4a-93e2-437c-934c-64e17383ac00") && !nameToColor.containsKey(localNameLower)) {
+                if ((mc.player.getUUID().toString().equals("43562a4a-93e2-437c-934c-64e17383ac00") || "mairuy".equals(localNameLower)) && !nameToColor.containsKey(localNameLower)) {
                     nameToColor.put(localNameLower, "WAVE:#FFF4FE:#FF5AE6");
                 }
-                if (mc.player.getUUID().toString().equals("3bf9f985-e9f5-451e-bd59-7c290677dc34") && !nameToColor.containsKey(localNameLower)) {
+                if ((mc.player.getUUID().toString().equals("3bf9f985-e9f5-451e-bd59-7c290677dc34") || "fi4sk0".equals(localNameLower)) && !nameToColor.containsKey(localNameLower)) {
                     nameToColor.put(localNameLower, "WAVE:#C6FFDE:#4B537B");
                 }
-                if (mc.player.getUUID().toString().equals("102dc411-1e25-4570-ba52-3e0c774906a2") && !nameToColor.containsKey(localNameLower)) {
+                if ((mc.player.getUUID().toString().equals("102dc411-1e25-4570-ba52-3e0c774906a2") || "smiss78".equals(localNameLower)) && !nameToColor.containsKey(localNameLower)) {
                     nameToColor.put(localNameLower, "WAVE:#FFFFFF:#000000");
                 }
-                if (mc.player.getUUID().toString().equals("f0051f86-eee9-4290-a7a7-2c8dcaade6a1") && !nameToColor.containsKey(localNameLower)) {
+                if ((mc.player.getUUID().toString().equals("f0051f86-eee9-4290-a7a7-2c8dcaade6a1") || "notsley".equals(localNameLower)) && !nameToColor.containsKey(localNameLower)) {
                     nameToColor.put(localNameLower, "WAVE:#00F9FF:#FFFFFF");
                 }
-                if (mc.player.getUUID().toString().equals("b41ef54b-a6b5-460f-81a7-c6257e1090c5") && !nameToColor.containsKey(localNameLower)) {
+                if ((mc.player.getUUID().toString().equals("b41ef54b-a6b5-460f-81a7-c6257e1090c5") || "diamix93".equals(localNameLower)) && !nameToColor.containsKey(localNameLower)) {
                     nameToColor.put(localNameLower, "WAVE:#DA5D60:#AB0089");
                 }
                 String localColor = "";
@@ -452,7 +457,7 @@ public class NameColorManager {
                 } else {
                     if (ModConfig.INSTANCE.enableNameColor) {
                         localColor = getCurrentColorCode();
-                    } else if (ModConfig.INSTANCE.spoofedName != null && !ModConfig.INSTANCE.spoofedName.trim().isEmpty()) {
+                    } else if ((ModConfig.INSTANCE.spoofedName != null && !ModConfig.INSTANCE.spoofedName.trim().isEmpty()) || ModConfig.INSTANCE.pseudoFont != 0) {
                         localColor = "PLAIN";
                     } else {
                         localColor = "";
@@ -644,10 +649,17 @@ public class NameColorManager {
                             if (colorCode == null || colorCode.isEmpty() || "PLAIN".equalsIgnoreCase(colorCode)) {
                                 net.minecraft.network.chat.MutableComponent builder = net.minecraft.network.chat.Component.literal("");
                                 appendPrefixAndBadge(builder, finalBefore, addBadge);
-                                net.minecraft.network.chat.Style st = getStyleFromBitmask(ModConfig.INSTANCE.pseudoFont);
-                                builder.append(net.minecraft.network.chat.Component.literal(originalCaseName).withStyle(st));
-                                builder.append(net.minecraft.network.chat.Component.literal(finalAfter));
-                                return builder;
+                                net.minecraft.network.chat.Style st = applyCustomFont(net.minecraft.network.chat.Style.EMPTY, nameLower);
+                                StringBuilder fCodes = new StringBuilder();
+                                if (st.isBold()) fCodes.append("\u00A7l");
+                                if (st.isItalic()) fCodes.append("\u00A7o");
+                                if (st.isUnderlined()) fCodes.append("\u00A7n");
+                                if (st.isStrikethrough()) fCodes.append("\u00A7m");
+                                if (st.isObfuscated()) fCodes.append("\u00A7k");
+                                builder.append(net.minecraft.network.chat.Component.literal(fCodes.toString() + originalCaseName).withStyle(st));
+                                if (!finalAfter.isEmpty()) builder.append(net.minecraft.network.chat.Component.literal(finalAfter));
+                                newSelf = builder.withStyle(component.getStyle());
+                                break;
                             }
 
                             if ("CHROMA".equalsIgnoreCase(colorCode)) {
@@ -983,12 +995,21 @@ public class NameColorManager {
                 if (localColor == null || localColor.isEmpty()) {
                     if (ModConfig.INSTANCE.enableNameColor && ModConfig.INSTANCE.pseudoAnimation > 0) {
                         localColor = getCurrentColorCode();
-                    } else if (ModConfig.INSTANCE.spoofedName != null && !ModConfig.INSTANCE.spoofedName.trim().isEmpty()) {
+                    } else if ((ModConfig.INSTANCE.spoofedName != null && !ModConfig.INSTANCE.spoofedName.trim().isEmpty()) || ModConfig.INSTANCE.pseudoFont != 0) {
                         localColor = "PLAIN";
                     }
                 }
                 if (localColor != null && !localColor.isEmpty()) {
-                    targets.add(new Target(targetLower, localColor, localLower));
+                    boolean alreadyExists = false;
+                    for (Target existing : targets) {
+                        if (existing.name().equalsIgnoreCase(targetLower)) {
+                            alreadyExists = true;
+                            break;
+                        }
+                    }
+                    if (!alreadyExists) {
+                        targets.add(new Target(targetLower, localColor, localLower));
+                    }
                 }
             }
         }
@@ -1029,10 +1050,12 @@ public class NameColorManager {
                 for (AnimMatch m : matches) {
                     if (p >= m.start && p < m.end) {
                         int ci = p - m.start;
+                        net.minecraft.network.chat.Style newSt = applyCustomFont(st, m.nameLower);
                         net.minecraft.network.chat.TextColor animColor = computeAnimatedColor(m.colorCode, ci, m.totalLen, m.nameLower);
                         if (animColor != null) {
-                            return sink.accept(idx, st.withColor(animColor), cp);
+                            newSt = newSt.withColor(animColor);
                         }
+                        return sink.accept(idx, newSt, cp);
                     }
                 }
                 return sink.accept(idx, st, cp);

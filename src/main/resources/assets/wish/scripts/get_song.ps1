@@ -1,5 +1,6 @@
 param (
-    [string]$provider = "ALL"
+    [string]$provider = "ALL",
+    [switch]$detailed
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -45,10 +46,37 @@ try {
                         $props = $task2.Result
                         if ($props -and $props.Title -and $props.Title.Trim() -ne "") {
                             $artist = if ($props.Artist) { $props.Artist.Trim() } else { "" }
-                            if ($artist -ne "") {
-                                Write-Output ($props.Title + " - " + $artist)
+                            $songTitle = $props.Title.Trim()
+                            if ($detailed) {
+                                $status = "Playing"
+                                try {
+                                    $pb = $session.GetPlaybackInfo()
+                                    if ($pb -and $pb.PlaybackStatus -ne 4 -and $pb.PlaybackStatus.ToString() -ne "Playing") {
+                                        $status = "Paused"
+                                    }
+                                } catch {}
+                                $posMs = -1
+                                $durMs = 0
+                                try {
+                                    $tl = $session.GetTimelineProperties()
+                                    if ($tl) {
+                                        $posMs = [long]$tl.Position.TotalMilliseconds
+                                        $durMs = [long]$tl.EndTime.TotalMilliseconds
+                                        if ($status -eq "Playing" -and $tl.LastUpdatedTime -and $tl.LastUpdatedTime.Year -gt 2000) {
+                                            $elapsed = ([DateTimeOffset]::UtcNow - $tl.LastUpdatedTime).TotalMilliseconds
+                                            if ($elapsed -gt 0 -and $elapsed -lt 600000) {
+                                                $posMs += [long]$elapsed
+                                            }
+                                        }
+                                    }
+                                } catch {}
+                                Write-Output ($appId + "|||" + $status + "|||" + $posMs + "|||" + $artist + "|||" + $songTitle + "|||" + $durMs)
                             } else {
-                                Write-Output $props.Title
+                                if ($artist -ne "") {
+                                    Write-Output ($songTitle + " - " + $artist)
+                                } else {
+                                    Write-Output $songTitle
+                                }
                             }
                             exit 0
                         }
@@ -81,7 +109,22 @@ try {
                 if ($isProcMatch) {
                     $clean = $title -replace ' - Deezer$', '' -replace ' - YouTube Music$', '' -replace ' - Spotify$', ''
                     if ($clean -and $clean.Trim() -ne "" -and $clean -ne "Deezer" -and $clean -ne "YouTube Music" -and $clean -ne "Spotify" -and $clean -notlike "*YouTube Music Desktop App*") {
-                        Write-Output $clean
+                        if ($detailed) {
+                            $art = ""
+                            $ttl = $clean.Trim()
+                            if ($ttl -match "^(.+?)\s+-\s+(.+)$") {
+                                if ($name -like "*spotify*") {
+                                    $art = $Matches[1].Trim()
+                                    $ttl = $Matches[2].Trim()
+                                } else {
+                                    $ttl = $Matches[1].Trim()
+                                    $art = $Matches[2].Trim()
+                                }
+                            }
+                            Write-Output ($name + "|||Playing|||-1|||" + $art + "|||" + $ttl + "|||0")
+                        } else {
+                            Write-Output $clean
+                        }
                         exit 0
                     }
                 }

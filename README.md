@@ -67,7 +67,7 @@ A modern, high-performance Fabric client mod designed for **Hypixel Skyblock** u
 
 1. Install **Fabric Loader** (version `0.19.5` or newer).
 2. Ensure you are using **Minecraft 26.2** and **Java 25+**.
-3. Download the latest `wish-1.1.0.jar` from the [Releases](https://github.com/Sorakkaa/Wish/releases) page.
+3. Download the latest `wish-1.1.1.jar` from the [Releases](https://github.com/Sorakkaa/Wish/releases) page.
 4. Place the jar into your `.minecraft/mods` folder along with **Fabric API**.
 5. Launch your game and type `/wish` to configure your options!
 
@@ -86,7 +86,7 @@ cd Wish
 ./gradlew build
 ```
 
-The compiled mod jar will be in `build/libs/wish-1.1.0.jar`.
+The compiled mod jar will be in `build/libs/wish-1.1.1.jar`.
 
 ---
 
