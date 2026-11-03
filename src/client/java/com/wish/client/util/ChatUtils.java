@@ -1,5 +1,8 @@
 package com.wish.client.util;
 
+import com.wish.client.config.ModConfig;
+import net.minecraft.client.Minecraft;
+
 public final class ChatUtils {
 
     private ChatUtils() {}
@@ -24,6 +27,18 @@ public final class ChatUtils {
         String beforeColon = text.substring(0, colonIdx);
         beforeColon = beforeColon.replaceAll("(?i)\\u00A7[0-9a-fk-or]", "");
         String noBrackets = beforeColon.replaceAll("\\[.*?\\]", "").trim();
+
+        Minecraft mc = Minecraft.getInstance();
+        String myName = (mc != null && mc.player != null) ? mc.player.getScoreboardName() : null;
+        String spoof = (ModConfig.INSTANCE.spoofedName != null) ? ModConfig.INSTANCE.spoofedName.trim() : null;
+
+        if (spoof != null && !spoof.isEmpty() && beforeColon.toLowerCase().contains(spoof.toLowerCase())) {
+            return myName != null ? myName : spoof;
+        }
+        if (myName != null && beforeColon.toLowerCase().contains(myName.toLowerCase())) {
+            return myName;
+        }
+
         String[] words = noBrackets.split("\\s+");
         if (words.length > 0) {
             return words[words.length - 1];

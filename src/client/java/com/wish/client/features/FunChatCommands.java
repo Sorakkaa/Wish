@@ -34,10 +34,46 @@ public final class FunChatCommands {
         else if (lower.contains("!yuri") && ModConfig.INSTANCE.enableYuri) processFunCommand(text, "!yuri");
     }
 
+    private static String resolvePlayerName(String arg, Minecraft mc) {
+        if (arg == null || arg.isEmpty()) return arg;
+        if (mc != null && mc.player != null && mc.player.getScoreboardName().equalsIgnoreCase(arg)) {
+            return mc.player.getScoreboardName();
+        }
+        if (mc != null && mc.player != null && mc.player.connection != null) {
+            for (PlayerInfo info : mc.player.connection.getOnlinePlayers()) {
+                if (info != null && info.getProfile() != null && info.getProfile().name() != null) {
+                    String pName = info.getProfile().name();
+                    if (pName.equalsIgnoreCase(arg) || pName.toLowerCase().startsWith(arg.toLowerCase())) {
+                        return pName;
+                    }
+                }
+            }
+        }
+        return arg;
+    }
+
     private static void processFunCommand(String text, String command) {
         long now = System.currentTimeMillis();
         if (now - lastCommandTime < 1500) return; 
         lastCommandTime = now;
+
+        Minecraft mc = Minecraft.getInstance();
+        String myName = (mc != null && mc.player != null) ? mc.player.getScoreboardName() : "Me";
+        String spoof = (ModConfig.INSTANCE.spoofedName != null) ? ModConfig.INSTANCE.spoofedName.trim() : "";
+
+        // If Name Spoofer is enabled, replace occurrences of spoofed name with the real player pseudo
+        // so that fun commands sent to server always use valid player names
+        if (!spoof.isEmpty() && !spoof.equalsIgnoreCase(myName)) {
+            text = text.replaceAll("(?i)" + java.util.regex.Pattern.quote(spoof), myName);
+            String[] spoofWords = spoof.split("\\s+");
+            if (spoofWords.length > 1) {
+                for (String sw : spoofWords) {
+                    if (sw.length() >= 3) {
+                        text = text.replaceAll("(?i)\\b" + java.util.regex.Pattern.quote(sw) + "\\b", myName);
+                    }
+                }
+            }
+        }
 
         String lower = text.replace('\u00A0', ' ').toLowerCase().trim();
         String explicitTarget = null;
@@ -48,28 +84,12 @@ public final class FunChatCommands {
                 String[] words = afterCmd.split("\\s+");
                 String arg = words[0];
                 if (arg.matches("^[a-zA-Z0-9_]{2,16}$")) {
-                    explicitTarget = arg;
-                    try {
-                        Minecraft mc = Minecraft.getInstance();
-                        if (mc.player != null && mc.player.connection != null) {
-                            for (PlayerInfo info : mc.player.connection.getOnlinePlayers()) {
-                                if (info != null && info.getProfile() != null && info.getProfile().name() != null) {
-                                    String pName = info.getProfile().name();
-                                    if (pName.toLowerCase().startsWith(arg.toLowerCase())) {
-                                        explicitTarget = pName;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    } catch (Throwable ignored) {}
+                    explicitTarget = resolvePlayerName(arg, mc);
                 }
             }
         }
 
         String senderName = ChatUtils.extractNameFromChat(text);
-        Minecraft mc = Minecraft.getInstance();
-        String myName = mc.player != null ? mc.player.getScoreboardName() : "Me";
 
         String target = explicitTarget != null ? explicitTarget : (senderName != null ? senderName : myName);
         String actor = senderName != null ? senderName : myName;
@@ -120,8 +140,15 @@ public final class FunChatCommands {
                         String[] words = afterCmd.split("\\s+");
                         if (words.length >= 2) {
                             hasTwo = true;
-                            p1 = words[0];
-                            p2 = words[1];
+                            p1 = resolvePlayerName(words[0], mc);
+                            p2 = resolvePlayerName(words[1], mc);
+                        } else if (words.length == 1) {
+                            String resolved = resolvePlayerName(words[0], mc);
+                            if (!actor.equalsIgnoreCase(resolved)) {
+                                hasTwo = true;
+                                p1 = actor;
+                                p2 = resolved;
+                            }
                         }
                     }
                 }

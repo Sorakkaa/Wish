@@ -54,6 +54,25 @@ public final class MusicManager {
                 Thread.sleep(1500); 
 
                 
+                // 1. Direct check: If 3D Lyrics is active, use the current playing song
+                if (!ModConfig.INSTANCE.lyricsDemoMode) {
+                    String lTitle = com.wish.client.features.environment.LyricsManager.getCurrentTitle();
+                    String lArtist = com.wish.client.features.environment.LyricsManager.getCurrentArtist();
+                    if (lTitle != null && !lTitle.trim().isEmpty()) {
+                        String songInfo = (lArtist != null && !lArtist.trim().isEmpty()) ? lTitle + " - " + lArtist : lTitle;
+                        sendWinMediaSongToChat(songInfo, chatPrefix);
+                        return;
+                    }
+                }
+
+                // 2. Query system media (playerctl on Linux, PowerShell on Windows) - works for YTM, Spotify, Deezer
+                String sysSong = fetchSystemMediaSong();
+                if (sysSong != null && !sysSong.trim().isEmpty()) {
+                    sendWinMediaSongToChat(sysSong, chatPrefix);
+                    return;
+                }
+
+                // 3. Try Companion HTTP API if token is configured
                 boolean apiConnectionFailed = false;
                 if (ModConfig.INSTANCE.authToken != null) {
                     try {
@@ -71,16 +90,6 @@ public final class MusicManager {
                     }
                 }
 
-                
-                if (!"YTM".equalsIgnoreCase(provider)) {
-                    String winMediaSong = fetchSystemMediaSong();
-                    if (winMediaSong != null && !winMediaSong.trim().isEmpty()) {
-                        sendWinMediaSongToChat(winMediaSong, chatPrefix);
-                        return;
-                    }
-                }
-
-                
                 if ("YTM".equalsIgnoreCase(provider)) {
                     if (ModConfig.INSTANCE.authToken == null) {
                         WishClient.sendLocalChatMessage("§e[Wish] §cYou haven't connected your API! Click 'Pair API' in /wish");
@@ -102,6 +111,14 @@ public final class MusicManager {
     }
 
     public static String fetchSystemMediaSong() {
+        if (!ModConfig.INSTANCE.lyricsDemoMode) {
+            String lTitle = com.wish.client.features.environment.LyricsManager.getCurrentTitle();
+            String lArtist = com.wish.client.features.environment.LyricsManager.getCurrentArtist();
+            if (lTitle != null && !lTitle.trim().isEmpty()) {
+                return (lArtist != null && !lArtist.trim().isEmpty()) ? lTitle + " - " + lArtist : lTitle;
+            }
+        }
+
         try {
             String os = System.getProperty("os.name").toLowerCase();
             if (os.contains("linux")) {
@@ -115,15 +132,12 @@ public final class MusicManager {
                     targetPlayers = "deezer,deezer-desktop,deezplayer";
                 }
 
-                ProcessBuilder pb = new ProcessBuilder("bash", "-c", "playerctl -p " + targetPlayers + " metadata --format '{{album}}|||{{title}} - {{artist}}' 2>/dev/null | grep -v '^|||' | head -n 1");
+                ProcessBuilder pb = new ProcessBuilder("bash", "-c", "playerctl -p " + targetPlayers + " metadata --format '{{title}} - {{artist}}' 2>/dev/null | grep -v '^ - $' | head -n 1");
                 Process p = pb.start();
                 try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
                     String line = br.readLine();
-                    if (line != null && line.contains("|||")) {
-                        String[] parts = line.split("\\|\\|\\|");
-                        if (parts.length > 1) {
-                            return parts[1].trim();
-                        }
+                    if (line != null && !line.trim().isEmpty() && !line.trim().equals("-")) {
+                        return line.trim();
                     }
                 } finally {
                     if (p.isAlive()) {
@@ -337,12 +351,10 @@ public final class MusicManager {
             }
         } catch (Exception ignored) {}
 
-        if (!"YTM".equalsIgnoreCase(ModConfig.INSTANCE.musicProvider)) {
-            String winMediaSong = fetchSystemMediaSong();
-            if (winMediaSong != null && !winMediaSong.trim().isEmpty()) {
-                sendWinMediaSongToChat(winMediaSong, chatPrefix);
-                return;
-            }
+        String winMediaSong = fetchSystemMediaSong();
+        if (winMediaSong != null && !winMediaSong.trim().isEmpty()) {
+            sendWinMediaSongToChat(winMediaSong, chatPrefix);
+            return;
         }
 
         WishClient.sendLocalChatMessage("§e[Wish] §cNo song currently playing.");

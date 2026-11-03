@@ -168,18 +168,22 @@ public final class LyricsManager {
         try {
             String configuredProvider = ModConfig.INSTANCE.musicProvider != null ? ModConfig.INSTANCE.musicProvider.trim() : "";
 
-            // 1. Direct companion query if YouTube Music provider is selected
+            // 1. On Linux, playerctl is local MPRIS IPC with zero latency and no HTTP rate limits
+            String os = System.getProperty("os.name").toLowerCase();
+            if (os.contains("linux")) {
+                pollLinuxPlayerctl();
+                return;
+            }
+
+            // 2. Direct companion query if YouTube Music provider is selected
             if ("YTM".equalsIgnoreCase(configuredProvider) || "YouTube Music".equalsIgnoreCase(configuredProvider)) {
                 if (pollYtmCompanion()) {
                     return;
                 }
             }
 
-            // 2. Fallback to OS-specific media listeners
-            String os = System.getProperty("os.name").toLowerCase();
-            if (os.contains("linux")) {
-                pollLinuxPlayerctl();
-            } else if ("YTM".equalsIgnoreCase(configuredProvider)) {
+            // 3. Fallback to OS-specific media listeners
+            if ("YTM".equalsIgnoreCase(configuredProvider)) {
                 pollYtmCompanion();
             } else {
                 pollWindowsMedia();
@@ -372,7 +376,10 @@ public final class LyricsManager {
         } catch (Exception ignored) {}
     }
 
+    private static volatile long ytmBackoffUntil = 0;
+
     private static boolean pollYtmCompanion() {
+        if (System.currentTimeMillis() < ytmBackoffUntil) return false;
         try {
             int port = ModConfig.INSTANCE.ytmPort > 0 ? ModConfig.INSTANCE.ytmPort : 9863;
             URI uri = URI.create("http://127.0.0.1:" + port + "/api/v1/state");
@@ -383,7 +390,12 @@ public final class LyricsManager {
             if (ModConfig.INSTANCE.authToken != null) {
                 conn.setRequestProperty("Authorization", ModConfig.INSTANCE.authToken);
             }
-            if (conn.getResponseCode() == 200) {
+            int code = conn.getResponseCode();
+            if (code == 429) {
+                ytmBackoffUntil = System.currentTimeMillis() + 3000;
+                return false;
+            }
+            if (code == 200) {
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
                     StringBuilder sb = new StringBuilder();
                     String l;
