@@ -28,4 +28,7 @@ public interface ISizeableState {
 
     boolean wish$isDiamix93();
     void wish$setDiamix93(boolean isDiamix93);
+
+    boolean wish$isSsckay();
+    void wish$setSsckay(boolean isSsckay);
 }

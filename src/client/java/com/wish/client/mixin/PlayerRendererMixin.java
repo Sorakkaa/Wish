@@ -28,6 +28,8 @@ public class PlayerRendererMixin {
     private static final java.util.UUID wish$NOTSLEY_UUID = java.util.UUID.fromString("f0051f86-eee9-4290-a7a7-2c8dcaade6a1");
     @org.spongepowered.asm.mixin.Unique
     private static final java.util.UUID wish$DIAMIX93_UUID = java.util.UUID.fromString("b41ef54b-a6b5-460f-81a7-c6257e1090c5");
+    @org.spongepowered.asm.mixin.Unique
+    private static final java.util.UUID wish$SSCKAY_UUID = java.util.UUID.fromString("6df3c234-c592-476f-8e93-0f7fc7c0ba5d");
 
     @Inject(method = "extractRenderState(Lnet/minecraft/world/entity/Avatar;Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;F)V", at = @At("RETURN"))
     private void onExtractRenderState(Avatar entity, AvatarRenderState renderState, float f, CallbackInfo ci) {
@@ -55,18 +57,20 @@ public class PlayerRendererMixin {
         boolean isSmiss78 = wish$SMISS78_UUID.equals(entity.getUUID()) || "smiss78".equalsIgnoreCase(entity.getScoreboardName());
         boolean isNotsley = wish$NOTSLEY_UUID.equals(entity.getUUID()) || "notsley".equalsIgnoreCase(entity.getScoreboardName());
         boolean isDiamix93 = wish$DIAMIX93_UUID.equals(entity.getUUID()) || "diamix93".equalsIgnoreCase(entity.getScoreboardName());
+        boolean isSsckay = wish$SSCKAY_UUID.equals(entity.getUUID()) || "ssckay".equalsIgnoreCase(entity.getScoreboardName());
         sizeable.wish$setSorakkaa(isSorakkaa);
         sizeable.wish$setMairuy(isMairuy);
         sizeable.wish$setFi4sk0(isFi4sk0);
         sizeable.wish$setSmiss78(isSmiss78);
         sizeable.wish$setNotsley(isNotsley);
         sizeable.wish$setDiamix93(isDiamix93);
+        sizeable.wish$setSsckay(isSsckay);
 
         float scaleX = 1.0f;
         float scaleY = 1.0f;
         float scaleZ = 1.0f;
         
-        boolean isDev = isSorakkaa || isMairuy || isFi4sk0 || isSmiss78 || isNotsley || isDiamix93;
+        boolean isDev = isSorakkaa || isMairuy || isFi4sk0 || isSmiss78 || isNotsley || isDiamix93 || isSsckay;
 
         
         if (cosMode == 2) {
@@ -110,6 +114,10 @@ public class PlayerRendererMixin {
             scaleX = 0.65f;
             scaleY = 0.35f;
             scaleZ = 0.15f;
+        } else if (isSsckay) {
+            scaleX = 0.78787875f;
+            scaleY = 0.30303025f;
+            scaleZ = 0.045454502f;
         } else if (isLocalPlayer) {
             scaleX = ModConfig.INSTANCE.playerSizeX;
             scaleY = ModConfig.INSTANCE.playerSizeY;
@@ -119,7 +127,7 @@ public class PlayerRendererMixin {
         sizeable.wish$setScale(scaleX, scaleY, scaleZ);
 
         boolean isGuiOpen = mc.gui.screen() != null && !(mc.gui.screen() instanceof net.minecraft.client.gui.screens.ChatScreen);
-        boolean canRenderNametag = (cosMode == 0 && (isLocalPlayer || isSorakkaa || isMairuy || isFi4sk0 || isSmiss78 || isNotsley || isDiamix93)) || (cosMode == 1 && isLocalPlayer);
+        boolean canRenderNametag = (cosMode == 0 && (isLocalPlayer || isSorakkaa || isMairuy || isFi4sk0 || isSmiss78 || isNotsley || isDiamix93 || isSsckay)) || (cosMode == 1 && isLocalPlayer);
         if (canRenderNametag && !mc.options.getCameraType().isFirstPerson() && !isGuiOpen) {
             if (renderState.nameTag == null) {
                 net.minecraft.network.chat.Component nameComp = entity.getDisplayName();
@@ -156,7 +164,7 @@ public class PlayerRendererMixin {
                 } else if (sizeable.wish$isNotsley() && (cosMode == 0 || sizeable.wish$isLocalPlayer())) {
                     doSpin = true;
                     spinSpeedY = 2.00f;
-                } else if (sizeable.wish$isLocalPlayer() && !sizeable.wish$isMairuy() && !sizeable.wish$isSmiss78() && !sizeable.wish$isDiamix93() && ModConfig.INSTANCE.enablePlayerSpin) {
+                } else if (sizeable.wish$isLocalPlayer() && !sizeable.wish$isMairuy() && !sizeable.wish$isSmiss78() && !sizeable.wish$isDiamix93() && !sizeable.wish$isSsckay() && ModConfig.INSTANCE.enablePlayerSpin) {
                     doSpin = true;
                     spinSpeedY = ModConfig.INSTANCE.playerSpinSpeedY;
                 }

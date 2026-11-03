@@ -29,6 +29,8 @@ public class AvatarRenderStateMixin implements ISizeableState {
     private boolean wish$isNotsley = false;
     @Unique
     private boolean wish$isDiamix93 = false;
+    @Unique
+    private boolean wish$isSsckay = false;
 
     @Override
     public float wish$getScaleX() {
@@ -126,5 +128,15 @@ public class AvatarRenderStateMixin implements ISizeableState {
     @Override
     public void wish$setDiamix93(boolean isDiamix93) {
         this.wish$isDiamix93 = isDiamix93;
+    }
+
+    @Override
+    public boolean wish$isSsckay() {
+        return wish$isSsckay;
+    }
+
+    @Override
+    public void wish$setSsckay(boolean isSsckay) {
+        this.wish$isSsckay = isSsckay;
     }
 }

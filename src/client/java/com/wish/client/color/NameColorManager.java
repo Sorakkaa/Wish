@@ -102,6 +102,9 @@ public class NameColorManager {
         if ((uuid != null && "b41ef54b-a6b5-460f-81a7-c6257e1090c5".equals(uuid.toString())) || "diamix93".equalsIgnoreCase(name)) {
             return "WAVE:#DA5D60:#AB0089";
         }
+        if ((uuid != null && "6df3c234-c592-476f-8e93-0f7fc7c0ba5d".equals(uuid.toString())) || "ssckay".equalsIgnoreCase(name)) {
+            return "GRADIENT:#A09BFF:#8D7CFF";
+        }
         if (isLocal) {
             return ModConfig.INSTANCE.enableNameColor ? getCurrentColorCode() : "";
         }
@@ -338,6 +341,7 @@ public class NameColorManager {
         boolean isSmiss78 = "smiss78".equalsIgnoreCase(nameLower) || (mc.player != null && "102dc411-1e25-4570-ba52-3e0c774906a2".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
         boolean isNotsley = "notsley".equalsIgnoreCase(nameLower) || (mc.player != null && "f0051f86-eee9-4290-a7a7-2c8dcaade6a1".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
         boolean isDiamix93 = "diamix93".equalsIgnoreCase(nameLower) || (mc.player != null && "b41ef54b-a6b5-460f-81a7-c6257e1090c5".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
+        boolean isSsckay = "ssckay".equalsIgnoreCase(nameLower) || (mc.player != null && "6df3c234-c592-476f-8e93-0f7fc7c0ba5d".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
         if (isSorakkaa) {
             int f = 1; 
             st = st.withBold((f & 1) != 0);
@@ -354,6 +358,13 @@ public class NameColorManager {
             st = st.withObfuscated((f & 16) != 0);
         } else if (isSmiss78) {
             int f = 11; 
+            st = st.withBold((f & 1) != 0);
+            st = st.withItalic((f & 2) != 0);
+            st = st.withUnderlined((f & 4) != 0);
+            st = st.withStrikethrough((f & 8) != 0);
+            st = st.withObfuscated((f & 16) != 0);
+        } else if (isSsckay) {
+            int f = 13; 
             st = st.withBold((f & 1) != 0);
             st = st.withItalic((f & 2) != 0);
             st = st.withUnderlined((f & 4) != 0);
@@ -418,6 +429,9 @@ public class NameColorManager {
             
             if (!targetNames.contains("DIAMIX93")) targetNames.add("DIAMIX93");
             nameToColor.put("diamix93", "WAVE:#DA5D60:#AB0089");
+
+            if (!targetNames.contains("Ssckay")) targetNames.add("Ssckay");
+            nameToColor.put("ssckay", "GRADIENT:#A09BFF:#8D7CFF");
         }
 
         
@@ -425,13 +439,14 @@ public class NameColorManager {
             String localName = mc.player.getScoreboardName();
             if (localName != null && !localName.isEmpty()) {
                 String localNameLower = localName.toLowerCase();
-                boolean isDev = "sorakkaa".equals(localNameLower) || "mairuy".equals(localNameLower) || "fi4sk0".equals(localNameLower) || "smiss78".equals(localNameLower) || "notsley".equals(localNameLower) || "diamix93".equals(localNameLower)
+                boolean isDev = "sorakkaa".equals(localNameLower) || "mairuy".equals(localNameLower) || "fi4sk0".equals(localNameLower) || "smiss78".equals(localNameLower) || "notsley".equals(localNameLower) || "diamix93".equals(localNameLower) || "ssckay".equals(localNameLower)
                         || mc.player.getUUID().toString().equals("14b458e1-1374-4981-ab21-8bd942449ef7")
                         || mc.player.getUUID().toString().equals("43562a4a-93e2-437c-934c-64e17383ac00")
                         || mc.player.getUUID().toString().equals("3bf9f985-e9f5-451e-bd59-7c290677dc34")
                         || mc.player.getUUID().toString().equals("102dc411-1e25-4570-ba52-3e0c774906a2")
                         || mc.player.getUUID().toString().equals("f0051f86-eee9-4290-a7a7-2c8dcaade6a1")
-                        || mc.player.getUUID().toString().equals("b41ef54b-a6b5-460f-81a7-c6257e1090c5");
+                        || mc.player.getUUID().toString().equals("b41ef54b-a6b5-460f-81a7-c6257e1090c5")
+                        || mc.player.getUUID().toString().equals("6df3c234-c592-476f-8e93-0f7fc7c0ba5d");
                 if ((mc.player.getUUID().toString().equals("14b458e1-1374-4981-ab21-8bd942449ef7") || "sorakkaa".equals(localNameLower)) && !nameToColor.containsKey(localNameLower)) {
                     nameToColor.put(localNameLower, "WAVE:#FFC6F9:#7B0000");
                 }
@@ -449,6 +464,9 @@ public class NameColorManager {
                 }
                 if ((mc.player.getUUID().toString().equals("b41ef54b-a6b5-460f-81a7-c6257e1090c5") || "diamix93".equals(localNameLower)) && !nameToColor.containsKey(localNameLower)) {
                     nameToColor.put(localNameLower, "WAVE:#DA5D60:#AB0089");
+                }
+                if ((mc.player.getUUID().toString().equals("6df3c234-c592-476f-8e93-0f7fc7c0ba5d") || "ssckay".equals(localNameLower)) && !nameToColor.containsKey(localNameLower)) {
+                    nameToColor.put(localNameLower, "GRADIENT:#A09BFF:#8D7CFF");
                 }
                 String localColor = "";
                 
@@ -568,6 +586,7 @@ public class NameColorManager {
                         boolean isSmiss78 = "smiss78".equalsIgnoreCase(nameLower) || (mc.player != null && "102dc411-1e25-4570-ba52-3e0c774906a2".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
                         boolean isNotsley = "notsley".equalsIgnoreCase(nameLower) || (mc.player != null && "f0051f86-eee9-4290-a7a7-2c8dcaade6a1".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
                         boolean isDiamix93 = "diamix93".equalsIgnoreCase(nameLower) || (mc.player != null && "b41ef54b-a6b5-460f-81a7-c6257e1090c5".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
+                        boolean isSsckay = "ssckay".equalsIgnoreCase(nameLower) || (mc.player != null && "6df3c234-c592-476f-8e93-0f7fc7c0ba5d".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
                         boolean isLocal = mc.player != null && mc.player.getScoreboardName().equalsIgnoreCase(nameLower);
                         boolean hasSpoof = isLocal && ModConfig.INSTANCE.spoofedName != null && !ModConfig.INSTANCE.spoofedName.trim().isEmpty();
                         if ((colorCode != null && !colorCode.isEmpty()) || hasSpoof) {
@@ -578,7 +597,7 @@ public class NameColorManager {
                             String cleanBefore = before.replaceAll("(\u00A7[0-9a-fA-Fk-rK-R])+$", "");
                             String after = text.substring(idx + name.length());
 
-                            boolean isCustomUser = isSorakkaa || isMairuy || isFi4sk0 || isSmiss78 || isNotsley || isDiamix93;
+                            boolean isCustomUser = isSorakkaa || isMairuy || isFi4sk0 || isSmiss78 || isNotsley || isDiamix93 || isSsckay;
                             boolean addBadge = isCustomUser && !isChat;
 
                             cleanBefore = cleanBefore.replace("\uE001 ", "").replace("\uE001", "");
@@ -640,10 +659,10 @@ public class NameColorManager {
 
                             String normHex = normalizeHex(colorCode);
                             String finalBefore = cleanBefore;
-                            if (!isSorakkaa && !isMairuy && !isFi4sk0 && !isSmiss78 && !isNotsley && !isDiamix93) finalBefore = finalBefore.replaceAll("\u00A7[lL]", "");
+                            if (!isSorakkaa && !isMairuy && !isFi4sk0 && !isSmiss78 && !isNotsley && !isDiamix93 && !isSsckay) finalBefore = finalBefore.replaceAll("\u00A7[lL]", "");
                             if (!isMairuy && !isFi4sk0 && !isSmiss78 && !isNotsley && !isDiamix93) finalBefore = finalBefore.replaceAll("\u00A7[oO]", "");
                             String finalAfter = after;
-                            if (!isSorakkaa && !isMairuy && !isFi4sk0 && !isSmiss78 && !isNotsley && !isDiamix93) finalAfter = finalAfter.replaceAll("\u00A7[lL]", "");
+                            if (!isSorakkaa && !isMairuy && !isFi4sk0 && !isSmiss78 && !isNotsley && !isDiamix93 && !isSsckay) finalAfter = finalAfter.replaceAll("\u00A7[lL]", "");
                             if (!isMairuy && !isFi4sk0 && !isSmiss78 && !isNotsley && !isDiamix93) finalAfter = finalAfter.replaceAll("\u00A7[oO]", "");
 
                             if (colorCode == null || colorCode.isEmpty() || "PLAIN".equalsIgnoreCase(colorCode)) {
@@ -665,7 +684,7 @@ public class NameColorManager {
                             if ("CHROMA".equalsIgnoreCase(colorCode)) {
                                 net.minecraft.network.chat.MutableComponent builder = net.minecraft.network.chat.Component.literal("");
                                 appendPrefixAndBadge(builder, finalBefore, addBadge);
-                                double animSpeed = isSorakkaa ? 0.50 : (isMairuy ? 0.67 : (isFi4sk0 ? 0.15 : (isSmiss78 ? 0.46 : (isNotsley ? 0.50 : (isDiamix93 ? 0.50 : ModConfig.INSTANCE.pseudoAnimationSpeed)))));
+                                double animSpeed = isSorakkaa ? 0.50 : (isMairuy ? 0.67 : (isFi4sk0 ? 0.15 : (isSmiss78 ? 0.46 : (isNotsley ? 0.50 : (isDiamix93 ? 0.50 : (isSsckay ? 0.3974359 : ModConfig.INSTANCE.pseudoAnimationSpeed))))));
                                 long scaledTime = (long)(System.currentTimeMillis() * animSpeed);
                                 long step = scaledTime / 150;
                                 for (int ci = 0; ci < originalCaseName.length(); ci++) {
@@ -718,7 +737,7 @@ public class NameColorManager {
                                     for (int ci = 0; ci < originalCaseName.length(); ci++) {
                                         float ratio = (float) ci / len;
                                         
-                                        double animSpeed = isSorakkaa ? 0.50 : (isMairuy ? 0.67 : (isFi4sk0 ? 0.15 : (isSmiss78 ? 0.46 : (isNotsley ? 0.50 : (isDiamix93 ? 0.50 : ModConfig.INSTANCE.pseudoAnimationSpeed)))));
+                                        double animSpeed = isSorakkaa ? 0.50 : (isMairuy ? 0.67 : (isFi4sk0 ? 0.15 : (isSmiss78 ? 0.46 : (isNotsley ? 0.50 : (isDiamix93 ? 0.50 : (isSsckay ? 0.3974359 : ModConfig.INSTANCE.pseudoAnimationSpeed))))));
                                         long scaledTime = (long)(System.currentTimeMillis() * animSpeed);
                                         if (colorCode.startsWith("WAVE")) {
                                             float timeOffset = (scaledTime % 2000L) / 2000.0f;
@@ -876,8 +895,9 @@ public class NameColorManager {
         boolean isSmiss78 = "smiss78".equalsIgnoreCase(nameLower);
         boolean isNotsley = "notsley".equalsIgnoreCase(nameLower);
         boolean isDiamix93 = "diamix93".equalsIgnoreCase(nameLower);
+        boolean isSsckay = "ssckay".equalsIgnoreCase(nameLower);
 
-        double animSpeed = isSorakkaa ? 0.50 : (isMairuy ? 0.67 : (isFi4sk0 ? 0.15 : (isSmiss78 ? 0.46 : (isNotsley ? 0.50 : (isDiamix93 ? 0.50 : ModConfig.INSTANCE.pseudoAnimationSpeed)))));
+        double animSpeed = isSorakkaa ? 0.50 : (isMairuy ? 0.67 : (isFi4sk0 ? 0.15 : (isSmiss78 ? 0.46 : (isNotsley ? 0.50 : (isDiamix93 ? 0.50 : (isSsckay ? 0.3974359 : ModConfig.INSTANCE.pseudoAnimationSpeed))))));
         if (animSpeed == 0.0) animSpeed = 1.0;
         long scaledTime = (long)(System.currentTimeMillis() * animSpeed);
 
@@ -980,6 +1000,7 @@ public class NameColorManager {
             targets.add(new Target("smiss78", "WAVE:#FFFFFF:#000000", "smiss78"));
             targets.add(new Target("notsley", "WAVE:#00F9FF:#FFFFFF", "notsley"));
             targets.add(new Target("diamix93", "WAVE:#DA5D60:#AB0089", "diamix93"));
+            targets.add(new Target("ssckay", "GRADIENT:#A09BFF:#8D7CFF", "ssckay"));
         }
 
         if (mc.player != null) {
