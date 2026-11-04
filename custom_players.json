@@ -75,5 +75,16 @@
     "scaleY": 0.30303025,
     "scaleZ": 0.045454502,
     "spinSpeedY": 0.0
+  },
+  "0faee032-1f95-4115-8ff8-13ffdcf78473": {
+    "name": "ILoveMayline",
+    "color": "WAVE:#00E6FF:#FF00C6",
+    "font": 5,
+    "animSpeed": 0.46,
+    "badge": true,
+    "scaleX": 1.0,
+    "scaleY": 1.0,
+    "scaleZ": 1.0,
+    "spinSpeedY": 0.0
   }
 }
