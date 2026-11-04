@@ -152,72 +152,74 @@ public final class LyricsRenderer {
         if (!ModConfig.INSTANCE.enableLyrics || mc.level == null || mc.player == null) return;
 
         LyricsManager.LyricState state = LyricsManager.getActiveLyricState();
-        if (!state.active) {
-            floatingWords.clear();
-            lastSpawnedLine = "";
-            lastSpawnedLineTime = -1;
-            lastSpawnedWordIdx = -1;
-            return;
-        }
-
         long now = System.currentTimeMillis();
         var camera = mc.gameRenderer.mainCamera();
         var camPos = camera.position();
         Font font = mc.font;
-
-        boolean hasWords = (state.currentLine != null && !state.currentLine.words.isEmpty());
-        String curText = hasWords ? state.currentLine.text : "";
-        long curLineTime = (state.currentLine != null) ? state.currentLine.timeMs : -1;
-
         int configuredColor = getLyricsColor();
-        boolean isSpeedUp = LyricsManager.isSpeedUpTrack(state.title);
 
-        // 1. Spawning lyrics according to selected mode: Mots (0) vs Phrases (1)
-        if (ModConfig.INSTANCE.lyricsMode == 0) {
-            // Mode Mots: Word by word
-            if (!curText.equals(lastSpawnedLine) || curLineTime != lastSpawnedLineTime) {
-                lastSpawnedLine = curText;
-                lastSpawnedLineTime = curLineTime;
-                lastSpawnedWordIdx = -1;
-            }
-
-            if (hasWords && state.activeWordIndex > lastSpawnedWordIdx) {
-                int startIdx = Math.max(0, lastSpawnedWordIdx + 1);
-                int endIdx = Math.min(state.currentLine.words.size() - 1, state.activeWordIndex);
-                for (int wi = startIdx; wi <= endIdx; wi++) {
-                    String rawWord = state.currentLine.words.get(wi);
-                    String clean = rawWord.replaceAll("[,.!?\"'();:]+", "").trim().toUpperCase();
-                    if (!clean.isEmpty()) {
-                        long gap = now - lastWordSpawnTime;
-                        lastWordSpawnTime = now;
-                        spawnWord(clean, configuredColor, 1.0f, gap, isSpeedUp, mc);
-                    }
-                }
-                lastSpawnedWordIdx = state.activeWordIndex;
+        if (!state.active) {
+            for (FloatingWord fw : floatingWords) {
+                fw.triggerDespawn(250);
             }
         } else {
-            // Mode Phrases: Full phrase / line centered in view, disappearing fast as requested
-            if (hasWords && (!curText.equals(lastSpawnedLine) || curLineTime != lastSpawnedLineTime)) {
-                lastSpawnedLine = curText;
-                lastSpawnedLineTime = curLineTime;
-                lastWordSpawnTime = now;
-                long lineDur = (state.nextLine != null && state.nextLine.timeMs > state.currentLine.timeMs)
-                    ? (state.nextLine.timeMs - state.currentLine.timeMs) : (isSpeedUp ? 2200 : 2800);
-                long phraseDuration = isSpeedUp
-                    ? Math.max(1300, Math.min(2300, (long)(lineDur * 0.80)))
-                    : Math.max(1500, Math.min(2800, lineDur));
-                spawnPhrase(curText, configuredColor, phraseDuration, mc);
+            boolean hasWords = (state.currentLine != null && !state.currentLine.words.isEmpty());
+            String curText = hasWords ? state.currentLine.text : "";
+            long curLineTime = (state.currentLine != null) ? state.currentLine.timeMs : -1;
+
+            boolean isSpeedUp = LyricsManager.isSpeedUpTrack(state.title);
+
+            // 1. Spawning lyrics according to selected mode: Mots (0) vs Phrases (1)
+            if (ModConfig.INSTANCE.lyricsMode == 0) {
+                // Mode Mots: Word by word
+                if (!curText.equals(lastSpawnedLine) || curLineTime != lastSpawnedLineTime || state.activeWordIndex < lastSpawnedWordIdx) {
+                    lastSpawnedLine = curText;
+                    lastSpawnedLineTime = curLineTime;
+                    lastSpawnedWordIdx = -1;
+                }
+
+                if (hasWords && state.activeWordIndex > lastSpawnedWordIdx) {
+                    int startIdx = (lastSpawnedWordIdx == -1 && state.activeWordIndex > 0)
+                        ? state.activeWordIndex
+                        : Math.max(0, lastSpawnedWordIdx + 1);
+                    int endIdx = Math.min(state.currentLine.words.size() - 1, state.activeWordIndex);
+                    for (int wi = startIdx; wi <= endIdx; wi++) {
+                        String rawWord = state.currentLine.words.get(wi);
+                        String clean = rawWord.replaceAll("[,.!?\"'();:]+", "").trim().toUpperCase();
+                        if (!clean.isEmpty()) {
+                            long gap = now - lastWordSpawnTime;
+                            lastWordSpawnTime = now;
+                            spawnWord(clean, configuredColor, 1.0f, gap, isSpeedUp, mc);
+                        }
+                    }
+                    lastSpawnedWordIdx = state.activeWordIndex;
+                }
+            } else {
+                // Mode Phrases: Full phrase / line centered in view, disappearing fast as requested
+                if (hasWords && (!curText.equals(lastSpawnedLine) || curLineTime != lastSpawnedLineTime)) {
+                    lastSpawnedLine = curText;
+                    lastSpawnedLineTime = curLineTime;
+                    lastWordSpawnTime = now;
+                    long lineDur = (state.nextLine != null && state.nextLine.timeMs > state.currentLine.timeMs)
+                        ? (state.nextLine.timeMs - state.currentLine.timeMs) : (isSpeedUp ? 2200 : 2800);
+                    long phraseDuration = isSpeedUp
+                        ? Math.max(1300, Math.min(2300, (long)(lineDur * 0.80)))
+                        : Math.max(1500, Math.min(2800, lineDur));
+                    spawnPhrase(curText, configuredColor, phraseDuration, mc);
+                }
+            }
+
+            // 2. Constant floating musical notes & stars whenever screen isn't crowded (< 15 items max)
+            int totalOnScreen = floatingWords.size();
+            long emojiInterval = (!hasWords || (now - lastWordSpawnTime > 1000)) ? 220 : (isSpeedUp ? 320 : 420);
+
+            if (totalOnScreen < MAX_TOTAL_SCREEN_ITEMS && (now - lastCenterNoteTime >= emojiInterval)) {
+                lastCenterNoteTime = now;
+                spawnIdleParticle(configuredColor, mc);
             }
         }
 
-        // 2. Constant floating musical notes & stars whenever screen isn't crowded (< 15 items max)
-        int totalOnScreen = floatingWords.size();
-        long emojiInterval = (!hasWords || (now - lastWordSpawnTime > 1000)) ? 220 : (isSpeedUp ? 320 : 420);
-
-        if (totalOnScreen < MAX_TOTAL_SCREEN_ITEMS && (now - lastCenterNoteTime >= emojiInterval)) {
-            lastCenterNoteTime = now;
-            spawnIdleParticle(configuredColor, mc);
-        }
+        if (floatingWords.isEmpty()) return;
 
         // 3. Render all active 3D floating words and notes (Floating mode)
         Quaternionf invRot = new Quaternionf(camera.rotation()).conjugate();
@@ -259,7 +261,8 @@ public final class LyricsRenderer {
             double projY = halfScreenH - (camSpace.y / depth) * focalLength;
 
             float baseMult = fw.isCenterSymbol ? 0.024f : (fw.isPhrase ? 0.022f : 0.026f);
-            float scale = (float) ((focalLength / depth) * baseMult * fw.sizeMult * 3.0f);
+            float userScale = Math.max(0.5f, Math.min(5.0f, ModConfig.INSTANCE.lyricsScale));
+            float scale = (float) ((focalLength / depth) * baseMult * fw.sizeMult * userScale);
 
             if (projX < -400 || projX > screenW + 400 || projY < -400 || projY > screenH + 400) continue;
 

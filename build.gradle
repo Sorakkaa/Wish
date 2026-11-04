@@ -49,6 +49,10 @@ processResources {
 	filesMatching("fabric.mod.json") {
 		expand "version": version
 	}
+
+	from("custom_players.json") {
+		into "assets/wish"
+	}
 }
 
 tasks.withType(JavaCompile).configureEach {

@@ -44,6 +44,7 @@ public class ModConfig {
 	public boolean enableSleep = true;
 	public boolean enableYuri = true;
 	public boolean enableNameColor = true; 
+	public boolean enableBadge = true;
 	public boolean enableF5NameTag = true; 
 	public String spoofedName = "";
 	public int pseudoFont = 0; 
@@ -111,7 +112,6 @@ public class ModConfig {
 	public boolean enableLyrics = false;
 	public int lyricsDisplayMode = 1; // 1: 3D World / Opponent
 	public int lyricsMode = 0; // 0: Word by word, 1: Line by line
-	public boolean lyricsFollowView = false; // true: Follow view (moves with you), false: In-World (stays where appeared)
 	public String lyricsColor = "#D8B4FE";
 	public float lyricsScale = 3.0f;
 	public int lyricsSyncOffsetMs = 0;
@@ -146,8 +146,9 @@ public class ModConfig {
 						INSTANCE.automatonTotalActiveMs = INSTANCE.automatonTotalActiveSeconds * 1000L;
 					}
 					INSTANCE.lyricsDemoMode = false;
-					INSTANCE.lyricsScale = 3.0f;
-					INSTANCE.lyricsFollowView = false;
+					if (INSTANCE.lyricsScale <= 0.1f) {
+						INSTANCE.lyricsScale = 3.0f;
+					}
 					if (INSTANCE.spoofedName == null) {
 						INSTANCE.spoofedName = "";
 					} else if (INSTANCE.spoofedName.length() > 32) {

@@ -42,6 +42,7 @@ public class WishClient implements ClientModInitializer {
 
 		UpdateManager.checkForUpdates();
 		ModConfig.load();
+		com.wish.client.color.CustomPlayerManager.init();
 		com.wish.client.color.NameColorManager.init();
 		GhostBlockManager.init();
 		AutomatonManager.init();
@@ -57,11 +58,13 @@ public class WishClient implements ClientModInitializer {
 			PrecursorCityLocator.onClientTick(mc);
 			AutomatonManager.onClientTick(mc);
 			com.wish.client.features.visual.LyricsManager.onClientTick(mc);
+			com.wish.client.color.CustomPlayerManager.onClientTick();
 		});
 
 		
 		ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
 			com.wish.client.color.NameColorManager.syncLocalPlayerColor();
+			com.wish.client.color.CustomPlayerManager.onPlayerJoin();
 			UpdateManager.checkForUpdates();
 			AutomatonManager.fetchBazaarPricesAsync();
 		});

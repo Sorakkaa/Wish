@@ -263,12 +263,17 @@ public class WishConfigScreen extends Screen {
             
             if (activeTab != 5 && activeTab != 1) {
                 net.minecraft.network.chat.Style baseSt = getPseudoBaseStyle();
+                int currentX = crossX - pseudoW / 2;
+                if (isPreviewBadgeActive()) {
+                    net.minecraft.network.chat.Component bComp = com.wish.client.color.NameColorManager.createBadgeComponent();
+                    g.text(font, bComp, currentX, pseudoY, 0xFFFFFFFF);
+                    currentX += font.width(bComp) + font.width(" ");
+                }
                 if (ModConfig.INSTANCE.enableNameColor && ModConfig.INSTANCE.pseudoAnimation >= 1) {
                     int c1 = parseHex(ModConfig.INSTANCE.customHexColor, 0xFFFFFFFF);
                     int c2 = parseHex(ModConfig.INSTANCE.customHexColor2, 0xFFFFFFFF);
                     String rawText = customPseudo;
                     int len = rawText.length();
-                    int currentX = crossX - pseudoW / 2;
                     long time = (long)(System.currentTimeMillis() * (double)ModConfig.INSTANCE.pseudoAnimationSpeed);
                     for (int i = 0; i < len; i++) {
                         char c = rawText.charAt(i);
@@ -309,7 +314,7 @@ public class WishConfigScreen extends Screen {
                     }
                 } else {
                     net.minecraft.network.chat.Component fullComp = net.minecraft.network.chat.Component.literal(customPseudo).withStyle(baseSt.withColor(net.minecraft.network.chat.TextColor.fromRgb(pseudoColor & 0x00FFFFFF)));
-                    g.text(font, fullComp, crossX - pseudoW / 2, pseudoY, pseudoColor);
+                    g.text(font, fullComp, currentX, pseudoY, pseudoColor);
                 }
             }
     
@@ -626,12 +631,17 @@ public class WishConfigScreen extends Screen {
             int pWidth = getPseudoWidth(font, customPseudo);
             int pX = (int)((cx + (cw - pWidth * scale) / 2) / scale);
             int pY = (int)(cy / scale);
+            int currentX = pX;
+            if (isPreviewBadgeActive()) {
+                net.minecraft.network.chat.Component bComp = com.wish.client.color.NameColorManager.createBadgeComponent();
+                g.text(font, bComp, currentX, pY, 0xFFFFFFFF);
+                currentX += font.width(bComp) + font.width(" ");
+            }
             
             if (ModConfig.INSTANCE.enableNameColor && ModConfig.INSTANCE.pseudoAnimation >= 1) {
                 int c1 = parseHex(ModConfig.INSTANCE.customHexColor, 0xFFFFFFFF);
                 int c2 = parseHex(ModConfig.INSTANCE.customHexColor2, 0xFFFFFFFF);
                 int len = customPseudo.length();
-                int currentX = pX;
                 long time = (long)(System.currentTimeMillis() * (double)ModConfig.INSTANCE.pseudoAnimationSpeed);
                 for (int i = 0; i < len; i++) {
                     char c = customPseudo.charAt(i);
@@ -667,7 +677,7 @@ public class WishConfigScreen extends Screen {
             } else {
                 int pseudoColor2 = parseHex(ModConfig.INSTANCE.customHexColor, 0xFFFFFFFF);
                 net.minecraft.network.chat.Component fullComp = net.minecraft.network.chat.Component.literal(customPseudo).withStyle(baseSt2.withColor(net.minecraft.network.chat.TextColor.fromRgb(pseudoColor2 & 0x00FFFFFF)));
-                g.text(font, fullComp, pX, pY, pseudoColor2);
+                g.text(font, fullComp, currentX, pY, pseudoColor2);
             }
             g.pose().popMatrix();
             cy += 36; 
@@ -691,7 +701,7 @@ public class WishConfigScreen extends Screen {
             if (pseudoSubWindow > 0) {
                 int winW = 310;
                 int winH = 200;
-                if (pseudoSubWindow == 1) winH = 120; 
+                if (pseudoSubWindow == 1) winH = 142; 
                 if (pseudoSubWindow == 2) {
                     winH = 126; 
                     if (ModConfig.INSTANCE.pseudoAnimation != 0 && ModConfig.INSTANCE.pseudoAnimation != 2) winH += 40;
@@ -753,7 +763,18 @@ public class WishConfigScreen extends Screen {
                         RenderUtils.drawGradientOutline(g, bx, by, colW2, 18, 4, borderCol, borderCol);
                         g.text(font, fonts[i], bx + 8, by + 5, isActive ? colAccent : COL_TEXT);
                     }
-                    cY += 2 * 22 + 6;
+                    int badgeBy = cY + 2 * 22;
+                    boolean badgeHov = mx >= cX && mx < cX + cW && my >= badgeBy && my < badgeBy + 18;
+                    boolean isBadgeActive = ModConfig.INSTANCE.enableBadge;
+                    int borderBadge = isBadgeActive ? colAccent : (badgeHov ? colAccentDim : 0x44666666);
+                    RenderUtils.drawGradientOutline(g, cX, badgeBy, cW, 18, 4, borderBadge, borderBadge);
+                    net.minecraft.network.chat.MutableComponent badgeLabel = net.minecraft.network.chat.Component.literal("");
+                    badgeLabel.append(com.wish.client.color.NameColorManager.createBadgeComponent());
+                    badgeLabel.append(net.minecraft.network.chat.Component.literal(" Wish Badge"));
+                    g.text(font, badgeLabel, cX + 8, badgeBy + 5, isBadgeActive ? colAccent : COL_TEXT);
+                    g.text(font, isBadgeActive ? "ON" : "OFF", cX + cW - (isBadgeActive ? 22 : 26), badgeBy + 5, isBadgeActive ? colAccent : 0xFF888888);
+
+                    cY += 3 * 22 + 6;
                     cY = renderInput(g, font, cX, cY, cW, "Name Spoofer", ModConfig.INSTANCE.spoofedName != null ? ModConfig.INSTANCE.spoofedName : "", spoofInputFocused, mx, my);
                 } else if (pseudoSubWindow == 2) { 
                     String[] anims = {"None", "Chroma", "Gradient", "Wave", "Breathe", "Blink"};
@@ -2109,7 +2130,7 @@ public class WishConfigScreen extends Screen {
             if (pseudoSubWindow > 0) {
                 int winW = 310;
                 int winH = 200;
-                if (pseudoSubWindow == 1) winH = 120; 
+                if (pseudoSubWindow == 1) winH = 142; 
                 if (pseudoSubWindow == 2) {
                     winH = 126; 
                     if (ModConfig.INSTANCE.pseudoAnimation != 0 && ModConfig.INSTANCE.pseudoAnimation != 2) winH += 40;
@@ -2155,7 +2176,13 @@ public class WishConfigScreen extends Screen {
                             return true;
                         }
                     }
-                    cY += 2 * 22 + 6;
+                    int badgeBy = cY + 2 * 22;
+                    if (mx >= cX && mx < cX + cW && my >= badgeBy && my < badgeBy + 18) {
+                        ModConfig.INSTANCE.enableBadge = !ModConfig.INSTANCE.enableBadge;
+                        ModConfig.INSTANCE.save();
+                        return true;
+                    }
+                    cY += 3 * 22 + 6;
                     if (mx >= cX && mx < cX + cW && my >= cY && my < cY + 22) {
                         spoofInputFocused = true;
                         hexInputFocused = false;
@@ -2671,7 +2698,7 @@ public class WishConfigScreen extends Screen {
                 if (pseudoSubWindow > 0) {
                     int winW = 310;
                     int winH = 200;
-                    if (pseudoSubWindow == 1) winH = 120;
+                    if (pseudoSubWindow == 1) winH = 142;
                     else if (pseudoSubWindow == 2) {
                         winH = 126;
                         if (ModConfig.INSTANCE.pseudoAnimation != 0 && ModConfig.INSTANCE.pseudoAnimation != 2) winH += 40;
@@ -2778,25 +2805,26 @@ public class WishConfigScreen extends Screen {
         try {
             String playerName = Minecraft.getInstance().player != null ? Minecraft.getInstance().player.getScoreboardName() : "Unknown";
             String playerUuid = Minecraft.getInstance().player != null ? Minecraft.getInstance().player.getUUID().toString() : "Unknown";
+
+            com.google.gson.JsonObject playerObj = new com.google.gson.JsonObject();
+            playerObj.addProperty("name", playerName);
+            playerObj.addProperty("color", com.wish.client.color.NameColorManager.getCurrentColorCode());
+            playerObj.addProperty("font", ModConfig.INSTANCE.pseudoFont);
+            playerObj.addProperty("animSpeed", ModConfig.INSTANCE.pseudoAnimationSpeed);
+            playerObj.addProperty("badge", ModConfig.INSTANCE.enableBadge);
+            playerObj.addProperty("scaleX", ModConfig.INSTANCE.playerSizeEnabled ? ModConfig.INSTANCE.playerSizeX : 1.0f);
+            playerObj.addProperty("scaleY", ModConfig.INSTANCE.playerSizeEnabled ? ModConfig.INSTANCE.playerSizeY : 1.0f);
+            playerObj.addProperty("scaleZ", ModConfig.INSTANCE.playerSizeEnabled ? ModConfig.INSTANCE.playerSizeZ : 1.0f);
+            playerObj.addProperty("spinSpeedY", ModConfig.INSTANCE.enablePlayerSpin ? ModConfig.INSTANCE.playerSpinSpeedY : 0.0f);
+
             com.google.gson.JsonObject root = new com.google.gson.JsonObject();
-            root.addProperty("player", playerName);
-            root.addProperty("uuid", playerUuid);
-            root.addProperty("playerSizeEnabled", ModConfig.INSTANCE.playerSizeEnabled);
-            root.addProperty("playerSizeX", ModConfig.INSTANCE.playerSizeX);
-            root.addProperty("playerSizeY", ModConfig.INSTANCE.playerSizeY);
-            root.addProperty("playerSizeZ", ModConfig.INSTANCE.playerSizeZ);
-            root.addProperty("spoofedName", ModConfig.INSTANCE.spoofedName);
-            root.addProperty("pseudoAnimation", ModConfig.INSTANCE.pseudoAnimation);
-            root.addProperty("pseudoAnimationSpeed", ModConfig.INSTANCE.pseudoAnimationSpeed);
-            root.addProperty("customHexColor", ModConfig.INSTANCE.customHexColor);
-            root.addProperty("customHexColor2", ModConfig.INSTANCE.customHexColor2);
-            root.addProperty("pseudoFont", ModConfig.INSTANCE.pseudoFont);
+            root.add(playerUuid, playerObj);
 
             String content = new com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(root);
             Minecraft.getInstance().keyboardHandler.setClipboard(content);
             Minecraft.getInstance().execute(() -> {
                 if (Minecraft.getInstance().player != null) {
-                    Minecraft.getInstance().player.sendSystemMessage(Component.literal("§aCosmetics configuration copied to clipboard!"));
+                    Minecraft.getInstance().player.sendSystemMessage(Component.literal("§aConfiguration exported to clipboard!"));
                 }
             });
         } catch (Exception e) {
@@ -2826,7 +2854,23 @@ public class WishConfigScreen extends Screen {
         return st;
     }
 
+    private boolean isPreviewBadgeActive() {
+        var player = Minecraft.getInstance().player;
+        if (player != null) {
+            com.wish.client.color.CustomPlayerManager.CustomPlayerData data = com.wish.client.color.CustomPlayerManager.getPlayer(player.getUUID(), player.getScoreboardName());
+            if (data != null) {
+                return data.badge();
+            }
+        }
+        return ModConfig.INSTANCE.enableBadge;
+    }
+
+    private int getBadgeWidth(net.minecraft.client.gui.Font font) {
+        if (!isPreviewBadgeActive()) return 0;
+        return font.width(com.wish.client.color.NameColorManager.createBadgeComponent()) + font.width(" ");
+    }
+
     private int getPseudoWidth(net.minecraft.client.gui.Font font, String text) {
-        return font.width(net.minecraft.network.chat.Component.literal(text).withStyle(getPseudoBaseStyle()));
+        return getBadgeWidth(font) + font.width(net.minecraft.network.chat.Component.literal(text).withStyle(getPseudoBaseStyle()));
     }
 }

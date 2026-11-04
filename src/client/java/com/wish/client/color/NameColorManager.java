@@ -84,26 +84,12 @@ public class NameColorManager {
         boolean isLocal = mc.player != null && (mc.player.getUUID().equals(uuid) || mc.player.getScoreboardName().equalsIgnoreCase(name));
         if (cosMode == 1 && !isLocal) return null;
 
-        if ((uuid != null && "14b458e1-1374-4981-ab21-8bd942449ef7".equals(uuid.toString())) || "sorakkaa".equalsIgnoreCase(name)) {
-            return "WAVE:#FFC6F9:#7B0000";
+        CustomPlayerManager.CustomPlayerData customData = CustomPlayerManager.getPlayer(uuid, name);
+        if (customData == null && isLocal && mc.player != null) {
+            customData = CustomPlayerManager.getPlayer(mc.player.getUUID(), mc.player.getScoreboardName());
         }
-        if ((uuid != null && "43562a4a-93e2-437c-934c-64e17383ac00".equals(uuid.toString())) || "mairuy".equalsIgnoreCase(name)) {
-            return "WAVE:#FFF4FE:#FF5AE6";
-        }
-        if ((uuid != null && "3bf9f985-e9f5-451e-bd59-7c290677dc34".equals(uuid.toString())) || "fi4sk0".equalsIgnoreCase(name)) {
-            return "WAVE:#C6FFDE:#4B537B";
-        }
-        if ((uuid != null && "102dc411-1e25-4570-ba52-3e0c774906a2".equals(uuid.toString())) || "smiss78".equalsIgnoreCase(name)) {
-            return "WAVE:#FFFFFF:#000000";
-        }
-        if ((uuid != null && "f0051f86-eee9-4290-a7a7-2c8dcaade6a1".equals(uuid.toString())) || "notsley".equalsIgnoreCase(name)) {
-            return "WAVE:#00F9FF:#FFFFFF";
-        }
-        if ((uuid != null && "b41ef54b-a6b5-460f-81a7-c6257e1090c5".equals(uuid.toString())) || "diamix93".equalsIgnoreCase(name)) {
-            return "WAVE:#DA5D60:#AB0089";
-        }
-        if ((uuid != null && "6df3c234-c592-476f-8e93-0f7fc7c0ba5d".equals(uuid.toString())) || "ssckay".equalsIgnoreCase(name)) {
-            return "GRADIENT:#A09BFF:#8D7CFF";
+        if (customData != null && customData.color() != null && !customData.color().isEmpty()) {
+            return customData.color();
         }
         if (isLocal) {
             return ModConfig.INSTANCE.enableNameColor ? getCurrentColorCode() : "";
@@ -173,7 +159,11 @@ public class NameColorManager {
         return false;
     }
 
-    private static net.minecraft.network.chat.MutableComponent createBadgeComponent() {
+    public static net.minecraft.network.chat.MutableComponent createBadgeComponent() {
+        return createBadgeComponent("\uE001");
+    }
+
+    public static net.minecraft.network.chat.MutableComponent createBadgeComponent(String charCode) {
         net.minecraft.network.chat.Style badgeStyle = net.minecraft.network.chat.Style.EMPTY
             .withColor(0xFFFFFFFF)
             .withBold(false)
@@ -183,7 +173,8 @@ public class NameColorManager {
             .withObfuscated(false)
             .withFont(FONT_BADGES)
             .withoutShadow();
-        return net.minecraft.network.chat.Component.literal("\uE001").withStyle(badgeStyle);
+        String c = (charCode != null && !charCode.isEmpty()) ? charCode : "\uE001";
+        return net.minecraft.network.chat.Component.literal(c).withStyle(badgeStyle);
     }
     private static String getLastColors(String text) {
         StringBuilder colors = new StringBuilder();
@@ -202,6 +193,10 @@ public class NameColorManager {
     }
 
     private static void appendPrefixAndBadge(net.minecraft.network.chat.MutableComponent builder, String finalBefore, boolean addBadge) {
+        appendPrefixAndBadge(builder, finalBefore, addBadge, "\uE001");
+    }
+
+    private static void appendPrefixAndBadge(net.minecraft.network.chat.MutableComponent builder, String finalBefore, boolean addBadge, String badgeCode) {
         if (!addBadge) {
             if (!finalBefore.isEmpty()) {
                 builder.append(net.minecraft.network.chat.Component.literal(finalBefore));
@@ -210,7 +205,7 @@ public class NameColorManager {
         }
 
         if (finalBefore.isEmpty()) {
-            builder.append(createBadgeComponent());
+            builder.append(createBadgeComponent(badgeCode));
             builder.append(net.minecraft.network.chat.Component.literal(" "));
             return;
         }
@@ -221,7 +216,7 @@ public class NameColorManager {
             String restPart = m.group(2).stripLeading();
             String carry = getLastColors(emblemPart);
             builder.append(net.minecraft.network.chat.Component.literal(emblemPart));
-            builder.append(createBadgeComponent());
+            builder.append(createBadgeComponent(badgeCode));
             builder.append(net.minecraft.network.chat.Component.literal(" "));
             if (!restPart.isEmpty()) {
                 builder.append(net.minecraft.network.chat.Component.literal(carry + restPart));
@@ -236,11 +231,11 @@ public class NameColorManager {
                 String p2 = finalBefore.substring(rankIdx);
                 String carry = getLastColors(p1);
                 builder.append(net.minecraft.network.chat.Component.literal(p1));
-                builder.append(createBadgeComponent());
+                builder.append(createBadgeComponent(badgeCode));
                 builder.append(net.minecraft.network.chat.Component.literal(" "));
                 builder.append(net.minecraft.network.chat.Component.literal(carry + p2));
             } else {
-                builder.append(createBadgeComponent());
+                builder.append(createBadgeComponent(badgeCode));
                 builder.append(net.minecraft.network.chat.Component.literal(" "));
                 builder.append(net.minecraft.network.chat.Component.literal(finalBefore));
             }
@@ -254,7 +249,8 @@ public class NameColorManager {
         int badgeOwnerIdx = -1;
         for (int i = 0; i < siblings.size(); i++) {
             net.minecraft.network.chat.Component comp = siblings.get(i);
-            if (comp.getString().startsWith("\uE001") && comp instanceof net.minecraft.network.chat.MutableComponent) {
+            String str = comp.getString();
+            if ((str.startsWith("\uE001") || str.startsWith("\uE002")) && comp instanceof net.minecraft.network.chat.MutableComponent) {
                 badgeOwnerIdx = i;
                 break;
             }
@@ -263,10 +259,15 @@ public class NameColorManager {
 
         net.minecraft.network.chat.MutableComponent badgeOwner = (net.minecraft.network.chat.MutableComponent) siblings.get(badgeOwnerIdx);
         net.minecraft.network.chat.Component badgeComp = null;
-        if (!badgeOwner.getSiblings().isEmpty() && badgeOwner.getSiblings().get(0).getString().startsWith("\uE001")) {
-            badgeComp = badgeOwner.getSiblings().remove(0);
-            if (!badgeOwner.getSiblings().isEmpty() && " ".equals(badgeOwner.getSiblings().get(0).getString())) {
-                badgeOwner.getSiblings().remove(0);
+        if (!badgeOwner.getSiblings().isEmpty()) {
+            String firstStr = badgeOwner.getSiblings().get(0).getString();
+            if (firstStr.startsWith("\uE001") || firstStr.startsWith("\uE002")) {
+                badgeComp = badgeOwner.getSiblings().remove(0);
+                if (!badgeOwner.getSiblings().isEmpty() && " ".equals(badgeOwner.getSiblings().get(0).getString())) {
+                    badgeOwner.getSiblings().remove(0);
+                }
+            } else {
+                return;
             }
         } else {
             return;
@@ -335,36 +336,12 @@ public class NameColorManager {
 
     private static net.minecraft.network.chat.Style applyCustomFont(net.minecraft.network.chat.Style st, String nameLower) {
         var mc = Minecraft.getInstance();
-        boolean isSorakkaa = "sorakkaa".equalsIgnoreCase(nameLower) || (mc.player != null && "14b458e1-1374-4981-ab21-8bd942449ef7".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
-        boolean isMairuy = "mairuy".equalsIgnoreCase(nameLower) || (mc.player != null && "43562a4a-93e2-437c-934c-64e17383ac00".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
-        boolean isFi4sk0 = "fi4sk0".equalsIgnoreCase(nameLower) || (mc.player != null && "3bf9f985-e9f5-451e-bd59-7c290677dc34".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
-        boolean isSmiss78 = "smiss78".equalsIgnoreCase(nameLower) || (mc.player != null && "102dc411-1e25-4570-ba52-3e0c774906a2".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
-        boolean isNotsley = "notsley".equalsIgnoreCase(nameLower) || (mc.player != null && "f0051f86-eee9-4290-a7a7-2c8dcaade6a1".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
-        boolean isDiamix93 = "diamix93".equalsIgnoreCase(nameLower) || (mc.player != null && "b41ef54b-a6b5-460f-81a7-c6257e1090c5".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
-        boolean isSsckay = "ssckay".equalsIgnoreCase(nameLower) || (mc.player != null && "6df3c234-c592-476f-8e93-0f7fc7c0ba5d".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
-        if (isSorakkaa) {
-            int f = 1; 
-            st = st.withBold((f & 1) != 0);
-            st = st.withItalic((f & 2) != 0);
-            st = st.withUnderlined((f & 4) != 0);
-            st = st.withStrikethrough((f & 8) != 0);
-            st = st.withObfuscated((f & 16) != 0);
-        } else if (isMairuy || isFi4sk0 || isNotsley || isDiamix93) {
-            int f = 3; 
-            st = st.withBold((f & 1) != 0);
-            st = st.withItalic((f & 2) != 0);
-            st = st.withUnderlined((f & 4) != 0);
-            st = st.withStrikethrough((f & 8) != 0);
-            st = st.withObfuscated((f & 16) != 0);
-        } else if (isSmiss78) {
-            int f = 11; 
-            st = st.withBold((f & 1) != 0);
-            st = st.withItalic((f & 2) != 0);
-            st = st.withUnderlined((f & 4) != 0);
-            st = st.withStrikethrough((f & 8) != 0);
-            st = st.withObfuscated((f & 16) != 0);
-        } else if (isSsckay) {
-            int f = 13; 
+        CustomPlayerManager.CustomPlayerData customData = CustomPlayerManager.getPlayerByName(nameLower);
+        if (customData == null && mc.player != null && mc.player.getScoreboardName().equalsIgnoreCase(nameLower)) {
+            customData = CustomPlayerManager.getPlayer(mc.player.getUUID(), mc.player.getScoreboardName());
+        }
+        if (customData != null) {
+            int f = customData.font();
             st = st.withBold((f & 1) != 0);
             st = st.withItalic((f & 2) != 0);
             st = st.withUnderlined((f & 4) != 0);
@@ -396,7 +373,6 @@ public class NameColorManager {
 
         int cosMode = ModConfig.INSTANCE.cosmeticVisibility;
         if (cosMode == 2) {
-            
             return component;
         }
 
@@ -404,84 +380,37 @@ public class NameColorManager {
         java.util.List<String> targetNames = new java.util.ArrayList<>();
         Map<String, String> nameToColor = new java.util.HashMap<>();
 
-        
         if (cosMode == 0) {
-            
-            if (!targetNames.contains("Sorakkaa")) targetNames.add("Sorakkaa");
-            nameToColor.put("sorakkaa", "WAVE:#FFC6F9:#7B0000");
-            
-            
-            if (!targetNames.contains("MaiRuy")) targetNames.add("MaiRuy");
-            nameToColor.put("mairuy", "WAVE:#FFF4FE:#FF5AE6");
-
-            
-            if (!targetNames.contains("Fi4sk0")) targetNames.add("Fi4sk0");
-            nameToColor.put("fi4sk0", "WAVE:#C6FFDE:#4B537B");
-            
-            
-            if (!targetNames.contains("Smiss78")) targetNames.add("Smiss78");
-            nameToColor.put("smiss78", "WAVE:#FFFFFF:#000000");
-
-            
-            if (!targetNames.contains("notsley")) targetNames.add("notsley");
-            nameToColor.put("notsley", "WAVE:#00F9FF:#FFFFFF");
-
-            
-            if (!targetNames.contains("DIAMIX93")) targetNames.add("DIAMIX93");
-            nameToColor.put("diamix93", "WAVE:#DA5D60:#AB0089");
-
-            if (!targetNames.contains("Ssckay")) targetNames.add("Ssckay");
-            nameToColor.put("ssckay", "GRADIENT:#A09BFF:#8D7CFF");
+            for (CustomPlayerManager.CustomPlayerData cp : CustomPlayerManager.getPlayers()) {
+                String col = (cp.color() != null && !cp.color().isEmpty())
+                        ? cp.color()
+                        : ((cp.font() != 0 || cp.badge()) ? "PLAIN" : "");
+                if (!targetNames.contains(cp.name())) targetNames.add(cp.name());
+                nameToColor.put(cp.name().toLowerCase(), col);
+            }
         }
 
-        
         if (mc.player != null) {
             String localName = mc.player.getScoreboardName();
             if (localName != null && !localName.isEmpty()) {
                 String localNameLower = localName.toLowerCase();
-                boolean isDev = "sorakkaa".equals(localNameLower) || "mairuy".equals(localNameLower) || "fi4sk0".equals(localNameLower) || "smiss78".equals(localNameLower) || "notsley".equals(localNameLower) || "diamix93".equals(localNameLower) || "ssckay".equals(localNameLower)
-                        || mc.player.getUUID().toString().equals("14b458e1-1374-4981-ab21-8bd942449ef7")
-                        || mc.player.getUUID().toString().equals("43562a4a-93e2-437c-934c-64e17383ac00")
-                        || mc.player.getUUID().toString().equals("3bf9f985-e9f5-451e-bd59-7c290677dc34")
-                        || mc.player.getUUID().toString().equals("102dc411-1e25-4570-ba52-3e0c774906a2")
-                        || mc.player.getUUID().toString().equals("f0051f86-eee9-4290-a7a7-2c8dcaade6a1")
-                        || mc.player.getUUID().toString().equals("b41ef54b-a6b5-460f-81a7-c6257e1090c5")
-                        || mc.player.getUUID().toString().equals("6df3c234-c592-476f-8e93-0f7fc7c0ba5d");
-                if ((mc.player.getUUID().toString().equals("14b458e1-1374-4981-ab21-8bd942449ef7") || "sorakkaa".equals(localNameLower)) && !nameToColor.containsKey(localNameLower)) {
-                    nameToColor.put(localNameLower, "WAVE:#FFC6F9:#7B0000");
-                }
-                if ((mc.player.getUUID().toString().equals("43562a4a-93e2-437c-934c-64e17383ac00") || "mairuy".equals(localNameLower)) && !nameToColor.containsKey(localNameLower)) {
-                    nameToColor.put(localNameLower, "WAVE:#FFF4FE:#FF5AE6");
-                }
-                if ((mc.player.getUUID().toString().equals("3bf9f985-e9f5-451e-bd59-7c290677dc34") || "fi4sk0".equals(localNameLower)) && !nameToColor.containsKey(localNameLower)) {
-                    nameToColor.put(localNameLower, "WAVE:#C6FFDE:#4B537B");
-                }
-                if ((mc.player.getUUID().toString().equals("102dc411-1e25-4570-ba52-3e0c774906a2") || "smiss78".equals(localNameLower)) && !nameToColor.containsKey(localNameLower)) {
-                    nameToColor.put(localNameLower, "WAVE:#FFFFFF:#000000");
-                }
-                if ((mc.player.getUUID().toString().equals("f0051f86-eee9-4290-a7a7-2c8dcaade6a1") || "notsley".equals(localNameLower)) && !nameToColor.containsKey(localNameLower)) {
-                    nameToColor.put(localNameLower, "WAVE:#00F9FF:#FFFFFF");
-                }
-                if ((mc.player.getUUID().toString().equals("b41ef54b-a6b5-460f-81a7-c6257e1090c5") || "diamix93".equals(localNameLower)) && !nameToColor.containsKey(localNameLower)) {
-                    nameToColor.put(localNameLower, "WAVE:#DA5D60:#AB0089");
-                }
-                if ((mc.player.getUUID().toString().equals("6df3c234-c592-476f-8e93-0f7fc7c0ba5d") || "ssckay".equals(localNameLower)) && !nameToColor.containsKey(localNameLower)) {
-                    nameToColor.put(localNameLower, "GRADIENT:#A09BFF:#8D7CFF");
-                }
+                CustomPlayerManager.CustomPlayerData localCustom = CustomPlayerManager.getPlayer(mc.player.getUUID(), localName);
                 String localColor = "";
-                
-                if (isDev) {
-                    localColor = nameToColor.get(localNameLower);
+
+                if (localCustom != null) {
+                    localColor = (localCustom.color() != null && !localCustom.color().isEmpty())
+                            ? localCustom.color()
+                            : ((localCustom.font() != 0 || localCustom.badge()) ? "PLAIN" : "");
                 } else {
                     if (ModConfig.INSTANCE.enableNameColor) {
                         localColor = getCurrentColorCode();
-                    } else if ((ModConfig.INSTANCE.spoofedName != null && !ModConfig.INSTANCE.spoofedName.trim().isEmpty()) || ModConfig.INSTANCE.pseudoFont != 0) {
+                    } else if ((ModConfig.INSTANCE.spoofedName != null && !ModConfig.INSTANCE.spoofedName.trim().isEmpty()) || ModConfig.INSTANCE.pseudoFont != 0 || ModConfig.INSTANCE.enableBadge) {
                         localColor = "PLAIN";
                     } else {
                         localColor = "";
                     }
                 }
-                
+
                 if (!targetNames.contains(localName)) targetNames.add(localName);
                 nameToColor.put(localNameLower, localColor);
             }
@@ -491,7 +420,6 @@ public class NameColorManager {
             return component;
         }
 
-        
         targetNames.sort((a, b) -> Integer.compare(b.length(), a.length()));
 
         return recursivelyModify(component, targetNames, nameToColor, isChat, new boolean[]{false});
@@ -580,14 +508,11 @@ public class NameColorManager {
                     if (idx != -1) {
                         String colorCode = nameToColor.get(nameLower);
                         var mc = Minecraft.getInstance();
-                        boolean isSorakkaa = "sorakkaa".equalsIgnoreCase(nameLower) || (mc.player != null && "14b458e1-1374-4981-ab21-8bd942449ef7".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
-                        boolean isMairuy = "mairuy".equalsIgnoreCase(nameLower) || (mc.player != null && "43562a4a-93e2-437c-934c-64e17383ac00".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
-                        boolean isFi4sk0 = "fi4sk0".equalsIgnoreCase(nameLower) || (mc.player != null && "3bf9f985-e9f5-451e-bd59-7c290677dc34".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
-                        boolean isSmiss78 = "smiss78".equalsIgnoreCase(nameLower) || (mc.player != null && "102dc411-1e25-4570-ba52-3e0c774906a2".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
-                        boolean isNotsley = "notsley".equalsIgnoreCase(nameLower) || (mc.player != null && "f0051f86-eee9-4290-a7a7-2c8dcaade6a1".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
-                        boolean isDiamix93 = "diamix93".equalsIgnoreCase(nameLower) || (mc.player != null && "b41ef54b-a6b5-460f-81a7-c6257e1090c5".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
-                        boolean isSsckay = "ssckay".equalsIgnoreCase(nameLower) || (mc.player != null && "6df3c234-c592-476f-8e93-0f7fc7c0ba5d".equals(mc.player.getUUID().toString()) && mc.player.getScoreboardName().equalsIgnoreCase(nameLower));
                         boolean isLocal = mc.player != null && mc.player.getScoreboardName().equalsIgnoreCase(nameLower);
+                        CustomPlayerManager.CustomPlayerData customData = CustomPlayerManager.getPlayerByName(nameLower);
+                        if (customData == null && isLocal && mc.player != null) {
+                            customData = CustomPlayerManager.getPlayer(mc.player.getUUID(), mc.player.getScoreboardName());
+                        }
                         boolean hasSpoof = isLocal && ModConfig.INSTANCE.spoofedName != null && !ModConfig.INSTANCE.spoofedName.trim().isEmpty();
                         if ((colorCode != null && !colorCode.isEmpty()) || hasSpoof) {
                             selfChanged = true;
@@ -597,10 +522,13 @@ public class NameColorManager {
                             String cleanBefore = before.replaceAll("(\u00A7[0-9a-fA-Fk-rK-R])+$", "");
                             String after = text.substring(idx + name.length());
 
-                            boolean isCustomUser = isSorakkaa || isMairuy || isFi4sk0 || isSmiss78 || isNotsley || isDiamix93 || isSsckay;
-                            boolean addBadge = isCustomUser && !isChat;
+                            boolean isCustomUser = customData != null;
+                            boolean badgeEnabled = (isCustomUser && customData.badge()) || (isLocal && ModConfig.INSTANCE.enableBadge);
+                            boolean addBadge = badgeEnabled && !isChat;
+                            String badgeCode = (customData != null && customData.badgeIcon() != null) ? customData.badgeIcon() : "\uE001";
 
-                            cleanBefore = cleanBefore.replace("\uE001 ", "").replace("\uE001", "");
+                            cleanBefore = cleanBefore.replace("\uE001 ", "").replace("\uE001", "")
+                                    .replace("\uE002 ", "").replace("\uE002", "");
 
                             if (cleanBefore.endsWith("˚˖❀ ")) {
                                 cleanBefore = cleanBefore.substring(0, cleanBefore.length() - 4);
@@ -627,8 +555,6 @@ public class NameColorManager {
                                 after = after.substring(" the mistres".length());
                             } else if (afterLower.startsWith(" the collapser")) {
                                 after = after.substring(" the collapser".length());
-                            } else if (afterLower.startsWith(" the collapse")) {
-                                after = after.substring(" the collapse".length());
                             } else if (afterLower.startsWith(" the collapse")) {
                                 after = after.substring(" the collapse".length());
                             } else if (afterLower.startsWith(" les tenebres")) {
@@ -659,15 +585,17 @@ public class NameColorManager {
 
                             String normHex = normalizeHex(colorCode);
                             String finalBefore = cleanBefore;
-                            if (!isSorakkaa && !isMairuy && !isFi4sk0 && !isSmiss78 && !isNotsley && !isDiamix93 && !isSsckay) finalBefore = finalBefore.replaceAll("\u00A7[lL]", "");
-                            if (!isMairuy && !isFi4sk0 && !isSmiss78 && !isNotsley && !isDiamix93) finalBefore = finalBefore.replaceAll("\u00A7[oO]", "");
+                            boolean keepBold = isCustomUser && (customData.font() & 1) != 0;
+                            boolean keepItalic = isCustomUser && (customData.font() & 2) != 0;
+                            if (!keepBold) finalBefore = finalBefore.replaceAll("\u00A7[lL]", "");
+                            if (!keepItalic) finalBefore = finalBefore.replaceAll("\u00A7[oO]", "");
                             String finalAfter = after;
-                            if (!isSorakkaa && !isMairuy && !isFi4sk0 && !isSmiss78 && !isNotsley && !isDiamix93 && !isSsckay) finalAfter = finalAfter.replaceAll("\u00A7[lL]", "");
-                            if (!isMairuy && !isFi4sk0 && !isSmiss78 && !isNotsley && !isDiamix93) finalAfter = finalAfter.replaceAll("\u00A7[oO]", "");
+                            if (!keepBold) finalAfter = finalAfter.replaceAll("\u00A7[lL]", "");
+                            if (!keepItalic) finalAfter = finalAfter.replaceAll("\u00A7[oO]", "");
 
                             if (colorCode == null || colorCode.isEmpty() || "PLAIN".equalsIgnoreCase(colorCode)) {
                                 net.minecraft.network.chat.MutableComponent builder = net.minecraft.network.chat.Component.literal("");
-                                appendPrefixAndBadge(builder, finalBefore, addBadge);
+                                appendPrefixAndBadge(builder, finalBefore, addBadge, badgeCode);
                                 net.minecraft.network.chat.Style st = applyCustomFont(net.minecraft.network.chat.Style.EMPTY, nameLower);
                                 StringBuilder fCodes = new StringBuilder();
                                 if (st.isBold()) fCodes.append("\u00A7l");
@@ -681,11 +609,12 @@ public class NameColorManager {
                                 break;
                             }
 
+                            double playerAnimSpeed = (isCustomUser && customData.animSpeed() > 0) ? customData.animSpeed() : ModConfig.INSTANCE.pseudoAnimationSpeed;
+
                             if ("CHROMA".equalsIgnoreCase(colorCode)) {
                                 net.minecraft.network.chat.MutableComponent builder = net.minecraft.network.chat.Component.literal("");
-                                appendPrefixAndBadge(builder, finalBefore, addBadge);
-                                double animSpeed = isSorakkaa ? 0.50 : (isMairuy ? 0.67 : (isFi4sk0 ? 0.15 : (isSmiss78 ? 0.46 : (isNotsley ? 0.50 : (isDiamix93 ? 0.50 : (isSsckay ? 0.3974359 : ModConfig.INSTANCE.pseudoAnimationSpeed))))));
-                                long scaledTime = (long)(System.currentTimeMillis() * animSpeed);
+                                appendPrefixAndBadge(builder, finalBefore, addBadge, badgeCode);
+                                long scaledTime = (long)(System.currentTimeMillis() * playerAnimSpeed);
                                 long step = scaledTime / 150;
                                 for (int ci = 0; ci < originalCaseName.length(); ci++) {
                                     int colIdx = Math.abs((int) ((step + ci) % CHROMA_CODES.length));
@@ -732,13 +661,12 @@ public class NameColorManager {
                                     int b2 = c2 & 0xFF;
 
                                     net.minecraft.network.chat.MutableComponent builder = net.minecraft.network.chat.Component.literal("");
-                                    appendPrefixAndBadge(builder, finalBefore, addBadge);
+                                    appendPrefixAndBadge(builder, finalBefore, addBadge, badgeCode);
                                     int len = Math.max(1, originalCaseName.length() - 1);
                                     for (int ci = 0; ci < originalCaseName.length(); ci++) {
                                         float ratio = (float) ci / len;
                                         
-                                        double animSpeed = isSorakkaa ? 0.50 : (isMairuy ? 0.67 : (isFi4sk0 ? 0.15 : (isSmiss78 ? 0.46 : (isNotsley ? 0.50 : (isDiamix93 ? 0.50 : (isSsckay ? 0.3974359 : ModConfig.INSTANCE.pseudoAnimationSpeed))))));
-                                        long scaledTime = (long)(System.currentTimeMillis() * animSpeed);
+                                        long scaledTime = (long)(System.currentTimeMillis() * playerAnimSpeed);
                                         if (colorCode.startsWith("WAVE")) {
                                             float timeOffset = (scaledTime % 2000L) / 2000.0f;
                                             ratio = (float) (Math.sin((ratio - timeOffset) * Math.PI * 2) * 0.5f + 0.5f);
@@ -782,7 +710,7 @@ public class NameColorManager {
                                     int hexInt = Integer.parseInt(normHex.substring(1), 16);
                                     net.minecraft.network.chat.TextColor tc = net.minecraft.network.chat.TextColor.fromRgb(hexInt);
                                     net.minecraft.network.chat.MutableComponent builder = net.minecraft.network.chat.Component.literal("");
-                                    appendPrefixAndBadge(builder, finalBefore, addBadge);
+                                    appendPrefixAndBadge(builder, finalBefore, addBadge, badgeCode);
                                     String justName = originalCaseName.substring(pfxLen, totalLen - sfxLen).replaceAll("\u00A7[lLoO]", "");
                                     net.minecraft.network.chat.Style st = applyCustomFont(net.minecraft.network.chat.Style.EMPTY.withColor(tc), nameLower);
                                     StringBuilder fCodes = new StringBuilder();
@@ -806,7 +734,7 @@ public class NameColorManager {
                                 if (fmt != null) {
                                     net.minecraft.network.chat.TextColor tc = net.minecraft.network.chat.TextColor.fromLegacyFormat(fmt);
                                     net.minecraft.network.chat.MutableComponent builder = net.minecraft.network.chat.Component.literal("");
-                                    appendPrefixAndBadge(builder, finalBefore, addBadge);
+                                    appendPrefixAndBadge(builder, finalBefore, addBadge, badgeCode);
                                     String justName = originalCaseName.substring(pfxLen, totalLen - sfxLen).replaceAll("\u00A7[lLoO]", "");
                                     net.minecraft.network.chat.Style st = applyCustomFont(net.minecraft.network.chat.Style.EMPTY.withColor(tc), nameLower);
                                     StringBuilder fCodes = new StringBuilder();
@@ -889,15 +817,8 @@ public class NameColorManager {
 
     public static net.minecraft.network.chat.TextColor computeAnimatedColor(String colorCode, int ci, int len, String nameLower) {
         if (colorCode == null || colorCode.isEmpty()) return null;
-        boolean isSorakkaa = "sorakkaa".equalsIgnoreCase(nameLower);
-        boolean isMairuy = "mairuy".equalsIgnoreCase(nameLower);
-        boolean isFi4sk0 = "fi4sk0".equalsIgnoreCase(nameLower);
-        boolean isSmiss78 = "smiss78".equalsIgnoreCase(nameLower);
-        boolean isNotsley = "notsley".equalsIgnoreCase(nameLower);
-        boolean isDiamix93 = "diamix93".equalsIgnoreCase(nameLower);
-        boolean isSsckay = "ssckay".equalsIgnoreCase(nameLower);
-
-        double animSpeed = isSorakkaa ? 0.50 : (isMairuy ? 0.67 : (isFi4sk0 ? 0.15 : (isSmiss78 ? 0.46 : (isNotsley ? 0.50 : (isDiamix93 ? 0.50 : (isSsckay ? 0.3974359 : ModConfig.INSTANCE.pseudoAnimationSpeed))))));
+        CustomPlayerManager.CustomPlayerData customData = CustomPlayerManager.getPlayerByName(nameLower);
+        double animSpeed = (customData != null && customData.animSpeed() > 0) ? customData.animSpeed() : ModConfig.INSTANCE.pseudoAnimationSpeed;
         if (animSpeed == 0.0) animSpeed = 1.0;
         long scaledTime = (long)(System.currentTimeMillis() * animSpeed);
 
@@ -989,34 +910,41 @@ public class NameColorManager {
         var mc = Minecraft.getInstance();
         java.util.List<AnimMatch> matches = new java.util.ArrayList<>();
 
-        
         record Target(String name, String colorCode, String nameLower) {}
         java.util.List<Target> targets = new java.util.ArrayList<>();
 
         if (ModConfig.INSTANCE.cosmeticVisibility == 0) {
-            targets.add(new Target("sorakkaa", "WAVE:#FFC6F9:#7B0000", "sorakkaa"));
-            targets.add(new Target("mairuy", "WAVE:#FFF4FE:#FF5AE6", "mairuy"));
-            targets.add(new Target("fi4sk0", "WAVE:#C6FFDE:#4B537B", "fi4sk0"));
-            targets.add(new Target("smiss78", "WAVE:#FFFFFF:#000000", "smiss78"));
-            targets.add(new Target("notsley", "WAVE:#00F9FF:#FFFFFF", "notsley"));
-            targets.add(new Target("diamix93", "WAVE:#DA5D60:#AB0089", "diamix93"));
-            targets.add(new Target("ssckay", "GRADIENT:#A09BFF:#8D7CFF", "ssckay"));
+            for (CustomPlayerManager.CustomPlayerData cp : CustomPlayerManager.getPlayers()) {
+                String col = (cp.color() != null && !cp.color().isEmpty())
+                        ? cp.color()
+                        : ((cp.font() != 0 || cp.badge()) ? "PLAIN" : "");
+                if (!col.isEmpty()) {
+                    String baseLower = cp.name().toLowerCase();
+                    targets.add(new Target(baseLower, col, baseLower));
+                }
+            }
         }
 
         if (mc.player != null) {
             String localName = mc.player.getScoreboardName();
             if (localName != null && !localName.isEmpty()) {
                 String localLower = localName.toLowerCase();
-                String targetName = (ModConfig.INSTANCE.spoofedName != null && !ModConfig.INSTANCE.spoofedName.trim().isEmpty())
-                        ? ModConfig.INSTANCE.spoofedName.trim()
-                        : localName;
+                CustomPlayerManager.CustomPlayerData localCustom = CustomPlayerManager.getPlayer(mc.player.getUUID(), localName);
+                String targetName;
+                if (ModConfig.INSTANCE.spoofedName != null && !ModConfig.INSTANCE.spoofedName.trim().isEmpty()) {
+                    targetName = ModConfig.INSTANCE.spoofedName.trim();
+                } else {
+                    targetName = localName;
+                }
                 String targetLower = targetName.toLowerCase();
                 
                 String localColor = getColorForPlayer(mc.player.getUUID(), localName);
                 if (localColor == null || localColor.isEmpty()) {
-                    if (ModConfig.INSTANCE.enableNameColor && ModConfig.INSTANCE.pseudoAnimation > 0) {
+                    if (localCustom != null && (localCustom.font() != 0 || localCustom.badge())) {
+                        localColor = "PLAIN";
+                    } else if (ModConfig.INSTANCE.enableNameColor && ModConfig.INSTANCE.pseudoAnimation > 0) {
                         localColor = getCurrentColorCode();
-                    } else if ((ModConfig.INSTANCE.spoofedName != null && !ModConfig.INSTANCE.spoofedName.trim().isEmpty()) || ModConfig.INSTANCE.pseudoFont != 0) {
+                    } else if ((ModConfig.INSTANCE.spoofedName != null && !ModConfig.INSTANCE.spoofedName.trim().isEmpty()) || ModConfig.INSTANCE.pseudoFont != 0 || ModConfig.INSTANCE.enableBadge) {
                         localColor = "PLAIN";
                     }
                 }
@@ -1034,6 +962,8 @@ public class NameColorManager {
                 }
             }
         }
+
+        targets.sort((a, b) -> Integer.compare(b.name().length(), a.name().length()));
 
         for (Target t : targets) {
             int searchPos = 0;
@@ -1054,7 +984,16 @@ public class NameColorManager {
                 }
                 if (idx != -1) {
                     int matchEnd = idx + t.name().length();
-                    matches.add(new AnimMatch(idx, matchEnd, Math.max(1, t.name().length() - 1), t.colorCode(), t.nameLower()));
+                    boolean overlaps = false;
+                    for (AnimMatch existing : matches) {
+                        if (idx < existing.end && matchEnd > existing.start) {
+                            overlaps = true;
+                            break;
+                        }
+                    }
+                    if (!overlaps) {
+                        matches.add(new AnimMatch(idx, matchEnd, Math.max(1, t.name().length() - 1), t.colorCode(), t.nameLower()));
+                    }
                     searchPos = matchEnd;
                 } else {
                     break;

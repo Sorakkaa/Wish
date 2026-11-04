@@ -1,0 +1,79 @@
+{
+  "14b458e1-1374-4981-ab21-8bd942449ef7": {
+    "name": "Sorakkaa",
+    "color": "WAVE:#FFC6F9:#7B0000",
+    "font": 1,
+    "animSpeed": 0.5,
+    "badge": true,
+    "scaleX": 1.0,
+    "scaleY": 0.3,
+    "scaleZ": 0.01,
+    "spinSpeedY": 0.0
+  },
+  "43562a4a-93e2-437c-934c-64e17383ac00": {
+    "name": "MaiRuy",
+    "color": "WAVE:#FFF4FE:#FF5AE6",
+    "font": 3,
+    "animSpeed": 0.67,
+    "badge": true,
+    "scaleX": 3.0,
+    "scaleY": 1.67,
+    "scaleZ": 0.01,
+    "spinSpeedY": 0.0
+  },
+  "3bf9f985-e9f5-451e-bd59-7c290677dc34": {
+    "name": "Fi4sk0",
+    "color": "WAVE:#C6FFDE:#4B537B",
+    "font": 3,
+    "animSpeed": 0.15,
+    "badge": true,
+    "scaleX": 0.14,
+    "scaleY": 0.27,
+    "scaleZ": 0.14,
+    "spinSpeedY": 3.0
+  },
+  "102dc411-1e25-4570-ba52-3e0c774906a2": {
+    "name": "Smiss78",
+    "color": "WAVE:#FFFFFF:#000000",
+    "font": 11,
+    "animSpeed": 0.46,
+    "badge": true,
+    "scaleX": 1.0,
+    "scaleY": 1.0,
+    "scaleZ": 1.0,
+    "spinSpeedY": 0.0
+  },
+  "f0051f86-eee9-4290-a7a7-2c8dcaade6a1": {
+    "name": "notsley",
+    "color": "WAVE:#00F9FF:#FFFFFF",
+    "font": 3,
+    "animSpeed": 0.5,
+    "badge": true,
+    "scaleX": 1.0,
+    "scaleY": 0.39,
+    "scaleZ": 0.41,
+    "spinSpeedY": 2.0
+  },
+  "b41ef54b-a6b5-460f-81a7-c6257e1090c5": {
+    "name": "DIAMIX93",
+    "color": "WAVE:#DA5D60:#AB0089",
+    "font": 3,
+    "animSpeed": 0.5,
+    "badge": true,
+    "scaleX": 0.65,
+    "scaleY": 0.35,
+    "scaleZ": 0.15,
+    "spinSpeedY": 0.0
+  },
+  "6df3c234-c592-476f-8e93-0f7fc7c0ba5d": {
+    "name": "Ssckay",
+    "color": "GRADIENT:#A09BFF:#8D7CFF",
+    "font": 13,
+    "animSpeed": 0.3974359,
+    "badge": true,
+    "scaleX": 0.78787875,
+    "scaleY": 0.30303025,
+    "scaleZ": 0.045454502,
+    "spinSpeedY": 0.0
+  }
+}

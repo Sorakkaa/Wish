@@ -18,19 +18,9 @@ public class AvatarRenderStateMixin implements ISizeableState {
     @Unique
     private boolean wish$isLocalPlayer = false;
     @Unique
-    private boolean wish$isSorakkaa = false;
+    private boolean wish$isCustomPlayer = false;
     @Unique
-    private boolean wish$isMairuy = false;
-    @Unique
-    private boolean wish$isFi4sk0 = false;
-    @Unique
-    private boolean wish$isSmiss78 = false;
-    @Unique
-    private boolean wish$isNotsley = false;
-    @Unique
-    private boolean wish$isDiamix93 = false;
-    @Unique
-    private boolean wish$isSsckay = false;
+    private float wish$spinSpeedY = 0.0f;
 
     @Override
     public float wish$getScaleX() {
@@ -71,72 +61,22 @@ public class AvatarRenderStateMixin implements ISizeableState {
     }
     
     @Override
-    public boolean wish$isSorakkaa() {
-        return wish$isSorakkaa;
+    public boolean wish$isCustomPlayer() {
+        return wish$isCustomPlayer;
     }
     
     @Override
-    public void wish$setSorakkaa(boolean isSorakkaa) {
-        this.wish$isSorakkaa = isSorakkaa;
+    public void wish$setCustomPlayer(boolean isCustomPlayer) {
+        this.wish$isCustomPlayer = isCustomPlayer;
     }
 
     @Override
-    public boolean wish$isMairuy() {
-        return wish$isMairuy;
+    public float wish$getSpinSpeedY() {
+        return wish$spinSpeedY;
     }
 
     @Override
-    public void wish$setMairuy(boolean isMairuy) {
-        this.wish$isMairuy = isMairuy;
-    }
-
-    @Override
-    public boolean wish$isFi4sk0() {
-        return wish$isFi4sk0;
-    }
-
-    @Override
-    public void wish$setFi4sk0(boolean isFi4sk0) {
-        this.wish$isFi4sk0 = isFi4sk0;
-    }
-
-    @Override
-    public boolean wish$isSmiss78() {
-        return wish$isSmiss78;
-    }
-
-    @Override
-    public void wish$setSmiss78(boolean isSmiss78) {
-        this.wish$isSmiss78 = isSmiss78;
-    }
-
-    @Override
-    public boolean wish$isNotsley() {
-        return wish$isNotsley;
-    }
-
-    @Override
-    public void wish$setNotsley(boolean isNotsley) {
-        this.wish$isNotsley = isNotsley;
-    }
-
-    @Override
-    public boolean wish$isDiamix93() {
-        return wish$isDiamix93;
-    }
-
-    @Override
-    public void wish$setDiamix93(boolean isDiamix93) {
-        this.wish$isDiamix93 = isDiamix93;
-    }
-
-    @Override
-    public boolean wish$isSsckay() {
-        return wish$isSsckay;
-    }
-
-    @Override
-    public void wish$setSsckay(boolean isSsckay) {
-        this.wish$isSsckay = isSsckay;
+    public void wish$setSpinSpeedY(float spinSpeedY) {
+        this.wish$spinSpeedY = spinSpeedY;
     }
 }

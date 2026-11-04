@@ -146,19 +146,25 @@ public final class MusicManager {
                 }
             } else if (os.contains("win")) {
                 Path scriptPath = Path.of("config", "wish", "get_song.ps1");
-                try (InputStream in = MusicManager.class.getResourceAsStream("/assets/wish/scripts/get_song.ps1")) {
-                    if (in != null) {
-                        Files.createDirectories(scriptPath.getParent());
-                        Files.copy(in, scriptPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                    }
-                } catch (Exception ignored) {}
+                com.wish.client.features.visual.LyricsManager.ensureScriptExtracted(scriptPath);
 
                 if (!Files.exists(scriptPath)) return null;
 
-                String providerParam = ModConfig.INSTANCE.musicProvider != null ? ModConfig.INSTANCE.musicProvider : "YTM";
-                ProcessBuilder pb = new ProcessBuilder("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath.toAbsolutePath().toString(), "-provider", providerParam);
+                String providerParam = ModConfig.INSTANCE.musicProvider != null && !ModConfig.INSTANCE.musicProvider.equalsIgnoreCase("None")
+                    ? ModConfig.INSTANCE.musicProvider : "ALL";
+                ProcessBuilder pb = new ProcessBuilder(
+                    com.wish.client.features.visual.LyricsManager.getPowerShellExecutable(),
+                    "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                    "-File", scriptPath.toAbsolutePath().toString(),
+                    "-provider", providerParam
+                );
                 Process p = pb.start();
                 try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+                    boolean finished = p.waitFor(3000, java.util.concurrent.TimeUnit.MILLISECONDS);
+                    if (!finished) {
+                        p.destroyForcibly();
+                        return null;
+                    }
                     String line = br.readLine();
                     if (line != null && !line.trim().isEmpty()) {
                         return line.trim();

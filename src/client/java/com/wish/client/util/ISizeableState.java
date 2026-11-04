@@ -11,24 +11,9 @@ public interface ISizeableState {
     boolean wish$isLocalPlayer();
     void wish$setLocalPlayer(boolean isLocal);
     
-    boolean wish$isSorakkaa();
-    void wish$setSorakkaa(boolean isSorakkaa);
+    boolean wish$isCustomPlayer();
+    void wish$setCustomPlayer(boolean isCustomPlayer);
 
-    boolean wish$isMairuy();
-    void wish$setMairuy(boolean isMairuy);
-
-    boolean wish$isFi4sk0();
-    void wish$setFi4sk0(boolean isFi4sk0);
-
-    boolean wish$isSmiss78();
-    void wish$setSmiss78(boolean isSmiss78);
-
-    boolean wish$isNotsley();
-    void wish$setNotsley(boolean isNotsley);
-
-    boolean wish$isDiamix93();
-    void wish$setDiamix93(boolean isDiamix93);
-
-    boolean wish$isSsckay();
-    void wish$setSsckay(boolean isSsckay);
+    float wish$getSpinSpeedY();
+    void wish$setSpinSpeedY(float spinSpeedY);
 }

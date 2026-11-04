@@ -10,6 +10,15 @@
       ]
     },
     {
+      "type": "bitmap",
+      "file": "wish:font/badge.png",
+      "ascent": 7,
+      "height": 8,
+      "chars": [
+        "\ue002"
+      ]
+    },
+    {
       "type": "reference",
       "id": "minecraft:include/space"
     },
