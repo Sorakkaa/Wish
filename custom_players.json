@@ -81,7 +81,7 @@
     "color": "WAVE:#00E6FF:#FF00C6",
     "font": 5,
     "animSpeed": 0.46,
-    "badge": true,
+    "badge": false,
     "scaleX": 1.0,
     "scaleY": 1.0,
     "scaleZ": 1.0,
