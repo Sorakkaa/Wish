@@ -53,24 +53,6 @@ public final class WishCommands {
             .then(ClientCommands.literal("model")
                 .executes(context -> openModelScreen())
             )
-            .then(ClientCommands.literal("reload")
-                .executes(context -> {
-                    com.wish.client.color.CustomPlayerManager.fetchAsync(true);
-                    return 1;
-                })
-            )
-            .then(ClientCommands.literal("debug")
-                .executes(context -> {
-                    com.wish.client.features.visual.LyricsManager.runDiagnostics();
-                    return 1;
-                })
-                .then(ClientCommands.literal("live")
-                    .executes(context -> {
-                        com.wish.client.features.visual.LyricsManager.toggleLiveDebug();
-                        return 1;
-                    })
-                )
-            )
         );
     }
 
