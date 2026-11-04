@@ -112,7 +112,7 @@ public class ModConfig {
 	public boolean enableLyrics = false;
 	public int lyricsDisplayMode = 1; // 1: 3D World / Opponent
 	public int lyricsMode = 0; // 0: Word by word, 1: Line by line
-	public String lyricsColor = "#D8B4FE";
+	public String lyricsColor = "#FFFFFF";
 	public float lyricsScale = 3.0f;
 	public int lyricsSyncOffsetMs = 0;
 	public boolean lyricsDemoMode = false;
@@ -158,7 +158,7 @@ public class ModConfig {
 						INSTANCE.lyricsSyncOffsetMs = 0;
 					}
 					if (INSTANCE.lyricsColor == null || !INSTANCE.lyricsColor.startsWith("#") || INSTANCE.lyricsColor.length() != 7) {
-						INSTANCE.lyricsColor = "#D8B4FE";
+						INSTANCE.lyricsColor = "#FFFFFF";
 					}
 					
 					if (toRead.equals(OLD_CONFIG_FILE)) {
