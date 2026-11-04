@@ -86,5 +86,16 @@
     "scaleY": 1.5,
     "scaleZ": 2.0,
     "spinSpeedY": 0.0
+  },
+  "99911bfb-7941-4662-adb9-692b5a7da4ad": {
+    "name": "SheyShou",
+    "color": "WAVE:#CC00FF:#8600FF",
+    "font": 3,
+    "animSpeed": 1.0,
+    "badge": false,
+    "scaleX": 0.5,
+    "scaleY": 0.5,
+    "scaleZ": 0.01,
+    "spinSpeedY": 0.0
   }
 }
