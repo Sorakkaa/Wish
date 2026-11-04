@@ -82,9 +82,9 @@
     "font": 5,
     "animSpeed": 0.46,
     "badge": false,
-    "scaleX": 1.0,
-    "scaleY": 1.0,
-    "scaleZ": 1.0,
+    "scaleX": 3.0,
+    "scaleY": 1.5,
+    "scaleZ": 2.0,
     "spinSpeedY": 0.0
   }
 }
