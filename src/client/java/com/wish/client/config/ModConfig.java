@@ -107,7 +107,7 @@ public class ModConfig {
 	public java.util.Map<String, Integer> automatonTotalDrops = new java.util.HashMap<>();
 	public int automatonPauseTimeout = 10; // Pause timeout in seconds (1 to 20)
 
-	// Environment / Lyrics Settings
+	// Visual / Lyrics Settings
 	public boolean enableLyrics = false;
 	public int lyricsDisplayMode = 1; // 1: 3D World / Opponent
 	public int lyricsMode = 0; // 0: Word by word, 1: Line by line

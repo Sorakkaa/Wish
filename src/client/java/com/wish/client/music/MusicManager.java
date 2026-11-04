@@ -56,8 +56,8 @@ public final class MusicManager {
                 
                 // 1. Direct check: If 3D Lyrics is active, use the current playing song
                 if (!ModConfig.INSTANCE.lyricsDemoMode) {
-                    String lTitle = com.wish.client.features.environment.LyricsManager.getCurrentTitle();
-                    String lArtist = com.wish.client.features.environment.LyricsManager.getCurrentArtist();
+                    String lTitle = com.wish.client.features.visual.LyricsManager.getCurrentTitle();
+                    String lArtist = com.wish.client.features.visual.LyricsManager.getCurrentArtist();
                     if (lTitle != null && !lTitle.trim().isEmpty()) {
                         String songInfo = (lArtist != null && !lArtist.trim().isEmpty()) ? lTitle + " - " + lArtist : lTitle;
                         sendWinMediaSongToChat(songInfo, chatPrefix);
@@ -112,8 +112,8 @@ public final class MusicManager {
 
     public static String fetchSystemMediaSong() {
         if (!ModConfig.INSTANCE.lyricsDemoMode) {
-            String lTitle = com.wish.client.features.environment.LyricsManager.getCurrentTitle();
-            String lArtist = com.wish.client.features.environment.LyricsManager.getCurrentArtist();
+            String lTitle = com.wish.client.features.visual.LyricsManager.getCurrentTitle();
+            String lArtist = com.wish.client.features.visual.LyricsManager.getCurrentArtist();
             if (lTitle != null && !lTitle.trim().isEmpty()) {
                 return (lArtist != null && !lArtist.trim().isEmpty()) ? lTitle + " - " + lArtist : lTitle;
             }

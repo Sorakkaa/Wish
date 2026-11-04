@@ -64,7 +64,7 @@ public class GuiMixin {
 
         // Render 3D Lyrics & Atmosphere
         if (ModConfig.INSTANCE.enableLyrics) {
-            com.wish.client.features.environment.LyricsRenderer.render(guiGraphics, mc, screenW, screenH);
+            com.wish.client.features.visual.LyricsRenderer.render(guiGraphics, mc, screenW, screenH);
         }
     }
 }

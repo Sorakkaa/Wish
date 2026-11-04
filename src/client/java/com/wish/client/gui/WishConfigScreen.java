@@ -2,7 +2,7 @@ package com.wish.client.gui;
 
 import com.wish.client.config.ModConfig;
 import com.wish.client.features.GhostBlockManager;
-import com.wish.client.features.environment.LyricsManager;
+import com.wish.client.features.visual.LyricsManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
@@ -40,8 +40,8 @@ public class WishConfigScreen extends Screen {
     private int miscScrollY = 0;
     private int pseudoSubScrollY = 0;
     private int miningScrollY = 0;
-    private int environmentScrollY = 0;
-    private static boolean lyricsSectionOpen = true;
+    private int visualScrollY = 0;
+    private static boolean lyricsSectionOpen = false;
     
     
     private static boolean chatChannelsOpen = false;
@@ -403,7 +403,7 @@ public class WishConfigScreen extends Screen {
                 else if (activeTab == 2) menuTitle = "DUNGEON";
                 else if (activeTab == 4) menuTitle = "MISC SETTING";
                 else if (activeTab == 6) menuTitle = "MINING";
-                else if (activeTab == 7) menuTitle = "ENVIRONMENT";
+                else if (activeTab == 7) menuTitle = "VISUAL";
                 
                 g.text(font, "§l" + menuTitle, cx, cy, colAccent);
                 cy += 25;
@@ -1090,11 +1090,11 @@ public class WishConfigScreen extends Screen {
             }
 
             int maxScroll = Math.max(0, totalContentH - clipHeight);
-            if (environmentScrollY > maxScroll) environmentScrollY = maxScroll;
-            if (environmentScrollY < 0) environmentScrollY = 0;
+            if (visualScrollY > maxScroll) visualScrollY = maxScroll;
+            if (visualScrollY < 0) visualScrollY = 0;
 
             g.enableScissor(cx, clipTop, cx + cw, clipBottom);
-            cy -= environmentScrollY;
+            cy -= visualScrollY;
 
             int hY = cy;
             boolean hHover = (mx >= cx && mx < cx + cw && my >= Math.max(hY, clipTop) && my < Math.min(hY + hH, clipBottom));
@@ -1279,7 +1279,7 @@ public class WishConfigScreen extends Screen {
                 int scrollTrackY = clipTop;
                 int scrollTrackH = clipHeight;
                 int barH = Math.max(16, (int)((float)clipHeight / (float)totalContentH * clipHeight));
-                int barY = scrollTrackY + (int)((float)environmentScrollY / (float)maxScroll * (scrollTrackH - barH));
+                int barY = scrollTrackY + (int)((float)visualScrollY / (float)maxScroll * (scrollTrackH - barH));
 
                 RenderUtils.fillRoundedRect(g, scrollTrackX, scrollTrackY, 3, scrollTrackH, 1, 0x22FFFFFF);
                 RenderUtils.fillRoundedRect(g, scrollTrackX, barY, 3, barH, 1, colAccentDim);
@@ -1511,7 +1511,7 @@ public class WishConfigScreen extends Screen {
 
         } else if (activeSubMenuCategory == 2) { 
             int catY = sidebarStartY + categorySpacing;
-            String[] featLabels = {"Command", "Dungeon", "Mining", "Environment"};
+            String[] featLabels = {"Command", "Dungeon", "Mining", "Visual"};
             int[] optYs = {catY - 27, catY - 9, catY + 9, catY + 27};
 
             for (int k = 0; k < featLabels.length; k++) {
@@ -1856,7 +1856,7 @@ public class WishConfigScreen extends Screen {
                 }
             } else if (activeSubMenuCategory == 2) { 
                 int catY = sidebarStartY + categorySpacing;
-                String[] featLabels = {"Command", "Dungeon", "Mining", "Environment"};
+                String[] featLabels = {"Command", "Dungeon", "Mining", "Visual"};
                 int[] featTabs = {0, 2, 6, 7};
                 int[] optYs = {catY - 27, catY - 9, catY + 9, catY + 27};
                 for (int k = 0; k < featLabels.length; k++) {
@@ -2387,7 +2387,7 @@ public class WishConfigScreen extends Screen {
             int clipTop = py + 40;
             int clipBottom = py + WIN_H - 10;
             int hH = 22;
-            cy -= environmentScrollY;
+            cy -= visualScrollY;
 
             int dotSize = 8;
             int dotX = cx + cw - dotSize - 10;
@@ -2763,7 +2763,7 @@ public class WishConfigScreen extends Screen {
                         totalContentH += 24 + 6;      // Info Box
                     }
                     int maxScroll = Math.max(0, totalContentH - clipHeight);
-                    environmentScrollY = Math.max(0, Math.min(maxScroll, environmentScrollY - (int)(scrollY * 18)));
+                    visualScrollY = Math.max(0, Math.min(maxScroll, visualScrollY - (int)(scrollY * 18)));
                     return true;
                 }
             }

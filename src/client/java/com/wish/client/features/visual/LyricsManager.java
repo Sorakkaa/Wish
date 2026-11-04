@@ -1,4 +1,4 @@
-package com.wish.client.features.environment;
+package com.wish.client.features.visual;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;

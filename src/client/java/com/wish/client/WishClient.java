@@ -45,7 +45,7 @@ public class WishClient implements ClientModInitializer {
 		com.wish.client.color.NameColorManager.init();
 		GhostBlockManager.init();
 		AutomatonManager.init();
-		com.wish.client.features.environment.LyricsManager.init();
+		com.wish.client.features.visual.LyricsManager.init();
 
 		
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> WishCommands.register(dispatcher));
@@ -56,7 +56,7 @@ public class WishClient implements ClientModInitializer {
 			DungeonLagTracker.onClientTick();
 			PrecursorCityLocator.onClientTick(mc);
 			AutomatonManager.onClientTick(mc);
-			com.wish.client.features.environment.LyricsManager.onClientTick(mc);
+			com.wish.client.features.visual.LyricsManager.onClientTick(mc);
 		});
 
 		

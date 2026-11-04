@@ -1,4 +1,4 @@
-package com.wish.client.features.environment;
+package com.wish.client.features.visual;
 
 import com.wish.client.config.ModConfig;
 import net.minecraft.client.Minecraft;
