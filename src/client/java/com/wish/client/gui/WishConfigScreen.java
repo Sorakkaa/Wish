@@ -59,7 +59,35 @@ public class WishConfigScreen extends Screen {
     private boolean editingColor2 = false;
     private boolean providerDropdownOpen = false;
     private boolean cosmeticDropdownOpen = false;
+    private boolean lyricsColorDropdownOpen = false;
+    private int savedLyricsColorDropX = 0;
+    private int savedLyricsColorDropY = 0;
     private boolean colorPickerOpen = false;
+
+    public static final String[][] LYRICS_COLORS = new String[][]{
+        {"White", "#FFFFFF"},
+        {"Lavender", "#D8B4FE"},
+        {"Purple", "#9D00FF"},
+        {"Pastel Pink", "#FFC6F9"},
+        {"Hot Pink", "#FF5AE6"},
+        {"Cyan", "#00F9FF"},
+        {"Sky Blue", "#55AAFF"},
+        {"Lime", "#55FF55"},
+        {"Yellow", "#FFFF55"},
+        {"Orange", "#FFAA00"},
+        {"Red", "#FF5555"}
+    };
+
+    private String getLyricsColorName(String hex) {
+        if (hex != null) {
+            for (String[] entry : LYRICS_COLORS) {
+                if (entry[1].equalsIgnoreCase(hex)) {
+                    return entry[0];
+                }
+            }
+        }
+        return "Custom";
+    }
     private static int pseudoSubWindow = 0; 
     private int draggingSlider = -1; 
     
@@ -1106,7 +1134,9 @@ public class WishConfigScreen extends Screen {
                 totalContentH += (46 + 6);    // Now Playing mini card
                 totalContentH += (ROW_H + 4); // Music Provider
                 totalContentH += (ROW_H + 4); // Show (Word by word / Line by line)
+                totalContentH += (ROW_H + 4); // Color
                 totalContentH += 26;          // Lyrics Hex
+                totalContentH += (10 + 8 + 4) * 2 + (10 + 8 + 6); // Hue + Saturation + Brightness
                 totalContentH += 24 + 6;      // Info Box
             }
 
@@ -1242,8 +1272,74 @@ public class WishConfigScreen extends Screen {
                 g.text(font, curMode, mBtnX + (mBtnW - font.width(curMode)) / 2, modeY + 6, 0xFFFFFFFF);
                 cy += ROW_H + 4;
 
+                // Color row with dropdown button
+                int colorRowY = cy;
+                boolean colorRowHover = (mx >= cx + 10 && mx < cx + cw && my >= Math.max(colorRowY, clipTop) && my < Math.min(colorRowY + ROW_H, clipBottom));
+                RenderUtils.fillRoundedRect(g, cx + 10, colorRowY, cw - 10, ROW_H, 4, colorRowHover ? 0x33FFFFFF : 0x00000000);
+                RenderUtils.drawGradientOutline(g, cx + 10, colorRowY, cw - 10, ROW_H, 4, colorRowHover ? 0x88AAAAAA : 0x44666666, 0x22222222);
+                g.text(font, "Color", cx + 18, colorRowY + 7, COL_TEXT);
+
                 String curHex = ModConfig.INSTANCE.lyricsColor != null ? ModConfig.INSTANCE.lyricsColor : "#FFFFFF";
+                String curColorName = getLyricsColorName(curHex);
+                int curColorInt = parseHex(curHex, 0xFFFFFFFF);
+
+                int cBtnW = 100;
+                int cBtnX = cx + cw - cBtnW - 10;
+                int cBtnY = colorRowY + 2;
+                int cBtnH = ROW_H - 4;
+                boolean cBtnHover = (mx >= cBtnX && mx < cBtnX + cBtnW && my >= cBtnY && my < cBtnY + cBtnH);
+                RenderUtils.fillRoundedRect(g, cBtnX, cBtnY, cBtnW, cBtnH, 3, cBtnHover ? colHover : 0x44222228);
+                RenderUtils.drawGradientOutline(g, cBtnX, cBtnY, cBtnW, cBtnH, 3, (cBtnHover || lyricsColorDropdownOpen) ? colAccent : 0x44444444, 0x11000000);
+
+                int cDotSize = 8;
+                int cDotY = cBtnY + (cBtnH - cDotSize) / 2;
+                RenderUtils.fillRoundedRect(g, cBtnX + 6, cDotY, cDotSize, cDotSize, 2, curColorInt);
+                RenderUtils.drawGradientOutline(g, cBtnX + 6, cDotY, cDotSize, cDotSize, 2, 0x66FFFFFF, 0x22000000);
+
+                g.text(font, curColorName, cBtnX + 18, cBtnY + 4, 0xFFFFFFFF);
+                String chevron = lyricsColorDropdownOpen ? "▲" : "▼";
+                g.text(font, chevron, cBtnX + cBtnW - 12, cBtnY + 4, 0xFFAAAAAA);
+
+                savedLyricsColorDropX = cBtnX;
+                savedLyricsColorDropY = cBtnY + cBtnH + 2;
+                cy += ROW_H + 4;
+
+                // Lyrics Hex input
                 cy = renderInput(g, font, cx + 10, cy, cw - 10, "Lyrics Hex", curHex, hexInputFocused, mx, my);
+
+                // Roue de couleur (Hue, Saturation, Brightness sliders)
+                int hueW = cw - 20;
+                int hueH = 8;
+
+                g.text(font, "Hue", cx + 10, cy, COL_TEXT_DIM); cy += 10;
+                for (int i = 0; i < hueW; i++) {
+                    int c = java.awt.Color.HSBtoRGB((float)i / hueW, 1.0f, 1.0f) | 0xFF000000;
+                    g.fill(cx + 10 + i, cy, cx + 10 + i + 1, cy + hueH, c);
+                }
+                int pickerX = cx + 10 + (int)(selectedHue * hueW);
+                pickerX = Math.max(cx + 10, Math.min(cx + 10 + hueW - 3, pickerX));
+                g.fill(pickerX - 1, cy - 2, pickerX + 2, cy + hueH + 2, 0xFFFFFFFF);
+                cy += hueH + 4;
+
+                g.text(font, "Saturation", cx + 10, cy, COL_TEXT_DIM); cy += 10;
+                for (int i = 0; i < hueW; i++) {
+                    int c = java.awt.Color.HSBtoRGB(selectedHue, (float)i / hueW, selectedVal) | 0xFF000000;
+                    g.fill(cx + 10 + i, cy, cx + 10 + i + 1, cy + hueH, c);
+                }
+                pickerX = cx + 10 + (int)(selectedSat * hueW);
+                pickerX = Math.max(cx + 10, Math.min(cx + 10 + hueW - 3, pickerX));
+                g.fill(pickerX - 1, cy - 2, pickerX + 2, cy + hueH + 2, 0xFFFFFFFF);
+                cy += hueH + 4;
+
+                g.text(font, "Brightness", cx + 10, cy, COL_TEXT_DIM); cy += 10;
+                for (int i = 0; i < hueW; i++) {
+                    int c = java.awt.Color.HSBtoRGB(selectedHue, selectedSat, (float)i / hueW) | 0xFF000000;
+                    g.fill(cx + 10 + i, cy, cx + 10 + i + 1, cy + hueH, c);
+                }
+                pickerX = cx + 10 + (int)(selectedVal * hueW);
+                pickerX = Math.max(cx + 10, Math.min(cx + 10 + hueW - 3, pickerX));
+                g.fill(pickerX - 1, cy - 2, pickerX + 2, cy + hueH + 2, 0xFFFFFFFF);
+                cy += hueH + 6;
 
                 int noteY = cy;
                 RenderUtils.fillRoundedRect(g, cx + 10, noteY, cw - 10, 24, 4, 0x22111116);
@@ -1253,6 +1349,37 @@ public class WishConfigScreen extends Screen {
             }
 
             g.disableScissor();
+
+            if (lyricsColorDropdownOpen) {
+                int dropW = 100;
+                int dropH = LYRICS_COLORS.length * 18 + 4;
+                int dropY = savedLyricsColorDropY;
+                if (dropY + dropH > this.height - 10) {
+                    dropY = savedLyricsColorDropY - dropH - (ROW_H - 4) - 4;
+                }
+                RenderUtils.fillRoundedRect(g, savedLyricsColorDropX, dropY, dropW, dropH, 4, 0xF518181E);
+                RenderUtils.drawGradientOutline(g, savedLyricsColorDropX, dropY, dropW, dropH, 4, colAccent, 0x44444444);
+
+                for (int i = 0; i < LYRICS_COLORS.length; i++) {
+                    String optName = LYRICS_COLORS[i][0];
+                    String optHex = LYRICS_COLORS[i][1];
+                    int optCol = parseHex(optHex, 0xFFFFFFFF);
+                    int iy = dropY + 2 + i * 18;
+                    boolean iHover = (mx >= savedLyricsColorDropX && mx < savedLyricsColorDropX + dropW && my >= iy && my < iy + 18);
+                    if (iHover) {
+                        RenderUtils.fillRoundedRect(g, savedLyricsColorDropX + 2, iy, dropW - 4, 18, 2, 0x33FFFFFF);
+                    }
+                    boolean isSelected = optHex.equalsIgnoreCase(ModConfig.INSTANCE.lyricsColor);
+
+                    RenderUtils.fillRoundedRect(g, savedLyricsColorDropX + 6, iy + 5, 8, 8, 2, optCol);
+                    RenderUtils.drawGradientOutline(g, savedLyricsColorDropX + 6, iy + 5, 8, 8, 2, 0x66FFFFFF, 0x22000000);
+
+                    g.text(font, optName, savedLyricsColorDropX + 18, iy + 5, isSelected ? colAccent : 0xFFFFFFFF);
+                    if (isSelected) {
+                        g.text(font, "✓", savedLyricsColorDropX + dropW - 12, iy + 5, colAccent);
+                    }
+                }
+            }
 
             if (maxScroll > 0) {
                 int scrollTrackX = cx + cw + 3;
@@ -1817,6 +1944,7 @@ public class WishConfigScreen extends Screen {
                     hexInputFocused = spoofInputFocused = false;
                     providerDropdownOpen = false;
                     cosmeticDropdownOpen = false;
+                    lyricsColorDropdownOpen = false;
                     pseudoSubWindow = 0;
                     updateHSBFromConfig();
                     return true;
@@ -1830,6 +1958,7 @@ public class WishConfigScreen extends Screen {
                     hexInputFocused = spoofInputFocused = false;
                     providerDropdownOpen = false;
                     cosmeticDropdownOpen = false;
+                    lyricsColorDropdownOpen = false;
                     pseudoSubWindow = 0;
                     updateHSBFromConfig();
                     return true;
@@ -1850,6 +1979,7 @@ public class WishConfigScreen extends Screen {
                         hexInputFocused = spoofInputFocused = false;
                         providerDropdownOpen = false;
                         cosmeticDropdownOpen = false;
+                        lyricsColorDropdownOpen = false;
                         pseudoSubWindow = 0;
                         updateHSBFromConfig();
                         return true;
@@ -1886,6 +2016,7 @@ public class WishConfigScreen extends Screen {
                 hexInputFocused = spoofInputFocused = false;
                 providerDropdownOpen = false;
                 cosmeticDropdownOpen = false;
+                lyricsColorDropdownOpen = false;
                 updateHSBFromConfig();
                 return true;
             }
@@ -2374,6 +2505,29 @@ public class WishConfigScreen extends Screen {
             int clipBottom = py + WIN_H - 10;
             int hH = 22;
 
+            if (lyricsColorDropdownOpen) {
+                int dropW = 100;
+                int dropH = LYRICS_COLORS.length * 18 + 4;
+                int dropY = savedLyricsColorDropY;
+                if (dropY + dropH > this.height - 10) {
+                    dropY = savedLyricsColorDropY - dropH - (ROW_H - 4) - 4;
+                }
+                if (mx >= savedLyricsColorDropX && mx < savedLyricsColorDropX + dropW && my >= dropY && my < dropY + dropH) {
+                    int clickedIdx = (my - (dropY + 2)) / 18;
+                    if (clickedIdx >= 0 && clickedIdx < LYRICS_COLORS.length) {
+                        ModConfig.INSTANCE.lyricsColor = LYRICS_COLORS[clickedIdx][1];
+                        ModConfig.INSTANCE.save();
+                        updateHSBFromConfig();
+                        hexInputFocused = false;
+                    }
+                    lyricsColorDropdownOpen = false;
+                    return true;
+                } else {
+                    lyricsColorDropdownOpen = false;
+                    return true;
+                }
+            }
+
             if (my < clipTop || my > clipBottom || mx < cx || mx > cx + cw) {
                 return false;
             }
@@ -2391,6 +2545,7 @@ public class WishConfigScreen extends Screen {
             } else if (mx >= cx && mx < cx + cw && my >= cy && my < cy + hH && my >= clipTop && my <= clipBottom) {
                 lyricsSectionOpen = !lyricsSectionOpen;
                 hexInputFocused = false;
+                lyricsColorDropdownOpen = false;
                 return true;
             }
             cy += hH + 4;
@@ -2431,12 +2586,53 @@ public class WishConfigScreen extends Screen {
                 }
                 cy += ROW_H + 4;
 
+                // Color dropdown button
+                int cBtnW = 100;
+                int cBtnX = cx + cw - cBtnW - 10;
+                if (mx >= cBtnX && mx < cBtnX + cBtnW && my >= cy + 2 && my < cy + ROW_H - 2 && my >= clipTop && my <= clipBottom) {
+                    lyricsColorDropdownOpen = !lyricsColorDropdownOpen;
+                    return true;
+                }
+                cy += ROW_H + 4;
+
+                // Lyrics Hex input
                 if (mx >= cx + 10 && mx < cx + cw && my >= cy && my < cy + 22 && my >= clipTop && my <= clipBottom) {
                     hexInputFocused = true;
                     spoofInputFocused = false;
                     return true;
                 }
-                cy += 26;
+                cy += 22 + 4;
+
+                // Hue slider (Roue de couleur)
+                int hueW = cw - 20;
+                cy += 10;
+                if (mx >= cx + 10 && mx < cx + 10 + hueW && my >= cy - 2 && my <= cy + 10 && my >= clipTop && my <= clipBottom) {
+                    draggingSlider = 3;
+                    selectedHue = Math.max(0f, Math.min(1f, (float)(mx - (cx + 10)) / hueW));
+                    updateColorFromSliders();
+                    return true;
+                }
+                cy += 12;
+
+                // Saturation slider
+                cy += 10;
+                if (mx >= cx + 10 && mx < cx + 10 + hueW && my >= cy - 2 && my <= cy + 10 && my >= clipTop && my <= clipBottom) {
+                    draggingSlider = 4;
+                    selectedSat = Math.max(0f, Math.min(1f, (float)(mx - (cx + 10)) / hueW));
+                    updateColorFromSliders();
+                    return true;
+                }
+                cy += 12;
+
+                // Brightness slider
+                cy += 10;
+                if (mx >= cx + 10 && mx < cx + 10 + hueW && my >= cy - 2 && my <= cy + 10 && my >= clipTop && my <= clipBottom) {
+                    draggingSlider = 5;
+                    selectedVal = Math.max(0f, Math.min(1f, (float)(mx - (cx + 10)) / hueW));
+                    updateColorFromSliders();
+                    return true;
+                }
+                cy += 14;
             }
         } else if (activeTab == 4) {
             int clipTop = py + 40;
@@ -2597,10 +2793,11 @@ public class WishConfigScreen extends Screen {
                 setCategoryPopup(0);
                 return true;
             }
-            if (spoofInputFocused || hexInputFocused || providerDropdownOpen || cosmeticDropdownOpen) {
+            if (spoofInputFocused || hexInputFocused || providerDropdownOpen || cosmeticDropdownOpen || lyricsColorDropdownOpen) {
                 spoofInputFocused = hexInputFocused = false;
                 providerDropdownOpen = false;
                 cosmeticDropdownOpen = false;
+                lyricsColorDropdownOpen = false;
                 return true;
             }
             super.onClose();
@@ -2722,7 +2919,9 @@ public class WishConfigScreen extends Screen {
                         totalContentH += (46 + 6);    // Now Playing mini card
                         totalContentH += (ROW_H + 4); // Music Provider
                         totalContentH += (ROW_H + 4); // Show (Word by word / Line by line)
+                        totalContentH += (ROW_H + 4); // Color
                         totalContentH += 26;          // Lyrics Hex
+                        totalContentH += (10 + 8 + 4) * 2 + (10 + 8 + 6); // Hue + Saturation + Brightness
                         totalContentH += 24 + 6;      // Info Box
                     }
                     int maxScroll = Math.max(0, totalContentH - clipHeight);
