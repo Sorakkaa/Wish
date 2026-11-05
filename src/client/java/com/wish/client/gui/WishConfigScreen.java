@@ -53,6 +53,7 @@ public class WishConfigScreen extends Screen {
     private static boolean lagTimeLostOpen = false;
     private static boolean miningAutomatonOpen = false;
     private static boolean automatonGlowOpen = false;
+    private static boolean lyricsColorOpen = false;
     private static boolean songSettingsOpen = false;
     private boolean hexInputFocused = false;
     private boolean spoofInputFocused = false;
@@ -1106,9 +1107,12 @@ public class WishConfigScreen extends Screen {
                 totalContentH += (46 + 6);    // Now Playing mini card
                 totalContentH += (ROW_H + 4); // Music Provider
                 totalContentH += (ROW_H + 4); // Show (Word by word / Line by line)
-                totalContentH += 22 + 4;      // Lyrics Preview
-                totalContentH += 26;          // Lyrics Hex
-                totalContentH += (10 + 8 + 4) * 2 + (10 + 8 + 6); // Hue + Saturation + Brightness
+                totalContentH += hH + 4;      // Color collapsible header
+                if (lyricsColorOpen) {
+                    totalContentH += 22 + 4;      // Lyrics Preview
+                    totalContentH += 26;          // Lyrics Hex
+                    totalContentH += (10 + 8 + 4) * 2 + (10 + 8 + 6); // Hue + Saturation + Brightness
+                }
                 totalContentH += 24 + 6;      // Info Box
             }
 
@@ -1244,51 +1248,67 @@ public class WishConfigScreen extends Screen {
                 g.text(font, curMode, mBtnX + (mBtnW - font.width(curMode)) / 2, modeY + 6, 0xFFFFFFFF);
                 cy += ROW_H + 4;
 
-                int boxW = 50;
-                int boxH = 22;
-                int previewColor = parseHex(ModConfig.INSTANCE.lyricsColor, 0xFFFFFFFF);
+                int colorHY = cy;
+                boolean colorHover = (mx >= cx + 10 && mx < cx + cw && my >= Math.max(colorHY, clipTop) && my < Math.min(colorHY + hH, clipBottom));
+                RenderUtils.fillRoundedRect(g, cx + 10, colorHY, cw - 10, hH, 4, lyricsColorOpen ? colHover : (colorHover ? 0x44444455 : 0x2A2A2E55));
+                RenderUtils.drawGradientOutline(g, cx + 10, colorHY, cw - 10, hH, 4, lyricsColorOpen ? colAccent : 0x55888888, 0x22444444);
+                g.text(font, (lyricsColorOpen ? "▼ " : "▶ ") + "Color", cx + 18, colorHY + 7, COL_TEXT);
 
-                RenderUtils.fillRoundedRect(g, cx + 10, cy, boxW, boxH, 4, previewColor);
-                RenderUtils.drawGradientOutline(g, cx + 10, cy, boxW, boxH, 4, 0x66FFFFFF, 0x22FFFFFF);
-                g.text(font, "Lyrics Preview", cx + 10 + boxW + 10, cy + 7, COL_TEXT);
-                cy += boxH + 4;
+                int cDotSize = 8;
+                int dotX2 = cx + cw - cDotSize - 10;
+                int dotY2 = colorHY + 7;
+                int curColorInt = parseHex(ModConfig.INSTANCE.lyricsColor, 0xFFFFFFFF);
+                RenderUtils.fillRoundedRect(g, dotX2, dotY2, cDotSize, cDotSize, 4, curColorInt);
+                RenderUtils.drawGradientOutline(g, dotX2, dotY2, cDotSize, cDotSize, 4, 0x66FFFFFF, 0x11000000);
+                cy += hH + 4;
 
-                String curHex = ModConfig.INSTANCE.lyricsColor != null ? ModConfig.INSTANCE.lyricsColor : "#FFFFFF";
-                cy = renderInput(g, font, cx + 10, cy, cw - 10, "Lyrics Hex", curHex, hexInputFocused, mx, my);
+                if (lyricsColorOpen) {
+                    int boxW = 50;
+                    int boxH = 22;
+                    int previewColor = curColorInt;
 
-                // Roue de couleur (Hue, Saturation, Brightness sliders)
-                int hueW = cw - 20;
-                int hueH = 8;
+                    RenderUtils.fillRoundedRect(g, cx + 10, cy, boxW, boxH, 4, previewColor);
+                    RenderUtils.drawGradientOutline(g, cx + 10, cy, boxW, boxH, 4, 0x66FFFFFF, 0x22FFFFFF);
+                    g.text(font, "Lyrics Preview", cx + 10 + boxW + 10, cy + 7, COL_TEXT);
+                    cy += boxH + 4;
 
-                g.text(font, "Hue", cx + 10, cy, COL_TEXT_DIM); cy += 10;
-                for (int i = 0; i < hueW; i++) {
-                    int c = java.awt.Color.HSBtoRGB((float)i / hueW, 1.0f, 1.0f) | 0xFF000000;
-                    g.fill(cx + 10 + i, cy, cx + 10 + i + 1, cy + hueH, c);
+                    String curHex = ModConfig.INSTANCE.lyricsColor != null ? ModConfig.INSTANCE.lyricsColor : "#FFFFFF";
+                    cy = renderInput(g, font, cx + 10, cy, cw - 10, "Lyrics Hex", curHex, hexInputFocused, mx, my);
+
+                    // Roue de couleur (Hue, Saturation, Brightness sliders)
+                    int hueW = cw - 20;
+                    int hueH = 8;
+
+                    g.text(font, "Hue", cx + 10, cy, COL_TEXT_DIM); cy += 10;
+                    for (int i = 0; i < hueW; i++) {
+                        int c = java.awt.Color.HSBtoRGB((float)i / hueW, 1.0f, 1.0f) | 0xFF000000;
+                        g.fill(cx + 10 + i, cy, cx + 10 + i + 1, cy + hueH, c);
+                    }
+                    int pickerX = cx + 10 + (int)(selectedHue * hueW);
+                    pickerX = Math.max(cx + 10, Math.min(cx + 10 + hueW - 3, pickerX));
+                    g.fill(pickerX - 1, cy - 2, pickerX + 2, cy + hueH + 2, 0xFFFFFFFF);
+                    cy += hueH + 4;
+
+                    g.text(font, "Saturation", cx + 10, cy, COL_TEXT_DIM); cy += 10;
+                    for (int i = 0; i < hueW; i++) {
+                        int c = java.awt.Color.HSBtoRGB(selectedHue, (float)i / hueW, selectedVal) | 0xFF000000;
+                        g.fill(cx + 10 + i, cy, cx + 10 + i + 1, cy + hueH, c);
+                    }
+                    pickerX = cx + 10 + (int)(selectedSat * hueW);
+                    pickerX = Math.max(cx + 10, Math.min(cx + 10 + hueW - 3, pickerX));
+                    g.fill(pickerX - 1, cy - 2, pickerX + 2, cy + hueH + 2, 0xFFFFFFFF);
+                    cy += hueH + 4;
+
+                    g.text(font, "Brightness", cx + 10, cy, COL_TEXT_DIM); cy += 10;
+                    for (int i = 0; i < hueW; i++) {
+                        int c = java.awt.Color.HSBtoRGB(selectedHue, selectedSat, (float)i / hueW) | 0xFF000000;
+                        g.fill(cx + 10 + i, cy, cx + 10 + i + 1, cy + hueH, c);
+                    }
+                    pickerX = cx + 10 + (int)(selectedVal * hueW);
+                    pickerX = Math.max(cx + 10, Math.min(cx + 10 + hueW - 3, pickerX));
+                    g.fill(pickerX - 1, cy - 2, pickerX + 2, cy + hueH + 2, 0xFFFFFFFF);
+                    cy += hueH + 6;
                 }
-                int pickerX = cx + 10 + (int)(selectedHue * hueW);
-                pickerX = Math.max(cx + 10, Math.min(cx + 10 + hueW - 3, pickerX));
-                g.fill(pickerX - 1, cy - 2, pickerX + 2, cy + hueH + 2, 0xFFFFFFFF);
-                cy += hueH + 4;
-
-                g.text(font, "Saturation", cx + 10, cy, COL_TEXT_DIM); cy += 10;
-                for (int i = 0; i < hueW; i++) {
-                    int c = java.awt.Color.HSBtoRGB(selectedHue, (float)i / hueW, selectedVal) | 0xFF000000;
-                    g.fill(cx + 10 + i, cy, cx + 10 + i + 1, cy + hueH, c);
-                }
-                pickerX = cx + 10 + (int)(selectedSat * hueW);
-                pickerX = Math.max(cx + 10, Math.min(cx + 10 + hueW - 3, pickerX));
-                g.fill(pickerX - 1, cy - 2, pickerX + 2, cy + hueH + 2, 0xFFFFFFFF);
-                cy += hueH + 4;
-
-                g.text(font, "Brightness", cx + 10, cy, COL_TEXT_DIM); cy += 10;
-                for (int i = 0; i < hueW; i++) {
-                    int c = java.awt.Color.HSBtoRGB(selectedHue, selectedSat, (float)i / hueW) | 0xFF000000;
-                    g.fill(cx + 10 + i, cy, cx + 10 + i + 1, cy + hueH, c);
-                }
-                pickerX = cx + 10 + (int)(selectedVal * hueW);
-                pickerX = Math.max(cx + 10, Math.min(cx + 10 + hueW - 3, pickerX));
-                g.fill(pickerX - 1, cy - 2, pickerX + 2, cy + hueH + 2, 0xFFFFFFFF);
-                cy += hueH + 6;
 
                 int noteY = cy;
                 RenderUtils.fillRoundedRect(g, cx + 10, noteY, cw - 10, 24, 4, 0x22111116);
@@ -2476,43 +2496,53 @@ public class WishConfigScreen extends Screen {
                 }
                 cy += ROW_H + 4;
 
-                cy += 22 + 4; // Lyrics Preview box
-
-                // Lyrics Hex input
-                if (mx >= cx + 10 && mx < cx + cw && my >= cy && my < cy + 22 && my >= clipTop && my <= clipBottom) {
-                    hexInputFocused = true;
-                    spoofInputFocused = false;
+                // Color collapsible header
+                if (mx >= cx + 10 && mx < cx + cw && my >= cy && my < cy + hH && my >= clipTop && my <= clipBottom) {
+                    lyricsColorOpen = !lyricsColorOpen;
+                    hexInputFocused = false;
                     return true;
                 }
-                cy += 22 + 4;
+                cy += hH + 4;
 
-                cy += 10;
-                int hueW = cw - 20;
-                if (mx >= cx + 10 && mx < cx + 10 + hueW && my >= cy && my < cy + 10 && my >= clipTop && my <= clipBottom) {
-                    draggingSlider = 3;
-                    selectedHue = Math.max(0f, Math.min(1f, (float)(mx - (cx + 10)) / hueW));
-                    updateColorFromSliders();
-                    return true;
-                }
-                cy += 14;
+                if (lyricsColorOpen) {
+                    cy += 22 + 4; // Lyrics Preview box
 
-                cy += 10;
-                if (mx >= cx + 10 && mx < cx + 10 + hueW && my >= cy && my < cy + 10 && my >= clipTop && my <= clipBottom) {
-                    draggingSlider = 4;
-                    selectedSat = Math.max(0f, Math.min(1f, (float)(mx - (cx + 10)) / hueW));
-                    updateColorFromSliders();
-                    return true;
-                }
-                cy += 14;
+                    // Lyrics Hex input
+                    if (mx >= cx + 10 && mx < cx + cw && my >= cy && my < cy + 22 && my >= clipTop && my <= clipBottom) {
+                        hexInputFocused = true;
+                        spoofInputFocused = false;
+                        return true;
+                    }
+                    cy += 22 + 4;
 
-                cy += 10;
-                if (mx >= cx + 10 && mx < cx + 10 + hueW && my >= cy && my < cy + 10 && my >= clipTop && my <= clipBottom) {
-                    draggingSlider = 5;
-                    selectedVal = Math.max(0f, Math.min(1f, (float)(mx - (cx + 10)) / hueW));
-                    updateColorFromSliders();
-                    return true;
+                    cy += 10;
+                    int hueW = cw - 20;
+                    if (mx >= cx + 10 && mx < cx + 10 + hueW && my >= cy && my < cy + 10 && my >= clipTop && my <= clipBottom) {
+                        draggingSlider = 3;
+                        selectedHue = Math.max(0f, Math.min(1f, (float)(mx - (cx + 10)) / hueW));
+                        updateColorFromSliders();
+                        return true;
+                    }
+                    cy += 14;
+
+                    cy += 10;
+                    if (mx >= cx + 10 && mx < cx + 10 + hueW && my >= cy && my < cy + 10 && my >= clipTop && my <= clipBottom) {
+                        draggingSlider = 4;
+                        selectedSat = Math.max(0f, Math.min(1f, (float)(mx - (cx + 10)) / hueW));
+                        updateColorFromSliders();
+                        return true;
+                    }
+                    cy += 14;
+
+                    cy += 10;
+                    if (mx >= cx + 10 && mx < cx + 10 + hueW && my >= cy && my < cy + 10 && my >= clipTop && my <= clipBottom) {
+                        draggingSlider = 5;
+                        selectedVal = Math.max(0f, Math.min(1f, (float)(mx - (cx + 10)) / hueW));
+                        updateColorFromSliders();
+                        return true;
+                    }
+                    cy += 16;
                 }
-                cy += 16;
             }
         } else if (activeTab == 4) {
             int clipTop = py + 40;
@@ -2798,9 +2828,12 @@ public class WishConfigScreen extends Screen {
                         totalContentH += (46 + 6);    // Now Playing mini card
                         totalContentH += (ROW_H + 4); // Music Provider
                         totalContentH += (ROW_H + 4); // Show (Word by word / Line by line)
-                        totalContentH += 22 + 4;      // Lyrics Preview
-                        totalContentH += 26;          // Lyrics Hex
-                        totalContentH += (10 + 8 + 4) * 2 + (10 + 8 + 6); // Hue + Saturation + Brightness
+                        totalContentH += hH + 4;      // Color collapsible header
+                        if (lyricsColorOpen) {
+                            totalContentH += 22 + 4;      // Lyrics Preview
+                            totalContentH += 26;          // Lyrics Hex
+                            totalContentH += (10 + 8 + 4) * 2 + (10 + 8 + 6); // Hue + Saturation + Brightness
+                        }
                         totalContentH += 24 + 6;      // Info Box
                     }
                     int maxScroll = Math.max(0, totalContentH - clipHeight);
