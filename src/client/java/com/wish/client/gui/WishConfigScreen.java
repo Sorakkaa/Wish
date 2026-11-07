@@ -42,6 +42,7 @@ public class WishConfigScreen extends Screen {
     private int miningScrollY = 0;
     private int visualScrollY = 0;
     private static boolean lyricsSectionOpen = false;
+    private static boolean timeChangerSectionOpen = false;
     
     
     private static boolean chatChannelsOpen = false;
@@ -1115,6 +1116,12 @@ public class WishConfigScreen extends Screen {
                 }
                 totalContentH += 24 + 6;      // Info Box
             }
+            totalContentH += hH + 4; // Time Changer header
+            if (timeChangerSectionOpen) {
+                totalContentH += 26 + 4;      // Custom Time slider
+                totalContentH += (ROW_H + 4); // Freeze Time toggle
+            }
+            totalContentH += (ROW_H + 4); // Custom Sky toggle
 
             int maxScroll = Math.max(0, totalContentH - clipHeight);
             if (visualScrollY > maxScroll) visualScrollY = maxScroll;
@@ -1317,6 +1324,35 @@ public class WishConfigScreen extends Screen {
                 cy += 24 + 6;
             }
 
+            // Time Changer Section Header
+            int timeHY = cy;
+            boolean timeHHover = (mx >= cx && mx < cx + cw && my >= Math.max(timeHY, clipTop) && my < Math.min(timeHY + hH, clipBottom));
+            RenderUtils.fillRoundedRect(g, cx, timeHY, cw, hH, 4, timeChangerSectionOpen ? colHover : (timeHHover ? 0x44444455 : 0x2A2A2E55));
+            RenderUtils.drawGradientOutline(g, cx, timeHY, cw, hH, 4, timeChangerSectionOpen ? colAccent : 0x55888888, 0x22444444);
+            g.text(font, (timeChangerSectionOpen ? "▼ " : "▶ ") + "Time Changer", cx + 8, timeHY + 7, COL_TEXT);
+
+            boolean timeState = ModConfig.INSTANCE.enableCustomTime;
+            int timeDotX = cx + cw - dotSize - 10;
+            int timeDotY = timeHY + 7;
+            boolean timeDotHover = isHeaderDotClicked(mx, my, cx, timeHY, cw);
+            int timeDotCol = timeState ? (timeDotHover ? 0xFFBB00FF : colAccent) : (timeDotHover ? 0xFFFF5566 : COL_OFF);
+            RenderUtils.fillRoundedRect(g, timeDotX, timeDotY, dotSize, dotSize, 4, timeDotCol);
+            RenderUtils.drawGradientOutline(g, timeDotX, timeDotY, dotSize, dotSize, 4, timeDotHover ? 0xAAFFFFFF : 0x44FFFFFF, 0x11000000);
+            cy += hH + 4;
+
+            if (timeChangerSectionOpen) {
+                // Custom Time Slider
+                String timeFormatted = com.wish.client.features.visual.TimeManager.formatTime(ModConfig.INSTANCE.customTimeTicks);
+                String sliderTitle = "Custom Time: §e" + timeFormatted + " §7(" + ModConfig.INSTANCE.customTimeTicks + " ticks)";
+                cy = renderSlider(g, font, cx + 10, cy, cw - 10, sliderTitle, ModConfig.INSTANCE.customTimeTicks / 24000.0f, mx, my, 14, 0.0f, 1.0f);
+
+                // Freeze Time Toggle
+                cy = renderToggle(g, font, cx + 10, cy, cw - 10, "Freeze Time", ModConfig.INSTANCE.customTimeFrozen, mx, my, "Freeze Time", "Locks client time at this exact moment vs letting time advance naturally");
+            }
+
+            // Custom Sky Toggle
+            cy = renderToggle(g, font, cx, cy, cw, "Custom Sky", ModConfig.INSTANCE.enableCustomSky, mx, my, "Custom Sky", "Pure pitch-black space sky background while keeping the sun and moon.");
+
             g.disableScissor();
 
             if (maxScroll > 0) {
@@ -1432,7 +1468,7 @@ public class WishConfigScreen extends Screen {
                 RenderUtils.fillRoundedRect(g, scrollTrackX, barY, 3, barH, 1, colAccentDim);
             }
         }
-        } 
+        }  
 
         
         if (songSettingsOpen) {
@@ -1792,6 +1828,11 @@ public class WishConfigScreen extends Screen {
             float newPct = (float)(mx - (cx + 10 + 8)) / (cw - 10 - 16);
             newPct = Math.max(0, Math.min(1, newPct));
             ModConfig.INSTANCE.lyricsScale = 0.5f + newPct * 2.0f;
+        } else if (draggingSlider == 14) {
+            float newPct = (float)(mx - (cx + 10 + 8)) / (cw - 10 - 16);
+            newPct = Math.max(0.0f, Math.min(1.0f, newPct));
+            int ticks = Math.round(newPct * 24000.0f);
+            com.wish.client.features.visual.TimeManager.setCustomTicks(ticks);
         }
 
         return super.mouseDragged(event, dragX, dragY);
@@ -2544,6 +2585,46 @@ public class WishConfigScreen extends Screen {
                     cy += 16;
                 }
             }
+
+            // Time Changer Section Click Handling
+            if (isHeaderDotClicked(mx, my, cx, cy, cw) && my >= clipTop && my <= clipBottom) {
+                ModConfig.INSTANCE.enableCustomTime = !ModConfig.INSTANCE.enableCustomTime;
+                com.wish.client.features.visual.TimeManager.invalidateCache();
+                ModConfig.INSTANCE.save();
+                return true;
+            } else if (mx >= cx && mx < cx + cw && my >= cy && my < cy + hH && my >= clipTop && my <= clipBottom) {
+                timeChangerSectionOpen = !timeChangerSectionOpen;
+                return true;
+            }
+            cy += hH + 4;
+
+            if (timeChangerSectionOpen) {
+                // Custom Time slider (14)
+                if (mx >= cx + 10 && mx < cx + cw && my >= cy && my < cy + 26 && my >= clipTop && my <= clipBottom) {
+                    draggingSlider = 14;
+                    float newPct = (float)(mx - (cx + 10 + 8)) / (cw - 10 - 16);
+                    newPct = Math.max(0, Math.min(1, newPct));
+                    int ticks = Math.round(newPct * 24000.0f);
+                    com.wish.client.features.visual.TimeManager.setCustomTicks(ticks);
+                    return true;
+                }
+                cy += 26 + 4;
+
+                // Freeze Time toggle
+                if (isToggleBtnClicked(mx, my, cx + 10, cy, cw - 10) && my >= clipTop && my <= clipBottom) {
+                    com.wish.client.features.visual.TimeManager.setFrozen(!ModConfig.INSTANCE.customTimeFrozen);
+                    return true;
+                }
+                cy += ROW_H + 4;
+            }
+
+            // Custom Sky Toggle Click Handling
+            if (mx >= cx && mx < cx + cw && my >= cy && my < cy + ROW_H && my >= clipTop && my <= clipBottom) {
+                ModConfig.INSTANCE.enableCustomSky = !ModConfig.INSTANCE.enableCustomSky;
+                ModConfig.INSTANCE.save();
+                return true;
+            }
+            cy += ROW_H + 4;
         } else if (activeTab == 4) {
             int clipTop = py + 40;
             int clipBottom = py + WIN_H - 10;
@@ -2836,6 +2917,12 @@ public class WishConfigScreen extends Screen {
                         }
                         totalContentH += 24 + 6;      // Info Box
                     }
+                    totalContentH += hH + 4; // Time Changer
+                    if (timeChangerSectionOpen) {
+                        totalContentH += 26 + 4;      // Custom Time slider
+                        totalContentH += (ROW_H + 4); // Freeze Time toggle
+                    }
+                    totalContentH += (ROW_H + 4); // Custom Sky toggle
                     int maxScroll = Math.max(0, totalContentH - clipHeight);
                     visualScrollY = Math.max(0, Math.min(maxScroll, visualScrollY - (int)(scrollY * 18)));
                     return true;

@@ -113,7 +113,7 @@ public final class CustomPlayerManager {
                 if (Files.isRegularFile(candidate)) {
                     String json = Files.readString(candidate, StandardCharsets.UTF_8);
                     if (parseAndApply(json, true)) {
-                        LOGGER.info("[Wish] Loaded custom_players.json from local dev workspace: {}", candidate);
+                        LOGGER.debug("[Wish] Loaded custom_players.json from local dev workspace: {}", candidate);
                         return true;
                     }
                 }

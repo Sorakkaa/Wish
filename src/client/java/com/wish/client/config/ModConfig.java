@@ -117,6 +117,15 @@ public class ModConfig {
 	public int lyricsSyncOffsetMs = 0;
 	public boolean lyricsDemoMode = false;
 
+	// Time Changer Settings
+	public boolean enableCustomTime = false;
+	public int customTimePreset = 0; // 0: Day (1000), 1: Noon (6000), 2: Sunset (12000), 3: Night (14000), 4: Midnight (18000), 5: Sunrise (23000), 6: Custom
+	public int customTimeTicks = 6000; // 0 to 24000
+	public boolean customTimeFrozen = true;
+
+	// Custom Sky Settings
+	public boolean enableCustomSky = false;
+
 	private static final java.util.concurrent.ScheduledExecutorService SAVE_EXECUTOR = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
 	private static java.util.concurrent.ScheduledFuture<?> pendingSaveTask = null;
 	private static final Object SAVE_LOCK = new Object();

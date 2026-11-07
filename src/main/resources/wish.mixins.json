@@ -20,7 +20,10 @@
 		"ScreenMixin",
 		"GuiMessageLineMixin",
 		"FontTextureMixin",
-		"PlayerTabOverlayMixin"
+		"PlayerTabOverlayMixin",
+		"ClientClockManagerMixin",
+		"SkyRendererMixin",
+		"AtmosphericFogEnvironmentMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

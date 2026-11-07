@@ -766,11 +766,11 @@ public final class LyricsManager {
         if (isYtm) {
             List<LyricLine> ytmLyrics = fetchLyricsFromYouTubeMusic(lastYtmVideoId, title, artist, durationMs, true);
             if (ytmLyrics != null && !ytmLyrics.isEmpty()) {
-                LOGGER.info("Using official synchronized YouTube Music lyrics for '{}' ({} lines)", title, ytmLyrics.size());
+                LOGGER.debug("Using official synchronized YouTube Music lyrics for '{}' ({} lines)", title, ytmLyrics.size());
                 lastLyricsSource = "YouTube Music (" + ytmLyrics.size() + " lines)";
                 return ytmLyrics;
             }
-            LOGGER.info("No official YouTube Music lyrics found for '{}', falling back to LRCLIB and NetEase...", title);
+            LOGGER.debug("No official YouTube Music lyrics found for '{}', falling back to LRCLIB and NetEase...", title);
         }
 
         String cleanTitle = cleanTrackTitle(title);
@@ -823,7 +823,7 @@ public final class LyricsManager {
         if (!isRemix) {
             res = fetchLyricsFromYouTubeMusic(null, cleanTitle, primaryArtist, durationMs, false);
             if (res != null && !res.isEmpty()) {
-                LOGGER.info("Using official Musixmatch/YTM timed lyrics for Spotify track '{}' ({} lines)", title, res.size());
+                LOGGER.debug("Using official Musixmatch/YTM timed lyrics for Spotify track '{}' ({} lines)", title, res.size());
                 lastLyricsSource = "Musixmatch/YTM (" + res.size() + " lines)";
                 return res;
             }
@@ -878,13 +878,13 @@ public final class LyricsManager {
 
         // 1. If candidate duration matches audio duration (within 8 seconds), the lyrics are ALREADY timed to this version!
         if (candidateDurationMs > 0 && actualDurationMs > 0 && Math.abs(candidateDurationMs - actualDurationMs) <= 8000) {
-            LOGGER.info("Lyrics for '{}' already match track duration ({}s vs {}s). No scaling needed.", title, candidateDurationMs / 1000, actualDurationMs / 1000);
+            LOGGER.debug("Lyrics for '{}' already match track duration ({}s vs {}s). No scaling needed.", title, candidateDurationMs / 1000, actualDurationMs / 1000);
             return lines;
         }
 
         // Reject length mismatches (e.g. 69s TikTok edit vs 294s original song) to avoid displaying wrong verse
         if (candidateDurationMs > 0 && actualDurationMs > 0 && (candidateDurationMs > actualDurationMs * 1.5 || actualDurationMs > candidateDurationMs * 1.5)) {
-            LOGGER.info("Rejecting lyrics for '{}': length mismatch (audio: {}s, candidate: {}s). Floating musical emojis will be shown.", title, actualDurationMs / 1000, candidateDurationMs / 1000);
+            LOGGER.debug("Rejecting lyrics for '{}': length mismatch (audio: {}s, candidate: {}s). Floating musical emojis will be shown.", title, actualDurationMs / 1000, candidateDurationMs / 1000);
             return Collections.emptyList();
         }
 
@@ -912,7 +912,7 @@ public final class LyricsManager {
         }
 
         if (Math.abs(ratio - 1.0) > 0.03) {
-            LOGGER.info("Adjusting lyrics tempo for '{}' by factor {}", title, String.format(java.util.Locale.US, "%.2f", ratio));
+            LOGGER.debug("Adjusting lyrics tempo for '{}' by factor {}", title, String.format(java.util.Locale.US, "%.2f", ratio));
             List<LyricLine> scaled = new ArrayList<>();
             for (LyricLine l : lines) {
                 long scaledEnd = l.endTimeMs > 0 ? (long) (l.endTimeMs * ratio) : 0L;
@@ -923,7 +923,7 @@ public final class LyricsManager {
 
         // For non-remix tracks, reject candidates whose duration differs by > 20s (e.g. Music Video with long cinematic intro)
         if (!isSpeedUp && !isSlowed && candidateDurationMs > 0 && actualDurationMs > 0 && Math.abs(candidateDurationMs - actualDurationMs) > 20000) {
-            LOGGER.info("Skipping candidate for '{}': duration gap too large ({}s vs {}s)", title, candidateDurationMs / 1000, actualDurationMs / 1000);
+            LOGGER.debug("Skipping candidate for '{}': duration gap too large ({}s vs {}s)", title, candidateDurationMs / 1000, actualDurationMs / 1000);
             return Collections.emptyList();
         }
         return lines;
@@ -945,7 +945,7 @@ public final class LyricsManager {
                 String content = Files.readString(customFile.toPath(), StandardCharsets.UTF_8);
                 List<LyricLine> lines = parseNetEaseLrc(content);
                 if (!lines.isEmpty()) {
-                    LOGGER.info("Loaded lyrics from local file: custom.lrc");
+                    LOGGER.debug("Loaded lyrics from local file: custom.lrc");
                     return lines;
                 }
             }
@@ -965,7 +965,7 @@ public final class LyricsManager {
                     String content = Files.readString(f.toPath(), StandardCharsets.UTF_8);
                     List<LyricLine> lines = parseNetEaseLrc(content);
                     if (!lines.isEmpty()) {
-                        LOGGER.info("Loaded lyrics from local file: {}", f.getName());
+                        LOGGER.debug("Loaded lyrics from local file: {}", f.getName());
                         return lines;
                     }
                 }
@@ -1029,7 +1029,7 @@ public final class LyricsManager {
                         if (!lines.isEmpty()) {
                             List<LyricLine> adjusted = adjustTimingsForRemix(lines, title, durationMs, candDur);
                             if (!adjusted.isEmpty()) {
-                                LOGGER.info("Successfully fetched synced lyrics from NetEase for '{}' (songId={})", query, songId);
+                                LOGGER.debug("Successfully fetched synced lyrics from NetEase for '{}' (songId={})", query, songId);
                                 return adjusted;
                             }
                         }
@@ -1656,7 +1656,7 @@ public final class LyricsManager {
     }
 
     public static void debugLog(String message) {
-        LOGGER.info("[Wish-Lyrics] {}", message);
+        LOGGER.debug("[Wish-Lyrics] {}", message);
         if (liveDebug) {
             WishClient.sendLocalChatMessage("§d§l[Lyrics-Debug] §f" + message);
         }

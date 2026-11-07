@@ -52,7 +52,7 @@ public class UpdateManager {
         hasCheckedForUpdates = true;
         CompletableFuture.runAsync(() -> {
             try {
-                LOGGER.info("Checking for Wish updates...");
+                LOGGER.debug("Checking for Wish updates...");
                 URL url = URI.create(UPDATE_URL).toURL();
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
@@ -119,7 +119,7 @@ public class UpdateManager {
                                 pendingMsg2 = msg2;
                             }
                         } else {
-                            LOGGER.info("Wish is up to date (v" + WishClient.MOD_VERSION + ")");
+                            LOGGER.debug("Wish is up to date (v" + WishClient.MOD_VERSION + ")");
                         }
                     }
                 } else if (conn.getResponseCode() == 404) {
