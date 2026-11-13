@@ -11,9 +11,11 @@ public final class HudStateContainer {
 
     public record LagSnapshot(boolean isLagging, Component formattedText, long ms, int textWidth) {}
     public record AutomatonSnapshot(boolean isVisible, List<Component> mainLines, List<Component> dropLines, int maxWidth, int totalHeight) {}
+    public record BossSnapshot(boolean isVisible, String owner, int textWidth) {}
 
     private static volatile LagSnapshot currentLag = new LagSnapshot(false, Component.empty(), 0, 0);
     private static volatile AutomatonSnapshot currentAutomaton = new AutomatonSnapshot(false, Collections.emptyList(), Collections.emptyList(), 0, 0);
+    private static volatile BossSnapshot currentBoss = new BossSnapshot(false, "", 0);
 
     private static final Component AUTOMATON_TITLE = Component.literal("Automaton Tracker")
             .withStyle(style -> style.withColor(0xFFFFAA00));
@@ -24,6 +26,19 @@ public final class HudStateContainer {
 
     public static AutomatonSnapshot getAutomatonSnapshot() {
         return currentAutomaton;
+    }
+
+    public static BossSnapshot getBossSnapshot() {
+        return currentBoss;
+    }
+
+    public static void updateBossState(boolean visible, String owner, net.minecraft.client.gui.Font font) {
+        if (!visible) {
+            currentBoss = new BossSnapshot(false, "", 0);
+            return;
+        }
+        Component comp = Component.literal("Spawned by: " + owner).withStyle(s -> s.withColor(0xFF55FF55));
+        currentBoss = new BossSnapshot(true, owner, font != null ? font.width(comp) : 100);
     }
 
     public static void updateLagState(boolean lagging, long lagMs, net.minecraft.client.gui.Font font) {
@@ -64,8 +79,7 @@ public final class HudStateContainer {
         String statModeStr = isTotal ? "Total" : "Session";
         int statModeColor = isTotal ? 0xFFFF55FF : 0xFF55FFFF;
 
-        Component titleLine = Component.literal("Automaton Tracker")
-                .withStyle(s -> s.withColor(0xFFFFAA00))
+        Component titleLine = AUTOMATON_TITLE.copy()
                 .append(Component.literal(" [").withStyle(s -> s.withColor(0xFF888888)))
                 .append(Component.literal(statModeStr).withStyle(s -> s.withColor(statModeColor)))
                 .append(Component.literal("]").withStyle(s -> s.withColor(0xFF888888)))

@@ -17,43 +17,39 @@ public class WishConfigScreen extends Screen {
     private final Screen lastScreen;
 
     
-    private static final int WIN_W = 420;
-    private static final int WIN_H = 300;
-    private static final int SIDEBAR_W = 120;
     private static final int ROW_H = 22;
 
     
-    private static final int COL_BG         = 0xCC111115;
-    private static final int COL_SIDEBAR    = 0x66000000;
     private static final int COL_TEXT       = 0xFFFFFFFF;
     private static final int COL_TEXT_DIM   = 0xFFAAAAAA;
     private static final int COL_OFF        = 0xFFFF3344; 
     
     
     private int activeTab = -1; 
-    private int previousTab = -1;
     private long tabTransitionStartTime = 0;
-    private long screenOpenTime = 0;
-    private long screenCloseTime = 0;
     private int commandsScrollY = 0;
     private int customPlayerScrollY = 0;
     private int miscScrollY = 0;
     private int pseudoSubScrollY = 0;
     private int miningScrollY = 0;
     private int visualScrollY = 0;
+    private int slayerScrollY = 0;
     private static boolean lyricsSectionOpen = false;
     private static boolean timeChangerSectionOpen = false;
+    private static boolean weatherChangerSectionOpen = false;
+    private static boolean customSkySectionOpen = false;
+    private static boolean otherPlayersSizeSectionOpen = false;
     
     
     private static boolean chatChannelsOpen = false;
     private static boolean funCommandsOpen = false;
     private static boolean utilityCommandsOpen = false;
-    private static boolean customNameOpen = false;
-    private static boolean playerSizeOpen = false;
     private static boolean dungeonCustomBlocksOpen = false;
+    private static boolean slayerCarryOpen = false;
     private static boolean lagTimeLostOpen = false;
     private static boolean miningAutomatonOpen = false;
     private static boolean automatonGlowOpen = false;
+    private static boolean slayerGlowOpen = false;
     private static boolean lyricsColorOpen = false;
     private static boolean songSettingsOpen = false;
     private boolean hexInputFocused = false;
@@ -61,7 +57,15 @@ public class WishConfigScreen extends Screen {
     private boolean editingColor2 = false;
     private boolean providerDropdownOpen = false;
     private boolean cosmeticDropdownOpen = false;
-    private boolean colorPickerOpen = false;
+    private static final int VISUAL_DROP_W = 110;
+    private static final String[] MUSIC_PROVIDER_OPTIONS = {"None", "YTM", "Spotify", "Deezer"};
+    private static final String[] LYRICS_SHOW_OPTIONS = {"Word by word", "Line by line"};
+    private int activeVisualDropdown = 0; // 0 = none, 1 = Music Provider, 2 = Show, 3 = Weather Type, 4 = Sky Background
+    private int activeDropX = 0;
+    private int activeDropY = 0;
+    private int activeDropW = VISUAL_DROP_W;
+    private String[] activeDropOptions = new String[0];
+    private int activeDropSelected = 0;
     private static int pseudoSubWindow = 0; 
     private int draggingSlider = -1; 
     
@@ -121,8 +125,6 @@ public class WishConfigScreen extends Screen {
     protected void init() {
         super.init();
         activeTab = -1;
-        screenOpenTime = System.currentTimeMillis();
-        screenCloseTime = 0;
         tabTransitionStartTime = System.currentTimeMillis();
         openCategoryPopup = 0;
         activeSubMenuCategory = 0;
@@ -153,7 +155,9 @@ public class WishConfigScreen extends Screen {
 
     private void updateHSBFromConfig() {
         String hex;
-        if (activeTab == 6) {
+        if (activeTab == 3) {
+            hex = ModConfig.INSTANCE.slayerGlowColor;
+        } else if (activeTab == 6) {
             hex = ModConfig.INSTANCE.automatonGlowColor;
         } else if (activeTab == 7) {
             hex = ModConfig.INSTANCE.lyricsColor;
@@ -229,7 +233,6 @@ public class WishConfigScreen extends Screen {
             int crossX = targetCrossX;
             int visualCenterY = targetVisualCenterY;
 
-            String fPrefix = getFontPrefix(ModConfig.INSTANCE.pseudoFont);
             int pseudoW = getPseudoWidth(font, customPseudo);
             
             float skinScale = 1.0f; 
@@ -252,78 +255,21 @@ public class WishConfigScreen extends Screen {
                 skinHover = false;
             }
             
-            if (pseudoHover || activeTab == 1) {
-                if (pseudoHover) {
-                    g.text(font, "✎", crossX + pseudoW / 2 + 1, pseudoY + 1, 0xFFFFFFFF);
-                }
+            if (pseudoHover) {
+                g.text(font, "✎", crossX + pseudoW / 2 + 1, pseudoY + 1, 0xFFFFFFFF);
             }
-            if (skinHover || activeTab == 5) {
-                if (skinHover) {
-                    g.text(font, "✎", crossX + (int)(skinHalfW * 1.2f), skinHeadY - 45, 0xFFFFFFFF);
-                }
-            }
-            
-            if (activeTab != 5 && activeTab != 1) {
-                net.minecraft.network.chat.Style baseSt = getPseudoBaseStyle();
-                int currentX = crossX - pseudoW / 2;
-                if (isPreviewBadgeActive()) {
-                    net.minecraft.network.chat.Component bComp = com.wish.client.color.NameColorManager.createBadgeComponent();
-                    g.text(font, bComp, currentX, pseudoY, 0xFFFFFFFF);
-                    currentX += font.width(bComp) + font.width(" ");
-                }
-                if (ModConfig.INSTANCE.enableNameColor && ModConfig.INSTANCE.pseudoAnimation >= 1) {
-                    int c1 = parseHex(ModConfig.INSTANCE.customHexColor, 0xFFFFFFFF);
-                    int c2 = parseHex(ModConfig.INSTANCE.customHexColor2, 0xFFFFFFFF);
-                    String rawText = customPseudo;
-                    int len = rawText.length();
-                    long time = (long)(System.currentTimeMillis() * (double)ModConfig.INSTANCE.pseudoAnimationSpeed);
-                    for (int i = 0; i < len; i++) {
-                        char c = rawText.charAt(i);
-                        float ratio = len > 1 ? (float)i / (len - 1) : 0;
-                        
-                        int colorMix;
-                        if (ModConfig.INSTANCE.pseudoAnimation == 1) {
-                            float hue = (time % 3000L) / 3000.0f + ratio;
-                            colorMix = java.awt.Color.HSBtoRGB(hue, 1.0f, 1.0f) | 0xFF000000;
-                        } else if (ModConfig.INSTANCE.pseudoAnimation == 5) { 
-                            if ((time / 500) % 2 == 0) colorMix = c1;
-                            else colorMix = c2;
-                        } else {
-                            if (ModConfig.INSTANCE.pseudoAnimation == 3) {
-                                float timeOffset = (time % 2000L) / 2000.0f;
-                                ratio = (float) (Math.sin((ratio - timeOffset) * Math.PI * 2) * 0.5f + 0.5f);
-                            } else if (ModConfig.INSTANCE.pseudoAnimation == 4) {
-                                float timeRatio = (time % 3000L) / 3000.0f;
-                                ratio = (float) (Math.sin(timeRatio * Math.PI * 2) * 0.5f + 0.5f);
-                            }
-                            
-                            int r1 = (c1 >> 16) & 0xFF;
-                            int g1 = (c1 >> 8) & 0xFF;
-                            int b1 = c1 & 0xFF;
-                            int r2 = (c2 >> 16) & 0xFF;
-                            int g2 = (c2 >> 8) & 0xFF;
-                            int b2 = c2 & 0xFF;
-                            int rMix = (int)(r1 + (r2 - r1) * ratio);
-                            int gMix = (int)(g1 + (g2 - g1) * ratio);
-                            int bMix = (int)(b1 + (b2 - b1) * ratio);
-                            colorMix = 0xFF000000 | (rMix << 16) | (gMix << 8) | bMix;
-                        }
-                        
-                        String strChar = String.valueOf(c);
-                        net.minecraft.network.chat.Component chComp = net.minecraft.network.chat.Component.literal(strChar).withStyle(baseSt.withColor(net.minecraft.network.chat.TextColor.fromRgb(colorMix & 0x00FFFFFF)));
-                        g.text(font, chComp, currentX, pseudoY, colorMix);
-                        currentX += font.width(chComp);
-                    }
-                } else {
-                    net.minecraft.network.chat.Component fullComp = net.minecraft.network.chat.Component.literal(customPseudo).withStyle(baseSt.withColor(net.minecraft.network.chat.TextColor.fromRgb(pseudoColor & 0x00FFFFFF)));
-                    g.text(font, fullComp, currentX, pseudoY, pseudoColor);
-                }
+            if (skinHover) {
+                g.text(font, "✎", crossX + (int)(skinHalfW * 1.2f), skinHeadY - 45, 0xFFFFFFFF);
             }
     
             if (activeTab == 5) {
-                try {
-                    net.minecraft.client.gui.screens.inventory.InventoryScreen.extractEntityInInventoryFollowsMouse(g, crossX - skinHalfW * 6, skinHeadY - 100, crossX + skinHalfW * 6, skinFeetY, renderSize, 0.0625F, mx, my, player);
-                } catch (Exception e) {
+                if (player != null) {
+                    try {
+                        net.minecraft.client.gui.screens.inventory.InventoryScreen.extractEntityInInventoryFollowsMouse(g, crossX - skinHalfW * 6, skinHeadY - 100, crossX + skinHalfW * 6, skinFeetY, renderSize, 0.0625F, mx, my, player);
+                    } catch (Exception e) {
+                        g.text(font, "SKIN", crossX - font.width("SKIN") / 2, skinFeetY - 30, 0xFFFFFFFF);
+                    }
+                } else {
                     g.text(font, "SKIN", crossX - font.width("SKIN") / 2, skinFeetY - 30, 0xFFFFFFFF);
                 }
             }
@@ -340,7 +286,7 @@ public class WishConfigScreen extends Screen {
                 isCategoryActive = (activeTab == 1 || activeTab == 5);
                 isPopupOpen = (openCategoryPopup == 1);
             } else if (i == 1) {
-                isCategoryActive = (activeTab == 0 || activeTab == 2 || activeTab == 6 || activeTab == 7);
+                isCategoryActive = (activeTab == 0 || activeTab == 2 || activeTab == 3 || activeTab == 6 || activeTab == 7);
                 isPopupOpen = (openCategoryPopup == 2);
             } else if (i == 2) {
                 isCategoryActive = (activeTab == 4);
@@ -408,6 +354,7 @@ public class WishConfigScreen extends Screen {
                 String menuTitle = "";
                 if (activeTab == 0) menuTitle = "COMMAND";
                 else if (activeTab == 2) menuTitle = "DUNGEON";
+                else if (activeTab == 3) menuTitle = "SLAYER";
                 else if (activeTab == 4) menuTitle = "MISC SETTING";
                 else if (activeTab == 6) menuTitle = "MINING";
                 else if (activeTab == 7) menuTitle = "VISUAL";
@@ -436,7 +383,7 @@ public class WishConfigScreen extends Screen {
             totalContentH += hH + 4; 
             if (funCommandsOpen) {
                 int funBtnH = 16;
-                totalContentH += ((15 + 1) / 2) * (funBtnH + 3) + 4;
+                totalContentH += ((14 + 1) / 2) * (funBtnH + 3) + 4;
             }
             totalContentH += hH + 4; 
             if (utilityCommandsOpen) {
@@ -628,7 +575,6 @@ public class WishConfigScreen extends Screen {
             float scale = 2.0f;
             g.pose().scale(scale, scale);
             
-            String fPrefix2 = getFontPrefix(ModConfig.INSTANCE.pseudoFont);
             net.minecraft.network.chat.Style baseSt2 = getPseudoBaseStyle();
             int pWidth = getPseudoWidth(font, customPseudo);
             int pX = (int)((cx + (cw - pWidth * scale) / 2) / scale);
@@ -703,7 +649,7 @@ public class WishConfigScreen extends Screen {
             if (pseudoSubWindow > 0) {
                 int winW = 310;
                 int winH = 200;
-                if (pseudoSubWindow == 1) winH = 142; 
+                if (pseudoSubWindow == 1) winH = 120; 
                 if (pseudoSubWindow == 2) {
                     winH = 126; 
                     if (ModConfig.INSTANCE.pseudoAnimation != 0 && ModConfig.INSTANCE.pseudoAnimation != 2) winH += 40;
@@ -765,18 +711,7 @@ public class WishConfigScreen extends Screen {
                         RenderUtils.drawGradientOutline(g, bx, by, colW2, 18, 4, borderCol, borderCol);
                         g.text(font, fonts[i], bx + 8, by + 5, isActive ? colAccent : COL_TEXT);
                     }
-                    int badgeBy = cY + 2 * 22;
-                    boolean badgeHov = mx >= cX && mx < cX + cW && my >= badgeBy && my < badgeBy + 18;
-                    boolean isBadgeActive = ModConfig.INSTANCE.enableBadge;
-                    int borderBadge = isBadgeActive ? colAccent : (badgeHov ? colAccentDim : 0x44666666);
-                    RenderUtils.drawGradientOutline(g, cX, badgeBy, cW, 18, 4, borderBadge, borderBadge);
-                    net.minecraft.network.chat.MutableComponent badgeLabel = net.minecraft.network.chat.Component.literal("");
-                    badgeLabel.append(com.wish.client.color.NameColorManager.createBadgeComponent());
-                    badgeLabel.append(net.minecraft.network.chat.Component.literal(" Wish Badge"));
-                    g.text(font, badgeLabel, cX + 8, badgeBy + 5, isBadgeActive ? colAccent : COL_TEXT);
-                    g.text(font, isBadgeActive ? "ON" : "OFF", cX + cW - (isBadgeActive ? 22 : 26), badgeBy + 5, isBadgeActive ? colAccent : 0xFF888888);
-
-                    cY += 3 * 22 + 6;
+                    cY += 2 * 22 + 6;
                     cY = renderInput(g, font, cX, cY, cW, "Name Spoofer", ModConfig.INSTANCE.spoofedName != null ? ModConfig.INSTANCE.spoofedName : "", spoofInputFocused, mx, my);
                 } else if (pseudoSubWindow == 2) { 
                     String[] anims = {"None", "Chroma", "Gradient", "Wave", "Breathe", "Blink"};
@@ -953,6 +888,128 @@ public class WishConfigScreen extends Screen {
                 cy = renderToggle(g, font, cx + 10, cy, cw - 10, "Send in Chat", ModConfig.INSTANCE.sendLagTimeLost, mx, my, null, null);
             }
 
+        } else if (activeTab == 3) {
+            int clipTop = py + 40;
+            int clipBottom = py + WIN_H - 10;
+            int clipHeight = clipBottom - clipTop;
+
+            int totalContentH = 0;
+            int hH = 22;
+            totalContentH += hH + 4;
+            if (slayerCarryOpen) {
+                totalContentH += (ROW_H + 4) * 2 + 44 + (hH + 4);
+                if (slayerGlowOpen) {
+                    totalContentH += 22 + 4 + 26 + (10 + 8 + 4) * 3 + 6;
+                }
+            }
+
+            int maxScroll = Math.max(0, totalContentH - clipHeight);
+            if (slayerScrollY > maxScroll) slayerScrollY = maxScroll;
+            if (slayerScrollY < 0) slayerScrollY = 0;
+
+            g.enableScissor(cx - 2, clipTop, cx + cw + 4, clipBottom);
+            cy -= slayerScrollY;
+
+            int hY = cy;
+            boolean hHover = (mx >= cx && mx < cx + cw && my >= Math.max(hY, clipTop) && my < Math.min(hY + hH, clipBottom));
+            RenderUtils.fillRoundedRect(g, cx, hY, cw, hH, 4, slayerCarryOpen ? colHover : (hHover ? 0x44444455 : 0x2A2A2E55));
+            RenderUtils.drawGradientOutline(g, cx, hY, cw, hH, 4, slayerCarryOpen ? colAccent : 0x55888888, 0x22444444);
+            g.text(font, (slayerCarryOpen ? "▼ " : "▶ ") + "Slayer Carry Tracker", cx + 8, hY + 7, COL_TEXT);
+
+            boolean slayerState = ModConfig.INSTANCE.enableSlayerCarry;
+            int dotSize = 8;
+            int dotX = cx + cw - dotSize - 10;
+            int dotY = hY + 7;
+            RenderUtils.fillRoundedRect(g, dotX, dotY, dotSize, dotSize, 4, slayerState ? colAccent : COL_OFF);
+            RenderUtils.drawGradientOutline(g, dotX, dotY, dotSize, dotSize, 4, 0x44FFFFFF, 0x11000000);
+            cy += hH + 4;
+
+            if (slayerCarryOpen) {
+                cy = renderToggle(g, font, cx + 10, cy, cw - 10, "Boss Spawn Notification", ModConfig.INSTANCE.enableBossSpawnHud, mx, my, null, null);
+                cy = renderToggle(g, font, cx + 10, cy, cw - 10, "Auto Send Coords", ModConfig.INSTANCE.enableSlayerAutoCoords, mx, my, null, null);
+                
+                RenderUtils.fillRoundedRect(g, cx + 10, cy, cw - 10, 40, 4, 0x11FFFFFF);
+                g.text(font, "§7Commands:", cx + 16, cy + 4, COL_TEXT_DIM);
+                g.text(font, "/wish slayer carry <player> <amount>", cx + 24, cy + 16, 0xFFBBBBBB);
+                g.text(font, "/wish slayer stopcarry <player>", cx + 24, cy + 26, 0xFFBBBBBB);
+                cy += 44;
+
+                int glowHY = cy;
+                boolean glowHover = (mx >= cx + 10 && mx < cx + cw && my >= Math.max(glowHY, clipTop) && my < Math.min(glowHY + hH, clipBottom));
+                RenderUtils.fillRoundedRect(g, cx + 10, glowHY, cw - 10, hH, 4, slayerGlowOpen ? colHover : (glowHover ? 0x44444455 : 0x2A2A2E55));
+                RenderUtils.drawGradientOutline(g, cx + 10, glowHY, cw - 10, hH, 4, slayerGlowOpen ? colAccent : 0x55888888, 0x22444444);
+                g.text(font, (slayerGlowOpen ? "▼ " : "▶ ") + "Slayer Glow", cx + 18, glowHY + 7, COL_TEXT);
+
+                boolean glowState = ModConfig.INSTANCE.enableSlayerGlow;
+                int dotX2 = cx + cw - dotSize - 10;
+                int dotY2 = glowHY + 7;
+                boolean dotHover2 = isHeaderDotClicked(mx, my, cx + 10, glowHY, cw - 10);
+                int dotCol2 = glowState ? (dotHover2 ? 0xFFBB00FF : colAccent) : (dotHover2 ? 0xFFFF5566 : COL_OFF);
+                RenderUtils.fillRoundedRect(g, dotX2, dotY2, dotSize, dotSize, 4, dotCol2);
+                RenderUtils.drawGradientOutline(g, dotX2, dotY2, dotSize, dotSize, 4, dotHover2 ? 0xAAFFFFFF : 0x44FFFFFF, 0x11000000);
+                cy += hH + 4;
+
+                if (slayerGlowOpen) {
+                    int boxW = 50;
+                    int boxH = 22;
+                    int previewColor = parseHex(ModConfig.INSTANCE.slayerGlowColor, 0xFFFF55AA);
+                    
+                    RenderUtils.fillRoundedRect(g, cx + 10, cy, boxW, boxH, 4, previewColor);
+                    RenderUtils.drawGradientOutline(g, cx + 10, cy, boxW, boxH, 4, 0x66FFFFFF, 0x22FFFFFF);
+                    g.text(font, "Glow Preview", cx + 10 + boxW + 10, cy + 7, COL_TEXT);
+                    cy += boxH + 4;
+                    
+                    cy = renderInput(g, font, cx + 10, cy, cw - 10, "Glow Hex", ModConfig.INSTANCE.slayerGlowColor, hexInputFocused, mx, my);
+
+                    int hueW = cw - 20;
+                    int hueH = 8;
+                    
+                    g.text(font, "Hue", cx + 10, cy, COL_TEXT_DIM); cy += 10;
+                    for (int i = 0; i < hueW; i++) {
+                        int c = java.awt.Color.HSBtoRGB((float)i / hueW, 1.0f, 1.0f) | 0xFF000000;
+                        g.fill(cx + 10 + i, cy, cx + 10 + i + 1, cy + hueH, c);
+                    }
+                    int pickerX = cx + 10 + (int)(selectedHue * hueW);
+                    pickerX = Math.max(cx + 10, Math.min(cx + 10 + hueW - 3, pickerX));
+                    g.fill(pickerX - 1, cy - 2, pickerX + 2, cy + hueH + 2, 0xFFFFFFFF);
+                    cy += hueH + 4;
+                    
+                    g.text(font, "Saturation", cx + 10, cy, COL_TEXT_DIM); cy += 10;
+                    for (int i = 0; i < hueW; i++) {
+                        int c = java.awt.Color.HSBtoRGB(selectedHue, (float)i / hueW, selectedVal) | 0xFF000000;
+                        g.fill(cx + 10 + i, cy, cx + 10 + i + 1, cy + hueH, c);
+                    }
+                    pickerX = cx + 10 + (int)(selectedSat * hueW);
+                    pickerX = Math.max(cx + 10, Math.min(cx + 10 + hueW - 3, pickerX));
+                    g.fill(pickerX - 1, cy - 2, pickerX + 2, cy + hueH + 2, 0xFFFFFFFF);
+                    cy += hueH + 4;
+                    
+                    g.text(font, "Brightness", cx + 10, cy, COL_TEXT_DIM); cy += 10;
+                    for (int i = 0; i < hueW; i++) {
+                        int c = java.awt.Color.HSBtoRGB(selectedHue, selectedSat, (float)i / hueW) | 0xFF000000;
+                        g.fill(cx + 10 + i, cy, cx + 10 + i + 1, cy + hueH, c);
+                    }
+                    pickerX = cx + 10 + (int)(selectedVal * hueW);
+                    pickerX = Math.max(cx + 10, Math.min(cx + 10 + hueW - 3, pickerX));
+                    g.fill(pickerX - 1, cy - 2, pickerX + 2, cy + hueH + 2, 0xFFFFFFFF);
+                    cy += hueH + 6;
+                }
+            }
+
+            g.disableScissor();
+
+            if (maxScroll > 0) {
+                int scrollTrackX = cx + cw + 4;
+                int scrollTrackY = clipTop;
+                int scrollTrackW = 3;
+                int scrollTrackH = clipHeight;
+
+                RenderUtils.fillRoundedRect(g, scrollTrackX, scrollTrackY, scrollTrackW, scrollTrackH, 2, 0x22FFFFFF);
+                int barH = Math.max(16, (int)((float)clipHeight / (float)totalContentH * scrollTrackH));
+                int barY = scrollTrackY + (int)((float)slayerScrollY / (float)maxScroll * (scrollTrackH - barH));
+                RenderUtils.fillRoundedRect(g, scrollTrackX, barY, scrollTrackW, barH, 2, colAccent);
+            }
+
         } else if (activeTab == 6) {
             int clipTop = py + 40;
             int clipBottom = py + WIN_H - 10;
@@ -1101,27 +1158,9 @@ public class WishConfigScreen extends Screen {
             int clipBottom = py + WIN_H - 10;
             int clipHeight = clipBottom - clipTop;
 
-            int totalContentH = 0;
+            activeDropOptions = new String[0];
             int hH = 22;
-            totalContentH += hH + 4; 
-            if (lyricsSectionOpen) {
-                totalContentH += (46 + 6);    // Now Playing mini card
-                totalContentH += (ROW_H + 4); // Music Provider
-                totalContentH += (ROW_H + 4); // Show (Word by word / Line by line)
-                totalContentH += hH + 4;      // Color collapsible header
-                if (lyricsColorOpen) {
-                    totalContentH += 22 + 4;      // Lyrics Preview
-                    totalContentH += 26;          // Lyrics Hex
-                    totalContentH += (10 + 8 + 4) * 2 + (10 + 8 + 6); // Hue + Saturation + Brightness
-                }
-                totalContentH += 24 + 6;      // Info Box
-            }
-            totalContentH += hH + 4; // Time Changer header
-            if (timeChangerSectionOpen) {
-                totalContentH += 26 + 4;      // Custom Time slider
-                totalContentH += (ROW_H + 4); // Freeze Time toggle
-            }
-            totalContentH += (ROW_H + 4); // Custom Sky toggle
+            int totalContentH = getVisualContentHeight(hH);
 
             int maxScroll = Math.max(0, totalContentH - clipHeight);
             if (visualScrollY > maxScroll) visualScrollY = maxScroll;
@@ -1211,20 +1250,9 @@ public class WishConfigScreen extends Screen {
                 cy += cardH + 6;
 
                 int provY = cy;
-                boolean provHover = (mx >= cx + 10 && mx < cx + cw && my >= Math.max(provY, clipTop) && my < Math.min(provY + ROW_H, clipBottom));
-                RenderUtils.fillRoundedRect(g, cx + 10, provY, cw - 10, ROW_H, 4, provHover ? 0x33FFFFFF : 0x00000000);
-                RenderUtils.drawGradientOutline(g, cx + 10, provY, cw - 10, ROW_H, 4, provHover ? 0x88AAAAAA : 0x44666666, 0x22222222);
-                g.text(font, "Music Provider", cx + 18, provY + 7, COL_TEXT);
-
-                String curProv = ModConfig.INSTANCE.musicProvider != null ? ModConfig.INSTANCE.musicProvider : "None";
-                int pBtnW = 90;
-                int pBtnX = cx + cw - pBtnW - 10;
-                boolean pBtnHover = (mx >= pBtnX && mx < pBtnX + pBtnW && my >= provY + 2 && my < provY + ROW_H - 2);
-                RenderUtils.fillRoundedRect(g, pBtnX, provY + 2, pBtnW, ROW_H - 4, 3, pBtnHover ? colHover : 0x44222228);
-                RenderUtils.drawGradientOutline(g, pBtnX, provY + 2, pBtnW, ROW_H - 4, 3, colAccent, 0x44444444);
-                g.text(font, curProv, pBtnX + (pBtnW - font.width(curProv)) / 2, provY + 6, 0xFFFFFFFF);
-
-                if ("YTM".equalsIgnoreCase(curProv)) {
+                cy = renderVisualDropdownRow(g, font, cx, cy, cw, clipTop, clipBottom, "Music Provider", MUSIC_PROVIDER_OPTIONS, getMusicProviderIndex(), 1, mx, my, colHover, colAccent);
+                if ("YTM".equalsIgnoreCase(ModConfig.INSTANCE.musicProvider)) {
+                    int pBtnX = cx + cw - VISUAL_DROP_W - 10;
                     int pairBtnW = 60;
                     int pairBtnX = pBtnX - pairBtnW - 6;
                     boolean pairBtnHover = (mx >= pairBtnX && mx < pairBtnX + pairBtnW && my >= provY + 2 && my < provY + ROW_H - 2 && my >= clipTop && my <= clipBottom);
@@ -1238,22 +1266,9 @@ public class WishConfigScreen extends Screen {
                         hoveredTooltipDesc = "Connects to YouTube Music Desktop App via companion API (Port 9863).";
                     }
                 }
-                cy += ROW_H + 4;
 
-                int modeY = cy;
-                boolean modeHover = (mx >= cx + 10 && mx < cx + cw && my >= Math.max(modeY, clipTop) && my < Math.min(modeY + ROW_H, clipBottom));
-                RenderUtils.fillRoundedRect(g, cx + 10, modeY, cw - 10, ROW_H, 4, modeHover ? 0x33FFFFFF : 0x00000000);
-                RenderUtils.drawGradientOutline(g, cx + 10, modeY, cw - 10, ROW_H, 4, modeHover ? 0x88AAAAAA : 0x44666666, 0x22222222);
-                g.text(font, "Show", cx + 18, modeY + 7, COL_TEXT);
-
-                String curMode = (ModConfig.INSTANCE.lyricsMode == 1) ? "Line by line" : "Word by word";
-                int mBtnW = 90;
-                int mBtnX = cx + cw - mBtnW - 10;
-                boolean mBtnHover = (mx >= mBtnX && mx < mBtnX + mBtnW && my >= modeY + 2 && my < modeY + ROW_H - 2);
-                RenderUtils.fillRoundedRect(g, mBtnX, modeY + 2, mBtnW, ROW_H - 4, 3, mBtnHover ? colHover : 0x44222228);
-                RenderUtils.drawGradientOutline(g, mBtnX, modeY + 2, mBtnW, ROW_H - 4, 3, colAccent, 0x44444444);
-                g.text(font, curMode, mBtnX + (mBtnW - font.width(curMode)) / 2, modeY + 6, 0xFFFFFFFF);
-                cy += ROW_H + 4;
+                int modeIdx = (ModConfig.INSTANCE.lyricsMode == 1) ? 1 : 0;
+                cy = renderVisualDropdownRow(g, font, cx, cy, cw, clipTop, clipBottom, "Show", LYRICS_SHOW_OPTIONS, modeIdx, 2, mx, my, colHover, colAccent);
 
                 int colorHY = cy;
                 boolean colorHover = (mx >= cx + 10 && mx < cx + cw && my >= Math.max(colorHY, clipTop) && my < Math.min(colorHY + hH, clipBottom));
@@ -1350,10 +1365,89 @@ public class WishConfigScreen extends Screen {
                 cy = renderToggle(g, font, cx + 10, cy, cw - 10, "Freeze Time", ModConfig.INSTANCE.customTimeFrozen, mx, my, "Freeze Time", "Locks client time at this exact moment vs letting time advance naturally");
             }
 
-            // Custom Sky Toggle
-            cy = renderToggle(g, font, cx, cy, cw, "Custom Sky", ModConfig.INSTANCE.enableCustomSky, mx, my, "Custom Sky", "Pure pitch-black space sky background while keeping the sun and moon.");
+            // Weather Changer Section Header
+            int weatherHY = cy;
+            boolean weatherHHover = (mx >= cx && mx < cx + cw && my >= Math.max(weatherHY, clipTop) && my < Math.min(weatherHY + hH, clipBottom));
+            RenderUtils.fillRoundedRect(g, cx, weatherHY, cw, hH, 4, weatherChangerSectionOpen ? colHover : (weatherHHover ? 0x44444455 : 0x2A2A2E55));
+            RenderUtils.drawGradientOutline(g, cx, weatherHY, cw, hH, 4, weatherChangerSectionOpen ? colAccent : 0x55888888, 0x22444444);
+            g.text(font, (weatherChangerSectionOpen ? "▼ " : "▶ ") + "Weather Changer", cx + 8, weatherHY + 7, COL_TEXT);
+
+            boolean weatherState = ModConfig.INSTANCE.enableCustomWeather;
+            int weatherDotX = cx + cw - dotSize - 10;
+            int weatherDotY = weatherHY + 7;
+            boolean weatherDotHover = isHeaderDotClicked(mx, my, cx, weatherHY, cw);
+            int weatherDotCol = weatherState ? (weatherDotHover ? 0xFFBB00FF : colAccent) : (weatherDotHover ? 0xFFFF5566 : COL_OFF);
+            RenderUtils.fillRoundedRect(g, weatherDotX, weatherDotY, dotSize, dotSize, 4, weatherDotCol);
+            RenderUtils.drawGradientOutline(g, weatherDotX, weatherDotY, dotSize, dotSize, 4, weatherDotHover ? 0xAAFFFFFF : 0x44FFFFFF, 0x11000000);
+            cy += hH + 4;
+
+            if (weatherChangerSectionOpen) {
+                int wMode = com.wish.client.features.visual.WeatherManager.getMode();
+                cy = renderVisualDropdownRow(g, font, cx, cy, cw, clipTop, clipBottom, "Weather Type", com.wish.client.features.visual.WeatherManager.MODE_NAMES, wMode, 3, mx, my, colHover, colAccent);
+
+                float wCount = com.wish.client.features.visual.WeatherManager.getCount();
+                cy = renderPercentSlider(g, font, cx + 10, cy, cw - 10, "Count", wCount, mx, my, 0.1f, 3.0f);
+
+                float wSize = com.wish.client.features.visual.WeatherManager.getSize();
+                cy = renderPercentSlider(g, font, cx + 10, cy, cw - 10, "Size", wSize, mx, my, 0.25f, 2.5f);
+
+                boolean windOn = com.wish.client.features.visual.WeatherManager.isWindEnabled();
+                String windLabel = windOn ? ("Wind (§e" + com.wish.client.features.visual.WeatherManager.getWindDirectionLabel() + "§r)") : "Wind";
+                cy = renderToggle(g, font, cx + 10, cy, cw - 10, windLabel, windOn, mx, my, "Dynamic Wind", "Slants rain & swirls snow with wind that shifts direction smoothly over time.");
+
+                if (windOn) {
+                    float windStr = com.wish.client.features.visual.WeatherManager.getWindStrength();
+                    cy = renderPercentSlider(g, font, cx + 10, cy, cw - 10, "Wind Force", windStr, mx, my, 0.25f, 2.0f);
+                }
+            }
+
+            // Custom Sky Section Header
+            int skyHY = cy;
+            boolean skyHHover = (mx >= cx && mx < cx + cw && my >= Math.max(skyHY, clipTop) && my < Math.min(skyHY + hH, clipBottom));
+            RenderUtils.fillRoundedRect(g, cx, skyHY, cw, hH, 4, customSkySectionOpen ? colHover : (skyHHover ? 0x44444455 : 0x2A2A2E55));
+            RenderUtils.drawGradientOutline(g, cx, skyHY, cw, hH, 4, customSkySectionOpen ? colAccent : 0x55888888, 0x22444444);
+            g.text(font, (customSkySectionOpen ? "▼ " : "▶ ") + "Custom Sky", cx + 8, skyHY + 7, COL_TEXT);
+
+            boolean skyState = ModConfig.INSTANCE.enableCustomSky;
+            int skyDotX = cx + cw - dotSize - 10;
+            int skyDotY = skyHY + 7;
+            boolean skyDotHover = isHeaderDotClicked(mx, my, cx, skyHY, cw);
+            int skyDotCol = skyState ? (skyDotHover ? 0xFFBB00FF : colAccent) : (skyDotHover ? 0xFFFF5566 : COL_OFF);
+            RenderUtils.fillRoundedRect(g, skyDotX, skyDotY, dotSize, dotSize, 4, skyDotCol);
+            RenderUtils.drawGradientOutline(g, skyDotX, skyDotY, dotSize, dotSize, 4, skyDotHover ? 0xAAFFFFFF : 0x44FFFFFF, 0x11000000);
+            cy += hH + 4;
+
+            if (customSkySectionOpen) {
+                int skyModeIdx = Math.max(0, Math.min(com.wish.client.features.visual.CustomSkyManager.MODE_NAMES.length - 1, ModConfig.INSTANCE.customSkyMode));
+                cy = renderVisualDropdownRow(g, font, cx, cy, cw, clipTop, clipBottom, "Sky Background", com.wish.client.features.visual.CustomSkyManager.MODE_NAMES, skyModeIdx, 4, mx, my, colHover, colAccent);
+
+                cy = renderToggle(g, font, cx + 10, cy, cw - 10, "Show Stars", ModConfig.INSTANCE.customSkyShowStars, mx, my, "Show Stars", "Renders bright stars in the custom sky.");
+                cy = renderToggle(g, font, cx + 10, cy, cw - 10, "Show Sun & Moon", ModConfig.INSTANCE.customSkyShowSunMoon, mx, my, "Show Sun & Moon", "Keeps the sun and moon visible in the custom sky.");
+                cy = renderToggle(g, font, cx + 10, cy, cw - 10, "Slow Rotation", ModConfig.INSTANCE.customSkyRotate, mx, my, "Slow Rotation", "Gently rotates the custom sky dome over time.");
+            }
+
+            // Smol People Section Header
+            int opsHY = cy;
+            boolean opsHHover = (mx >= cx && mx < cx + cw && my >= Math.max(opsHY, clipTop) && my < Math.min(opsHY + hH, clipBottom));
+            RenderUtils.fillRoundedRect(g, cx, opsHY, cw, hH, 4, otherPlayersSizeSectionOpen ? colHover : (opsHHover ? 0x44444455 : 0x2A2A2E55));
+            RenderUtils.drawGradientOutline(g, cx, opsHY, cw, hH, 4, otherPlayersSizeSectionOpen ? colAccent : 0x55888888, 0x22444444);
+            g.text(font, (otherPlayersSizeSectionOpen ? "▼ " : "▶ ") + "Smol People", cx + 8, opsHY + 7, COL_TEXT);
+
+            boolean opsState = ModConfig.INSTANCE.enableOtherPlayersSize;
+            int opsDotX = cx + cw - dotSize - 10;
+            int opsDotY = opsHY + 7;
+            boolean opsDotHover = isHeaderDotClicked(mx, my, cx, opsHY, cw);
+            int opsDotCol = opsState ? (opsDotHover ? 0xFFBB00FF : colAccent) : (opsDotHover ? 0xFFFF5566 : COL_OFF);
+            RenderUtils.fillRoundedRect(g, opsDotX, opsDotY, dotSize, dotSize, 4, opsDotCol);
+            RenderUtils.drawGradientOutline(g, opsDotX, opsDotY, dotSize, dotSize, 4, opsDotHover ? 0xAAFFFFFF : 0x44FFFFFF, 0x11000000);
+            cy += hH + 4;
+
+            if (otherPlayersSizeSectionOpen) {
+                cy = renderToggle(g, font, cx + 10, cy, cw - 10, "Include Yourself", ModConfig.INSTANCE.smolPeopleIncludeSelf, mx, my, "Include Yourself", "Also renders your own player with SmolPeople sizing.");
+            }
 
             g.disableScissor();
+            renderVisualDropdownPopup(g, font, mx, my, colHover, colAccent);
 
             if (maxScroll > 0) {
                 int scrollTrackX = cx + cw + 3;
@@ -1592,8 +1686,8 @@ public class WishConfigScreen extends Screen {
 
         } else if (activeSubMenuCategory == 2) { 
             int catY = sidebarStartY + categorySpacing;
-            String[] featLabels = {"Command", "Dungeon", "Mining", "Visual"};
-            int[] optYs = {catY - 27, catY - 9, catY + 9, catY + 27};
+            String[] featLabels = {"Command", "Dungeon", "Slayer", "Mining", "Visual"};
+            int[] optYs = {catY - 36, catY - 18, catY, catY + 18, catY + 36};
 
             for (int k = 0; k < featLabels.length; k++) {
                 int y = optYs[k];
@@ -1696,6 +1790,14 @@ public class WishConfigScreen extends Screen {
     }
 
     private int renderSlider(GuiGraphicsExtractor g, net.minecraft.client.gui.Font font, int x, int y, int w, String label, float val, int mx, int my, int id, float min, float max) {
+        return renderSliderInternal(g, font, x, y, w, label + String.format(": %.2f", val), val, mx, my, min, max);
+    }
+
+    private int renderPercentSlider(GuiGraphicsExtractor g, net.minecraft.client.gui.Font font, int x, int y, int w, String label, float val, int mx, int my, float min, float max) {
+        return renderSliderInternal(g, font, x, y, w, label + ": §e" + Math.round(val * 100.0f) + "%", val, mx, my, min, max);
+    }
+
+    private int renderSliderInternal(GuiGraphicsExtractor g, net.minecraft.client.gui.Font font, int x, int y, int w, String text, float val, int mx, int my, float min, float max) {
         int h = 26;
         boolean hover = (mx >= x && mx < x + w && my >= y && my < y + h);
         int bgColor = hover ? 0x5544444C : 0x332E2E33;
@@ -1704,7 +1806,7 @@ public class WishConfigScreen extends Screen {
         RenderUtils.fillRoundedRect(g, x, y, w, h, 4, bgColor);
         RenderUtils.drawGradientOutline(g, x, y, w, h, 4, borderColor, 0x22222222);
 
-        g.text(font, label + String.format(": %.2f", val), x + 8, y + 5, COL_TEXT);
+        g.text(font, text, x + 8, y + 5, COL_TEXT);
         
         int trackY = y + 16;
         int trackW = w - 16;
@@ -1722,27 +1824,12 @@ public class WishConfigScreen extends Screen {
         return y + h + 4;
     }
 
-    private int renderTimerSlider(GuiGraphicsExtractor g, net.minecraft.client.gui.Font font, int x, int y, int w, String label, float val, int mx, int my) {
-        g.text(font, label + String.format(": %.2fs", val), x, y + 2, COL_TEXT);
-        
-        int trackY = y + 14;
-        RenderUtils.fillRoundedRect(g, x, trackY, w, 4, 2, 0x55FFFFFF);
-        
-        float pct = (val - 1.0f) / 2.0f; 
-        pct = Math.max(0, Math.min(1, pct));
-        
-        RenderUtils.fillRoundedRect(g, x, trackY, (int)(w * pct), 4, 2, getAccentColor());
-        
-        int knobX = x + (int)(w * pct) - 4;
-        RenderUtils.fillRoundedRect(g, knobX, trackY - 3, 8, 10, 4, 0xFFFFFFFF);
-        
-        return y + 26;
-    }
-
     private void updateColorFromSliders() {
         int rgb = java.awt.Color.HSBtoRGB(selectedHue, selectedSat, selectedVal) & 0xFFFFFF;
         String hex = String.format("#%06X", rgb);
-        if (activeTab == 6) {
+        if (activeTab == 3) {
+            ModConfig.INSTANCE.slayerGlowColor = hex;
+        } else if (activeTab == 6) {
             ModConfig.INSTANCE.automatonGlowColor = hex;
         } else if (activeTab == 7) {
             ModConfig.INSTANCE.lyricsColor = hex;
@@ -1792,11 +1879,11 @@ public class WishConfigScreen extends Screen {
             int startX = cx;
             
             if (activeTab == 1) {
-                int winW = 280;
+                int winW = 310;
                 int winX = this.width / 2 - winW / 2;
                 startX = winX + 15;
                 sliderW = (winW - 30) - 10;
-            } else if (activeTab == 6 || activeTab == 7) {
+            } else if (activeTab == 3 || activeTab == 6 || activeTab == 7) {
                 sliderW = cw - 20;
                 startX = cx + 10;
             }
@@ -1812,7 +1899,7 @@ public class WishConfigScreen extends Screen {
             int startX = cx;
             int sliderW = cw;
             if (activeTab == 1) {
-                int winW = 280;
+                int winW = 310;
                 int winX = this.width / 2 - winW / 2;
                 startX = winX + 15 + 8;
                 sliderW = (winW - 30) - 16;
@@ -1824,18 +1911,28 @@ public class WishConfigScreen extends Screen {
             float newPct = (float)(mx - (cx + 10 + 8)) / (cw - 10 - 16);
             newPct = Math.max(0, Math.min(1, newPct));
             ModConfig.INSTANCE.automatonPauseTimeout = Math.max(1, Math.min(20, Math.round(1.0f + newPct * 19.0f)));
-        } else if (draggingSlider == 12) {
-            float newPct = (float)(mx - (cx + 10 + 8)) / (cw - 10 - 16);
-            newPct = Math.max(0, Math.min(1, newPct));
-            ModConfig.INSTANCE.lyricsScale = 0.5f + newPct * 2.0f;
         } else if (draggingSlider == 14) {
             float newPct = (float)(mx - (cx + 10 + 8)) / (cw - 10 - 16);
             newPct = Math.max(0.0f, Math.min(1.0f, newPct));
             int ticks = Math.round(newPct * 24000.0f);
             com.wish.client.features.visual.TimeManager.setCustomTicks(ticks);
+        } else if (draggingSlider >= 15 && draggingSlider <= 18) {
+            applyVisualSliderValue(draggingSlider, mx, cx, cw);
         }
 
         return super.mouseDragged(event, dragX, dragY);
+    }
+
+    private void applyVisualSliderValue(int sliderId, int mx, int cx, int cw) {
+        float pct = (float) (mx - (cx + 10 + 8)) / (cw - 10 - 16);
+        pct = Math.max(0.0f, Math.min(1.0f, pct));
+        if (sliderId == 15) {
+            com.wish.client.features.visual.WeatherManager.setCount(0.1f + pct * 2.9f);
+        } else if (sliderId == 16) {
+            com.wish.client.features.visual.WeatherManager.setSize(0.25f + pct * 2.25f);
+        } else if (sliderId == 18) {
+            com.wish.client.features.visual.WeatherManager.setWindStrength(0.25f + pct * 1.75f);
+        }
     }
 
     @Override
@@ -1889,6 +1986,9 @@ public class WishConfigScreen extends Screen {
             
             if (mx >= winX && mx <= winX + winW && my >= winY && my <= winY + winH) {
                 return true;
+            } else {
+                songSettingsOpen = false;
+                providerDropdownOpen = false;
             }
         }
 
@@ -1916,46 +2016,46 @@ public class WishConfigScreen extends Screen {
                 int opt2Y = catY + 11; 
 
                 if (mx >= optX - 8 && mx < optX + 110 && my >= opt1Y - 6 && my < opt1Y + 16) {
-                    previousTab = activeTab;
                     activeTab = 1;
                     tabTransitionStartTime = System.currentTimeMillis();
                     setCategoryPopup(0); 
                     hexInputFocused = spoofInputFocused = false;
                     providerDropdownOpen = false;
                     cosmeticDropdownOpen = false;
+                    activeVisualDropdown = 0;
                     pseudoSubWindow = 0;
                     updateHSBFromConfig();
                     return true;
                 }
 
                 if (mx >= optX - 8 && mx < optX + 110 && my >= opt2Y - 6 && my < opt2Y + 16) {
-                    previousTab = activeTab;
                     activeTab = 5;
                     tabTransitionStartTime = System.currentTimeMillis();
                     setCategoryPopup(0); 
                     hexInputFocused = spoofInputFocused = false;
                     providerDropdownOpen = false;
                     cosmeticDropdownOpen = false;
+                    activeVisualDropdown = 0;
                     pseudoSubWindow = 0;
                     updateHSBFromConfig();
                     return true;
                 }
             } else if (activeSubMenuCategory == 2) { 
                 int catY = sidebarStartY + categorySpacing;
-                String[] featLabels = {"Command", "Dungeon", "Mining", "Visual"};
-                int[] featTabs = {0, 2, 6, 7};
-                int[] optYs = {catY - 27, catY - 9, catY + 9, catY + 27};
+                String[] featLabels = {"Command", "Dungeon", "Slayer", "Mining", "Visual"};
+                int[] featTabs = {0, 2, 3, 6, 7};
+                int[] optYs = {catY - 36, catY - 18, catY, catY + 18, catY + 36};
                 for (int k = 0; k < featLabels.length; k++) {
                     int fTab = featTabs[k];
                     int y = optYs[k];
                     if (mx >= optX - 8 && mx < optX + 110 && my >= y - 6 && my < y + 16) {
-                        previousTab = activeTab;
                         activeTab = fTab;
                         tabTransitionStartTime = System.currentTimeMillis();
                         setCategoryPopup(0); 
                         hexInputFocused = spoofInputFocused = false;
                         providerDropdownOpen = false;
                         cosmeticDropdownOpen = false;
+                        activeVisualDropdown = 0;
                         pseudoSubWindow = 0;
                         updateHSBFromConfig();
                         return true;
@@ -1984,7 +2084,6 @@ public class WishConfigScreen extends Screen {
                 } else if (i == 2) { 
                     setCategoryPopup(0);
                     if (activeTab != 4) {
-                        previousTab = activeTab;
                         activeTab = 4;
                         tabTransitionStartTime = System.currentTimeMillis();
                     }
@@ -1992,6 +2091,7 @@ public class WishConfigScreen extends Screen {
                 hexInputFocused = spoofInputFocused = false;
                 providerDropdownOpen = false;
                 cosmeticDropdownOpen = false;
+                activeVisualDropdown = 0;
                 updateHSBFromConfig();
                 return true;
             }
@@ -2042,7 +2142,6 @@ public class WishConfigScreen extends Screen {
         }
         
         if (pseudoHover && activeTab != 1) {
-            previousTab = activeTab;
             activeTab = 1;
             tabTransitionStartTime = System.currentTimeMillis();
             hexInputFocused = spoofInputFocused = false;
@@ -2051,7 +2150,6 @@ public class WishConfigScreen extends Screen {
             return true;
         }
         if (skinHover && activeTab != 5) {
-            previousTab = activeTab;
             activeTab = 5;
             tabTransitionStartTime = System.currentTimeMillis();
             hexInputFocused = spoofInputFocused = false;
@@ -2111,7 +2209,7 @@ public class WishConfigScreen extends Screen {
             if (funCommandsOpen) {
                 int btnW = (cw - 6) / 2;
                 int btnH = 16;
-                for (int i = 0; i < 15; i++) {
+                for (int i = 0; i < 14; i++) {
                     int col = i % 2;
                     int row = i / 2;
                     int tx = cx + col * (btnW + 6);
@@ -2195,7 +2293,7 @@ public class WishConfigScreen extends Screen {
             if (pseudoSubWindow > 0) {
                 int winW = 310;
                 int winH = 200;
-                if (pseudoSubWindow == 1) winH = 142; 
+                if (pseudoSubWindow == 1) winH = 120; 
                 if (pseudoSubWindow == 2) {
                     winH = 126; 
                     if (ModConfig.INSTANCE.pseudoAnimation != 0 && ModConfig.INSTANCE.pseudoAnimation != 2) winH += 40;
@@ -2241,13 +2339,7 @@ public class WishConfigScreen extends Screen {
                             return true;
                         }
                     }
-                    int badgeBy = cY + 2 * 22;
-                    if (mx >= cX && mx < cX + cW && my >= badgeBy && my < badgeBy + 18) {
-                        ModConfig.INSTANCE.enableBadge = !ModConfig.INSTANCE.enableBadge;
-                        ModConfig.INSTANCE.save();
-                        return true;
-                    }
-                    cY += 3 * 22 + 6;
+                    cY += 2 * 22 + 6;
                     if (mx >= cX && mx < cX + cW && my >= cY && my < cY + 22) {
                         spoofInputFocused = true;
                         hexInputFocused = false;
@@ -2291,21 +2383,36 @@ public class WishConfigScreen extends Screen {
                     
                     cY += 35;
                     if (mx >= cX && mx < cX + cW && my >= cY && my < cY + 22) { hexInputFocused = true; spoofInputFocused = false; return true; }
-                    cY += 22;
+                    cY += 26;
                     
                     int hueW = cW - 10;
                     int hueH = 10;
                     
                     cY += 12; 
-                    if (mx >= cX && mx < cX + hueW && my >= cY && my < cY + hueH) { draggingSlider = 3; updateColorFromSliders(); return true; }
+                    if (mx >= cX && mx < cX + hueW && my >= cY && my < cY + hueH) {
+                        draggingSlider = 3;
+                        selectedHue = Math.max(0f, Math.min(1f, (float)(mx - cX) / hueW));
+                        updateColorFromSliders();
+                        return true;
+                    }
                     cY += hueH + 8;
                     
                     cY += 12; 
-                    if (mx >= cX && mx < cX + hueW && my >= cY && my < cY + hueH) { draggingSlider = 4; updateColorFromSliders(); return true; }
+                    if (mx >= cX && mx < cX + hueW && my >= cY && my < cY + hueH) {
+                        draggingSlider = 4;
+                        selectedSat = Math.max(0f, Math.min(1f, (float)(mx - cX) / hueW));
+                        updateColorFromSliders();
+                        return true;
+                    }
                     cY += hueH + 8;
                     
                     cY += 12; 
-                    if (mx >= cX && mx < cX + hueW && my >= cY && my < cY + hueH) { draggingSlider = 5; updateColorFromSliders(); return true; }
+                    if (mx >= cX && mx < cX + hueW && my >= cY && my < cY + hueH) {
+                        draggingSlider = 5;
+                        selectedVal = Math.max(0f, Math.min(1f, (float)(mx - cX) / hueW));
+                        updateColorFromSliders();
+                        return true;
+                    }
                 }
                 
                 return true; 
@@ -2368,9 +2475,99 @@ public class WishConfigScreen extends Screen {
                 } cy += ROW_H + 4;
             }
 
+        } else if (activeTab == 3) {
+            int clipTop = py + 40;
+            int clipBottom = py + WIN_H - 10;
+            if (my < clipTop || my > clipBottom || mx < cx || mx > cx + cw) {
+                return false;
+            }
+            cy -= slayerScrollY;
+
+            int hH = 22;
+            if (isHeaderDotClicked(mx, my, cx, cy, cw)) {
+                ModConfig.INSTANCE.enableSlayerCarry = !ModConfig.INSTANCE.enableSlayerCarry;
+                ModConfig.INSTANCE.save();
+                return true;
+            } else if (mx >= cx && mx < cx + cw && my >= cy && my < cy + hH) {
+                slayerCarryOpen = !slayerCarryOpen;
+                hexInputFocused = false;
+                return true;
+            }
+            cy += hH + 4;
+            
+            if (slayerCarryOpen) {
+                if (isToggleBtnClicked(mx, my, cx + 10, cy, cw - 10)) { 
+                    ModConfig.INSTANCE.enableBossSpawnHud = !ModConfig.INSTANCE.enableBossSpawnHud; 
+                    ModConfig.INSTANCE.save(); 
+                    return true; 
+                }
+                cy += ROW_H + 4;
+                if (isToggleBtnClicked(mx, my, cx + 10, cy, cw - 10)) { 
+                    ModConfig.INSTANCE.enableSlayerAutoCoords = !ModConfig.INSTANCE.enableSlayerAutoCoords; 
+                    ModConfig.INSTANCE.save(); 
+                    return true; 
+                }
+                cy += ROW_H + 4;
+                
+                cy += 44; // Commands box
+
+                if (isHeaderDotClicked(mx, my, cx + 10, cy, cw - 10)) {
+                    ModConfig.INSTANCE.enableSlayerGlow = !ModConfig.INSTANCE.enableSlayerGlow;
+                    ModConfig.INSTANCE.save();
+                    return true;
+                } else if (mx >= cx + 10 && mx < cx + cw && my >= cy && my < cy + hH) {
+                    slayerGlowOpen = !slayerGlowOpen;
+                    hexInputFocused = false;
+                    return true;
+                }
+                cy += hH + 4;
+
+                if (slayerGlowOpen) {
+                    cy += 22 + 4; // Preview box
+                    
+                    if (mx >= cx + 10 && mx < cx + cw && my >= cy && my < cy + 22) {
+                        hexInputFocused = true;
+                        spoofInputFocused = false;
+                        return true;
+                    }
+                    cy += 22 + 4;
+                    
+                    int hueW = cw - 20;
+                    cy += 10;
+                    if (mx >= cx + 10 && mx < cx + 10 + hueW && my >= cy && my < cy + 10) {
+                        draggingSlider = 3;
+                        selectedHue = Math.max(0f, Math.min(1f, (float)(mx - (cx + 10)) / hueW));
+                        updateColorFromSliders();
+                        return true;
+                    }
+                    cy += 14;
+                    
+                    cy += 10;
+                    if (mx >= cx + 10 && mx < cx + 10 + hueW && my >= cy && my < cy + 10) {
+                        draggingSlider = 4;
+                        selectedSat = Math.max(0f, Math.min(1f, (float)(mx - (cx + 10)) / hueW));
+                        updateColorFromSliders();
+                        return true;
+                    }
+                    cy += 14;
+                    
+                    cy += 10;
+                    if (mx >= cx + 10 && mx < cx + 10 + hueW && my >= cy && my < cy + 10) {
+                        draggingSlider = 5;
+                        selectedVal = Math.max(0f, Math.min(1f, (float)(mx - (cx + 10)) / hueW));
+                        updateColorFromSliders();
+                        return true;
+                    }
+                    cy += 16;
+                }
+            }
+
         } else if (activeTab == 6) {
             int clipTop = py + 40;
             int clipBottom = py + WIN_H - 10;
+            if (my < clipTop || my > clipBottom || mx < cx || mx > cx + cw) {
+                return false;
+            }
             cy -= miningScrollY;
 
             int hH = 22;
@@ -2453,6 +2650,7 @@ public class WishConfigScreen extends Screen {
                     int hueW = cw - 20;
                     if (mx >= cx + 10 && mx < cx + 10 + hueW && my >= cy && my < cy + 10) {
                         draggingSlider = 3;
+                        selectedHue = Math.max(0f, Math.min(1f, (float)(mx - (cx + 10)) / hueW));
                         updateColorFromSliders();
                         return true;
                     }
@@ -2461,6 +2659,7 @@ public class WishConfigScreen extends Screen {
                     cy += 10;
                     if (mx >= cx + 10 && mx < cx + 10 + hueW && my >= cy && my < cy + 10) {
                         draggingSlider = 4;
+                        selectedSat = Math.max(0f, Math.min(1f, (float)(mx - (cx + 10)) / hueW));
                         updateColorFromSliders();
                         return true;
                     }
@@ -2469,6 +2668,7 @@ public class WishConfigScreen extends Screen {
                     cy += 10;
                     if (mx >= cx + 10 && mx < cx + 10 + hueW && my >= cy && my < cy + 10) {
                         draggingSlider = 5;
+                        selectedVal = Math.max(0f, Math.min(1f, (float)(mx - (cx + 10)) / hueW));
                         updateColorFromSliders();
                         return true;
                     }
@@ -2480,15 +2680,28 @@ public class WishConfigScreen extends Screen {
             int clipBottom = py + WIN_H - 10;
             int hH = 22;
 
+            if (activeVisualDropdown != 0 && activeDropOptions.length > 0) {
+                int itemH = 18;
+                int dropH = activeDropOptions.length * itemH + 4;
+                if (mx >= activeDropX && mx < activeDropX + activeDropW && my >= activeDropY && my < activeDropY + dropH) {
+                    int clickedIdx = (my - (activeDropY + 2)) / itemH;
+                    if (clickedIdx >= 0 && clickedIdx < activeDropOptions.length) {
+                        applyVisualDropdownSelection(activeVisualDropdown, clickedIdx);
+                    }
+                    activeVisualDropdown = 0;
+                    return true;
+                }
+            }
+
             if (my < clipTop || my > clipBottom || mx < cx || mx > cx + cw) {
+                activeVisualDropdown = 0;
                 return false;
             }
 
-            cy -= visualScrollY;
+            int prevDrop = activeVisualDropdown;
+            activeVisualDropdown = 0;
 
-            int dotSize = 8;
-            int dotX = cx + cw - dotSize - 10;
-            int dotY = cy + 7;
+            cy -= visualScrollY;
 
             if (isHeaderDotClicked(mx, my, cx, cy, cw) && my >= clipTop && my <= clipBottom) {
                 ModConfig.INSTANCE.enableLyrics = !ModConfig.INSTANCE.enableLyrics;
@@ -2504,7 +2717,7 @@ public class WishConfigScreen extends Screen {
             if (lyricsSectionOpen) {
                 cy += 46 + 6; // Now playing mini card offset
 
-                int pBtnW = 90;
+                int pBtnW = VISUAL_DROP_W;
                 int pBtnX = cx + cw - pBtnW - 10;
 
                 if ("YTM".equalsIgnoreCase(ModConfig.INSTANCE.musicProvider)) {
@@ -2517,22 +2730,15 @@ public class WishConfigScreen extends Screen {
                 }
 
                 if (mx >= pBtnX && mx < pBtnX + pBtnW && my >= cy + 2 && my < cy + ROW_H - 2 && my >= clipTop && my <= clipBottom) {
-                    String[] plats = {"None", "YTM", "Spotify", "Deezer"};
-                    int curIdx = 0;
-                    for (int i = 0; i < plats.length; i++) {
-                        if (plats[i].equalsIgnoreCase(ModConfig.INSTANCE.musicProvider)) { curIdx = i; break; }
-                    }
-                    ModConfig.INSTANCE.musicProvider = plats[(curIdx + 1) % plats.length];
-                    ModConfig.INSTANCE.save();
+                    activeVisualDropdown = (prevDrop == 1) ? 0 : 1;
                     return true;
                 }
                 cy += ROW_H + 4;
 
-                int mBtnW = 90;
+                int mBtnW = VISUAL_DROP_W;
                 int mBtnX = cx + cw - mBtnW - 10;
                 if (mx >= mBtnX && mx < mBtnX + mBtnW && my >= cy + 2 && my < cy + ROW_H - 2 && my >= clipTop && my <= clipBottom) {
-                    ModConfig.INSTANCE.lyricsMode = (ModConfig.INSTANCE.lyricsMode == 0) ? 1 : 0;
-                    ModConfig.INSTANCE.save();
+                    activeVisualDropdown = (prevDrop == 2) ? 0 : 2;
                     return true;
                 }
                 cy += ROW_H + 4;
@@ -2584,6 +2790,7 @@ public class WishConfigScreen extends Screen {
                     }
                     cy += 16;
                 }
+                cy += 24 + 6;
             }
 
             // Time Changer Section Click Handling
@@ -2618,13 +2825,111 @@ public class WishConfigScreen extends Screen {
                 cy += ROW_H + 4;
             }
 
-            // Custom Sky Toggle Click Handling
-            if (mx >= cx && mx < cx + cw && my >= cy && my < cy + ROW_H && my >= clipTop && my <= clipBottom) {
+            // Weather Changer Section Click Handling
+            if (isHeaderDotClicked(mx, my, cx, cy, cw) && my >= clipTop && my <= clipBottom) {
+                com.wish.client.features.visual.WeatherManager.setEnabled(!ModConfig.INSTANCE.enableCustomWeather);
+                return true;
+            } else if (mx >= cx && mx < cx + cw && my >= cy && my < cy + hH && my >= clipTop && my <= clipBottom) {
+                weatherChangerSectionOpen = !weatherChangerSectionOpen;
+                return true;
+            }
+            cy += hH + 4;
+
+            if (weatherChangerSectionOpen) {
+                int wmBtnW = VISUAL_DROP_W;
+                int wmBtnX = cx + cw - wmBtnW - 10;
+                if (mx >= wmBtnX && mx < wmBtnX + wmBtnW && my >= cy + 2 && my < cy + ROW_H - 2 && my >= clipTop && my <= clipBottom) {
+                    activeVisualDropdown = (prevDrop == 3) ? 0 : 3;
+                    return true;
+                }
+                cy += ROW_H + 4;
+
+                for (int sliderId = 15; sliderId <= 16; sliderId++) {
+                    if (mx >= cx + 10 && mx < cx + cw && my >= cy && my < cy + 26 && my >= clipTop && my <= clipBottom) {
+                        draggingSlider = sliderId;
+                        applyVisualSliderValue(sliderId, mx, cx, cw);
+                        return true;
+                    }
+                    cy += 26 + 4;
+                }
+
+                if (isToggleBtnClicked(mx, my, cx + 10, cy, cw - 10) && my >= clipTop && my <= clipBottom) {
+                    com.wish.client.features.visual.WeatherManager.setWindEnabled(!com.wish.client.features.visual.WeatherManager.isWindEnabled());
+                    return true;
+                }
+                cy += ROW_H + 4;
+
+                if (com.wish.client.features.visual.WeatherManager.isWindEnabled()) {
+                    if (mx >= cx + 10 && mx < cx + cw && my >= cy && my < cy + 26 && my >= clipTop && my <= clipBottom) {
+                        draggingSlider = 18;
+                        applyVisualSliderValue(18, mx, cx, cw);
+                        return true;
+                    }
+                    cy += 26 + 4;
+                }
+            }
+
+            // Custom Sky Section Click Handling
+            if (isHeaderDotClicked(mx, my, cx, cy, cw) && my >= clipTop && my <= clipBottom) {
                 ModConfig.INSTANCE.enableCustomSky = !ModConfig.INSTANCE.enableCustomSky;
                 ModConfig.INSTANCE.save();
                 return true;
+            } else if (mx >= cx && mx < cx + cw && my >= cy && my < cy + hH && my >= clipTop && my <= clipBottom) {
+                customSkySectionOpen = !customSkySectionOpen;
+                return true;
             }
-            cy += ROW_H + 4;
+            cy += hH + 4;
+
+            if (customSkySectionOpen) {
+                int smBtnW = VISUAL_DROP_W;
+                int smBtnX = cx + cw - smBtnW - 10;
+                if (mx >= smBtnX && mx < smBtnX + smBtnW && my >= cy + 2 && my < cy + ROW_H - 2 && my >= clipTop && my <= clipBottom) {
+                    activeVisualDropdown = (prevDrop == 4) ? 0 : 4;
+                    return true;
+                }
+                cy += ROW_H + 4;
+
+                if (isToggleBtnClicked(mx, my, cx + 10, cy, cw - 10) && my >= clipTop && my <= clipBottom) {
+                    ModConfig.INSTANCE.customSkyShowStars = !ModConfig.INSTANCE.customSkyShowStars;
+                    ModConfig.INSTANCE.save();
+                    return true;
+                }
+                cy += ROW_H + 4;
+
+                if (isToggleBtnClicked(mx, my, cx + 10, cy, cw - 10) && my >= clipTop && my <= clipBottom) {
+                    ModConfig.INSTANCE.customSkyShowSunMoon = !ModConfig.INSTANCE.customSkyShowSunMoon;
+                    ModConfig.INSTANCE.save();
+                    return true;
+                }
+                cy += ROW_H + 4;
+
+                if (isToggleBtnClicked(mx, my, cx + 10, cy, cw - 10) && my >= clipTop && my <= clipBottom) {
+                    ModConfig.INSTANCE.customSkyRotate = !ModConfig.INSTANCE.customSkyRotate;
+                    ModConfig.INSTANCE.save();
+                    return true;
+                }
+                cy += ROW_H + 4;
+            }
+
+            // Smol People (Skytils) Section Click Handling
+            if (isHeaderDotClicked(mx, my, cx, cy, cw) && my >= clipTop && my <= clipBottom) {
+                ModConfig.INSTANCE.enableOtherPlayersSize = !ModConfig.INSTANCE.enableOtherPlayersSize;
+                ModConfig.INSTANCE.save();
+                return true;
+            } else if (mx >= cx && mx < cx + cw && my >= cy && my < cy + hH && my >= clipTop && my <= clipBottom) {
+                otherPlayersSizeSectionOpen = !otherPlayersSizeSectionOpen;
+                return true;
+            }
+            cy += hH + 4;
+
+            if (otherPlayersSizeSectionOpen) {
+                if (isToggleBtnClicked(mx, my, cx + 10, cy, cw - 10) && my >= clipTop && my <= clipBottom) {
+                    ModConfig.INSTANCE.smolPeopleIncludeSelf = !ModConfig.INSTANCE.smolPeopleIncludeSelf;
+                    ModConfig.INSTANCE.save();
+                    return true;
+                }
+                cy += ROW_H + 4;
+            }
         } else if (activeTab == 4) {
             int clipTop = py + 40;
             int clipBottom = py + WIN_H - 10;
@@ -2710,7 +3015,8 @@ public class WishConfigScreen extends Screen {
             ModConfig.INSTANCE.save(); return true;
         } else if (hexInputFocused) {
             String cur;
-            if (activeTab == 6) cur = ModConfig.INSTANCE.automatonGlowColor;
+            if (activeTab == 3) cur = ModConfig.INSTANCE.slayerGlowColor;
+            else if (activeTab == 6) cur = ModConfig.INSTANCE.automatonGlowColor;
             else if (activeTab == 7) cur = ModConfig.INSTANCE.lyricsColor;
             else cur = (editingColor2 && ModConfig.INSTANCE.pseudoAnimation >= 2 ? ModConfig.INSTANCE.customHexColor2 : ModConfig.INSTANCE.customHexColor);
             
@@ -2720,7 +3026,8 @@ public class WishConfigScreen extends Screen {
             else if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F')) {
                 if (cur.length() < 7) cur = cur + c;
             }
-            if (activeTab == 6) ModConfig.INSTANCE.automatonGlowColor = cur;
+            if (activeTab == 3) ModConfig.INSTANCE.slayerGlowColor = cur;
+            else if (activeTab == 6) ModConfig.INSTANCE.automatonGlowColor = cur;
             else if (activeTab == 7) ModConfig.INSTANCE.lyricsColor = cur;
             else if (editingColor2 && ModConfig.INSTANCE.pseudoAnimation >= 2) ModConfig.INSTANCE.customHexColor2 = cur;
             else ModConfig.INSTANCE.customHexColor = cur;
@@ -2747,7 +3054,8 @@ public class WishConfigScreen extends Screen {
                     if (!clean.startsWith("#")) clean = "#" + clean;
                     clean = clean.replaceAll("[^#0-9A-F]", "");
                     if (clean.length() > 7) clean = clean.substring(0, 7);
-                    if (activeTab == 6) ModConfig.INSTANCE.automatonGlowColor = clean;
+                    if (activeTab == 3) ModConfig.INSTANCE.slayerGlowColor = clean;
+                    else if (activeTab == 6) ModConfig.INSTANCE.automatonGlowColor = clean;
                     else if (activeTab == 7) ModConfig.INSTANCE.lyricsColor = clean;
                     else if (editingColor2 && ModConfig.INSTANCE.pseudoAnimation >= 2) ModConfig.INSTANCE.customHexColor2 = clean;
                     else ModConfig.INSTANCE.customHexColor = clean;
@@ -2763,13 +3071,15 @@ public class WishConfigScreen extends Screen {
                 ModConfig.INSTANCE.save(); return true;
             } else if (hexInputFocused) {
                 String cur;
-                if (activeTab == 6) cur = ModConfig.INSTANCE.automatonGlowColor;
+                if (activeTab == 3) cur = ModConfig.INSTANCE.slayerGlowColor;
+                else if (activeTab == 6) cur = ModConfig.INSTANCE.automatonGlowColor;
                 else if (activeTab == 7) cur = ModConfig.INSTANCE.lyricsColor;
                 else cur = (editingColor2 && ModConfig.INSTANCE.pseudoAnimation >= 2 ? ModConfig.INSTANCE.customHexColor2 : ModConfig.INSTANCE.customHexColor);
 
                 if (cur != null && cur.length() > 1) {
                     cur = cur.substring(0, cur.length() - 1);
-                    if (activeTab == 6) ModConfig.INSTANCE.automatonGlowColor = cur;
+                    if (activeTab == 3) ModConfig.INSTANCE.slayerGlowColor = cur;
+                    else if (activeTab == 6) ModConfig.INSTANCE.automatonGlowColor = cur;
                     else if (activeTab == 7) ModConfig.INSTANCE.lyricsColor = cur;
                     else if (editingColor2 && ModConfig.INSTANCE.pseudoAnimation >= 2) ModConfig.INSTANCE.customHexColor2 = cur;
                     else ModConfig.INSTANCE.customHexColor = cur;
@@ -2784,10 +3094,11 @@ public class WishConfigScreen extends Screen {
                 setCategoryPopup(0);
                 return true;
             }
-            if (spoofInputFocused || hexInputFocused || providerDropdownOpen || cosmeticDropdownOpen) {
+            if (spoofInputFocused || hexInputFocused || providerDropdownOpen || cosmeticDropdownOpen || activeVisualDropdown != 0) {
                 spoofInputFocused = hexInputFocused = false;
                 providerDropdownOpen = false;
                 cosmeticDropdownOpen = false;
+                activeVisualDropdown = 0;
                 return true;
             }
             super.onClose();
@@ -2860,7 +3171,7 @@ public class WishConfigScreen extends Screen {
                     totalContentH += hH + 4;
                     if (chatChannelsOpen) totalContentH += 3 * (16 + 3) + 4;
                     totalContentH += hH + 4;
-                    if (funCommandsOpen) totalContentH += ((15 + 1) / 2) * (16 + 3) + 4;
+                    if (funCommandsOpen) totalContentH += ((14 + 1) / 2) * (16 + 3) + 4;
                     totalContentH += hH + 4;
                     if (utilityCommandsOpen) totalContentH += ((1 + 1) / 2) * (16 + 3) + 4;
 
@@ -2882,6 +3193,17 @@ public class WishConfigScreen extends Screen {
                     int maxScroll = Math.max(0, totalContentH - clipHeight);
                     miscScrollY = Math.max(0, Math.min(maxScroll, miscScrollY - (int)(scrollY * 18)));
                     return true;
+                } else if (activeTab == 3) {
+                    int totalContentH = 22 + 4;
+                    if (slayerCarryOpen) {
+                        totalContentH += (ROW_H + 4) * 2 + 44 + (22 + 4);
+                        if (slayerGlowOpen) {
+                            totalContentH += 22 + 4 + 26 + (10 + 8 + 4) * 3 + 6;
+                        }
+                    }
+                    int maxScroll = Math.max(0, totalContentH - clipHeight);
+                    slayerScrollY = Math.max(0, Math.min(maxScroll, slayerScrollY - (int)(scrollY * 18)));
+                    return true;
                 } else if (activeTab == 6) {
                     int totalContentH = 0;
                     int hH = 22;
@@ -2891,6 +3213,7 @@ public class WishConfigScreen extends Screen {
                         totalContentH += (ROW_H + 4); 
                         totalContentH += (ROW_H + 4); 
                         totalContentH += (ROW_H + 4); 
+                        totalContentH += 26 + 4;
                         totalContentH += hH + 4;
                         if (automatonGlowOpen) {
                             totalContentH += ROW_H + 4;
@@ -2902,27 +3225,9 @@ public class WishConfigScreen extends Screen {
                     miningScrollY = Math.max(0, Math.min(maxScroll, miningScrollY - (int)(scrollY * 18)));
                     return true;
                 } else if (activeTab == 7) {
-                    int totalContentH = 0;
                     int hH = 22;
-                    totalContentH += hH + 4;
-                    if (lyricsSectionOpen) {
-                        totalContentH += (46 + 6);    // Now Playing mini card
-                        totalContentH += (ROW_H + 4); // Music Provider
-                        totalContentH += (ROW_H + 4); // Show (Word by word / Line by line)
-                        totalContentH += hH + 4;      // Color collapsible header
-                        if (lyricsColorOpen) {
-                            totalContentH += 22 + 4;      // Lyrics Preview
-                            totalContentH += 26;          // Lyrics Hex
-                            totalContentH += (10 + 8 + 4) * 2 + (10 + 8 + 6); // Hue + Saturation + Brightness
-                        }
-                        totalContentH += 24 + 6;      // Info Box
-                    }
-                    totalContentH += hH + 4; // Time Changer
-                    if (timeChangerSectionOpen) {
-                        totalContentH += 26 + 4;      // Custom Time slider
-                        totalContentH += (ROW_H + 4); // Freeze Time toggle
-                    }
-                    totalContentH += (ROW_H + 4); // Custom Sky toggle
+                    int totalContentH = getVisualContentHeight(hH);
+                    activeVisualDropdown = 0;
                     int maxScroll = Math.max(0, totalContentH - clipHeight);
                     visualScrollY = Math.max(0, Math.min(maxScroll, visualScrollY - (int)(scrollY * 18)));
                     return true;
@@ -2965,17 +3270,6 @@ public class WishConfigScreen extends Screen {
         }
     }
 
-    private String getFontPrefix(int fontMask) {
-        StringBuilder sb = new StringBuilder();
-        if ((fontMask & 1) != 0) sb.append("§l");
-        if ((fontMask & 2) != 0) sb.append("§o");
-        if ((fontMask & 4) != 0) sb.append("§n");
-        if ((fontMask & 8) != 0) sb.append("§m");
-        if ((fontMask & 16) != 0) sb.append("§k");
-        if (sb.length() == 0) return "§r";
-        return sb.toString();
-    }
-
     private net.minecraft.network.chat.Style getPseudoBaseStyle() {
         net.minecraft.network.chat.Style st = net.minecraft.network.chat.Style.EMPTY;
         int f = ModConfig.INSTANCE.pseudoFont;
@@ -2995,7 +3289,7 @@ public class WishConfigScreen extends Screen {
                 return data.badge();
             }
         }
-        return ModConfig.INSTANCE.enableBadge;
+        return false;
     }
 
     private int getBadgeWidth(net.minecraft.client.gui.Font font) {
@@ -3005,5 +3299,141 @@ public class WishConfigScreen extends Screen {
 
     private int getPseudoWidth(net.minecraft.client.gui.Font font, String text) {
         return getBadgeWidth(font) + font.width(net.minecraft.network.chat.Component.literal(text).withStyle(getPseudoBaseStyle()));
+    }
+
+    private int getMusicProviderIndex() {
+        String cur = ModConfig.INSTANCE.musicProvider != null ? ModConfig.INSTANCE.musicProvider : "None";
+        for (int i = 0; i < MUSIC_PROVIDER_OPTIONS.length; i++) {
+            if (MUSIC_PROVIDER_OPTIONS[i].equalsIgnoreCase(cur)) {
+                return i;
+            }
+        }
+        return 0;
+    }
+
+    private int renderVisualDropdownRow(
+            GuiGraphicsExtractor g, net.minecraft.client.gui.Font font,
+            int cx, int cy, int cw, int clipTop, int clipBottom,
+            String label, String[] options, int selectedIdx, int dropdownId,
+            int mx, int my, int colHover, int colAccent
+    ) {
+        boolean isOpen = (activeVisualDropdown == dropdownId);
+        boolean rowHover = (mx >= cx + 10 && mx < cx + cw && my >= Math.max(cy, clipTop) && my < Math.min(cy + ROW_H, clipBottom));
+        RenderUtils.fillRoundedRect(g, cx + 10, cy, cw - 10, ROW_H, 4, rowHover ? 0x33FFFFFF : 0x00000000);
+        RenderUtils.drawGradientOutline(g, cx + 10, cy, cw - 10, ROW_H, 4, rowHover ? 0x88AAAAAA : 0x44666666, 0x22222222);
+        g.text(font, label, cx + 18, cy + 7, COL_TEXT);
+
+        int btnW = VISUAL_DROP_W;
+        int btnX = cx + cw - btnW - 10;
+        int btnY = cy + 2;
+        int btnH = ROW_H - 4;
+        boolean btnHover = (mx >= btnX && mx < btnX + btnW && my >= btnY && my < btnY + btnH && my >= clipTop && my <= clipBottom);
+        RenderUtils.fillRoundedRect(g, btnX, btnY, btnW, btnH, 3, (btnHover || isOpen) ? colHover : 0x44222228);
+        RenderUtils.drawGradientOutline(g, btnX, btnY, btnW, btnH, 3, (btnHover || isOpen) ? colAccent : 0x44666666, 0x22000000);
+
+        String currentVal = (selectedIdx >= 0 && selectedIdx < options.length) ? options[selectedIdx] : "";
+        g.text(font, currentVal, btnX + 8, cy + 6, 0xFFFFFFFF);
+        g.text(font, isOpen ? "▲" : "▼", btnX + btnW - 13, cy + 6, 0xFFAAAAAA);
+
+        if (isOpen) {
+            activeDropX = btnX;
+            activeDropY = cy + ROW_H + 2;
+            activeDropW = btnW;
+            activeDropOptions = options;
+            activeDropSelected = selectedIdx;
+        }
+        return cy + ROW_H + 4;
+    }
+
+    private void renderVisualDropdownPopup(GuiGraphicsExtractor g, net.minecraft.client.gui.Font font, int mx, int my, int colHover, int colAccent) {
+        if (activeVisualDropdown == 0 || activeDropOptions.length == 0) return;
+        int itemH = 18;
+        int dropH = activeDropOptions.length * itemH + 4;
+        if (activeDropY + dropH > this.height - 6) {
+            activeDropY = activeDropY - (ROW_H + 4) - dropH;
+        }
+        int dropX = activeDropX;
+        int dropY = activeDropY;
+        RenderUtils.fillRoundedRect(g, dropX - 1, dropY - 1, activeDropW + 2, dropH + 2, 4, 0xEE111116);
+        RenderUtils.drawGradientOutline(g, dropX - 1, dropY - 1, activeDropW + 2, dropH + 2, 4, colAccent, 0x66444444);
+        for (int i = 0; i < activeDropOptions.length; i++) {
+            int iy = dropY + 2 + i * itemH;
+            boolean optHover = (mx >= dropX && mx < dropX + activeDropW && my >= iy && my < iy + itemH);
+            boolean optSel = (i == activeDropSelected);
+            if (optHover) {
+                RenderUtils.fillRoundedRect(g, dropX + 2, iy + 1, activeDropW - 4, itemH - 2, 3, colHover);
+            } else if (optSel) {
+                RenderUtils.fillRoundedRect(g, dropX + 2, iy + 1, activeDropW - 4, itemH - 2, 3, 0x33FFFFFF);
+            }
+            String optText = activeDropOptions[i];
+            int optCol = (optSel || optHover) ? 0xFFFFFFFF : 0xFFBBBBBB;
+            g.text(font, optText, dropX + 8, iy + 5, optCol);
+            if (optSel) {
+                g.text(font, "✓", dropX + activeDropW - 14, iy + 5, colAccent);
+            }
+        }
+        if (mx >= dropX && mx < dropX + activeDropW && my >= dropY && my < dropY + dropH) {
+            hoveredTooltipTitle = null;
+            hoveredTooltipDesc = null;
+        }
+    }
+
+    private void applyVisualDropdownSelection(int dropdownId, int idx) {
+        if (dropdownId == 1) {
+            if (idx >= 0 && idx < MUSIC_PROVIDER_OPTIONS.length) {
+                ModConfig.INSTANCE.musicProvider = MUSIC_PROVIDER_OPTIONS[idx];
+                ModConfig.INSTANCE.save();
+            }
+        } else if (dropdownId == 2) {
+            ModConfig.INSTANCE.lyricsMode = (idx == 1) ? 1 : 0;
+            ModConfig.INSTANCE.save();
+        } else if (dropdownId == 3) {
+            com.wish.client.features.visual.WeatherManager.setMode(idx);
+        } else if (dropdownId == 4) {
+            if (idx >= 0 && idx < com.wish.client.features.visual.CustomSkyManager.MODE_NAMES.length) {
+                ModConfig.INSTANCE.customSkyMode = idx;
+                ModConfig.INSTANCE.save();
+            }
+        }
+    }
+
+    private int getVisualContentHeight(int hH) {
+        int totalContentH = hH + 4; // Lyrics header
+        if (lyricsSectionOpen) {
+            totalContentH += (46 + 6);    // Now Playing mini card
+            totalContentH += (ROW_H + 4); // Music Provider
+            totalContentH += (ROW_H + 4); // Show (Word by word / Line by line)
+            totalContentH += hH + 4;      // Color collapsible header
+            if (lyricsColorOpen) {
+                totalContentH += 22 + 4;      // Lyrics Preview
+                totalContentH += 26;          // Lyrics Hex
+                totalContentH += (10 + 8 + 4) * 2 + (10 + 8 + 6); // Hue + Saturation + Brightness
+            }
+            totalContentH += 24 + 6;      // Info Box
+        }
+        totalContentH += hH + 4; // Time Changer header
+        if (timeChangerSectionOpen) {
+            totalContentH += 26 + 4;      // Custom Time slider
+            totalContentH += (ROW_H + 4); // Freeze Time toggle
+        }
+        totalContentH += hH + 4; // Weather Changer header
+        if (weatherChangerSectionOpen) {
+            totalContentH += (ROW_H + 4);     // Weather Type dropdown
+            totalContentH += (26 + 4) * 2;    // Count + Size sliders
+            totalContentH += (ROW_H + 4);     // Wind toggle
+            if (com.wish.client.features.visual.WeatherManager.isWindEnabled()) {
+                totalContentH += 26 + 4;      // Wind Force slider
+            }
+        }
+        totalContentH += hH + 4; // Custom Sky header
+        if (customSkySectionOpen) {
+            totalContentH += (ROW_H + 4);     // Sky Background mode selector
+            totalContentH += (ROW_H + 4) * 3; // Show Stars + Show Sun & Moon + Slow Rotation
+        }
+        totalContentH += hH + 4; // Smol People (Skytils) header
+        if (otherPlayersSizeSectionOpen) {
+            totalContentH += (ROW_H + 4);     // Include Yourself
+        }
+        return totalContentH;
     }
 }

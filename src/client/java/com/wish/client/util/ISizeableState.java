@@ -16,4 +16,7 @@ public interface ISizeableState {
 
     float wish$getSpinSpeedY();
     void wish$setSpinSpeedY(float spinSpeedY);
+
+    boolean wish$isSmolPeople();
+    void wish$setSmolPeople(boolean smolPeople);
 }

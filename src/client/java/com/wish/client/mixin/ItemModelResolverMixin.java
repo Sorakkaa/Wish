@@ -6,36 +6,35 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.item.ItemModelResolver;
 import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
 @Mixin(ItemModelResolver.class)
 public class ItemModelResolverMixin {
 
-    @ModifyVariable(method = "appendItemLayers", at = @At("HEAD"), argsOnly = true)
-    private ItemStack wish$modifyItemLayersStack(ItemStack stack) {
+    @Unique
+    private static ItemStack wish$resolveStack(ItemStack stack) {
         if (CustomModelManager.bypassReplacement) return stack;
-        if (Minecraft.getInstance().gui != null && Minecraft.getInstance().gui.screen() instanceof WishModelScreen) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.gui != null && mc.gui.screen() instanceof WishModelScreen) {
             return stack;
         }
         return CustomModelManager.getReplacement(stack);
+    }
+
+    @ModifyVariable(method = "appendItemLayers", at = @At("HEAD"), argsOnly = true)
+    private ItemStack wish$modifyItemLayersStack(ItemStack stack) {
+        return wish$resolveStack(stack);
     }
 
     @ModifyVariable(method = "shouldPlaySwapAnimation", at = @At("HEAD"), argsOnly = true)
     private ItemStack wish$modifySwapAnimationStack(ItemStack stack) {
-        if (CustomModelManager.bypassReplacement) return stack;
-        if (Minecraft.getInstance().gui != null && Minecraft.getInstance().gui.screen() instanceof WishModelScreen) {
-            return stack;
-        }
-        return CustomModelManager.getReplacement(stack);
+        return wish$resolveStack(stack);
     }
 
     @ModifyVariable(method = "swapAnimationScale", at = @At("HEAD"), argsOnly = true)
     private ItemStack wish$modifySwapScaleStack(ItemStack stack) {
-        if (CustomModelManager.bypassReplacement) return stack;
-        if (Minecraft.getInstance().gui != null && Minecraft.getInstance().gui.screen() instanceof WishModelScreen) {
-            return stack;
-        }
-        return CustomModelManager.getReplacement(stack);
+        return wish$resolveStack(stack);
     }
 }

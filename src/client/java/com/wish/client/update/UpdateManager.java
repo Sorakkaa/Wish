@@ -1,66 +1,63 @@
 package com.wish.client.update;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.wish.client.WishClient;
-import net.fabricmc.loader.api.FabricLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.concurrent.CompletableFuture;
 
 public class UpdateManager {
     private static final Logger LOGGER = LoggerFactory.getLogger("Wish-Updater");
 
     private static final String UPDATE_URL = "https://api.github.com/repos/Sorakkaa/Wish/releases/latest";
-    
 
-    private static boolean hasCheckedForUpdates = false;
+    private static volatile boolean hasCheckedForUpdates = false;
     private static volatile net.minecraft.network.chat.Component pendingMsg1 = null;
     private static volatile net.minecraft.network.chat.Component pendingMsg2 = null;
 
     public static void onPlayerJoin() {
-        if (pendingMsg1 != null && pendingMsg2 != null) {
+        final net.minecraft.network.chat.Component msg1 = pendingMsg1;
+        final net.minecraft.network.chat.Component msg2 = pendingMsg2;
+        if (msg1 != null && msg2 != null) {
+            pendingMsg1 = null;
+            pendingMsg2 = null;
             CompletableFuture.runAsync(() -> {
                 try {
-                    Thread.sleep(5000); // 5 secondes de délai à la connexion
+                    Thread.sleep(5000);
                 } catch (InterruptedException ignored) {}
-                if (pendingMsg1 != null && pendingMsg2 != null) {
-                    WishClient.sendLocalChatMessage(pendingMsg1);
-                    WishClient.sendLocalChatMessage(pendingMsg2);
-                    pendingMsg1 = null;
-                    pendingMsg2 = null;
-                }
+                WishClient.sendLocalChatMessage(msg1);
+                WishClient.sendLocalChatMessage(msg2);
             });
         }
     }
 
     public static void checkForUpdates() {
-        onPlayerJoin();
         if (!com.wish.client.config.ModConfig.INSTANCE.enableUpdateCheck) return;
+        onPlayerJoin();
         if (hasCheckedForUpdates) return;
         hasCheckedForUpdates = true;
         CompletableFuture.runAsync(() -> {
+            HttpURLConnection conn = null;
             try {
                 LOGGER.debug("Checking for Wish updates...");
                 URL url = URI.create(UPDATE_URL).toURL();
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
                 conn.setRequestProperty("User-Agent", "Wish-Client/" + WishClient.MOD_VERSION);
                 conn.setConnectTimeout(5000);
                 conn.setReadTimeout(5000);
 
-                if (conn.getResponseCode() == 200) {
+                int responseCode = conn.getResponseCode();
+                if (responseCode == 200) {
                     StringBuilder sb = new StringBuilder();
                     try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
                         String line;
@@ -70,7 +67,7 @@ public class UpdateManager {
                     }
 
                     JsonObject json = JsonParser.parseString(sb.toString()).getAsJsonObject();
-                    if (json.has("tag_name")) {
+                    if (json.has("tag_name") && !json.get("tag_name").isJsonNull()) {
                         String latestVersion = json.get("tag_name").getAsString();
                         if (latestVersion.startsWith("v") || latestVersion.startsWith("V")) {
                             latestVersion = latestVersion.substring(1);
@@ -78,10 +75,13 @@ public class UpdateManager {
 
                         if (isNewerVersion(WishClient.MOD_VERSION, latestVersion)) {
                             String downloadUrl = "https://github.com/Sorakkaa/Wish/releases/latest";
-                            if (json.has("assets") && json.getAsJsonArray("assets").size() > 0) {
-                                JsonObject asset = json.getAsJsonArray("assets").get(0).getAsJsonObject();
-                                if (asset.has("browser_download_url")) {
-                                    downloadUrl = asset.get("browser_download_url").getAsString();
+                            if (json.has("assets") && json.get("assets").isJsonArray()) {
+                                JsonArray assets = json.getAsJsonArray("assets");
+                                if (!assets.isEmpty() && assets.get(0).isJsonObject()) {
+                                    JsonObject asset = assets.get(0).getAsJsonObject();
+                                    if (asset.has("browser_download_url") && !asset.get("browser_download_url").isJsonNull()) {
+                                        downloadUrl = asset.get("browser_download_url").getAsString();
+                                    }
                                 }
                             }
 
@@ -122,23 +122,24 @@ public class UpdateManager {
                             LOGGER.debug("Wish is up to date (v" + WishClient.MOD_VERSION + ")");
                         }
                     }
-                } else if (conn.getResponseCode() == 404) {
+                } else if (responseCode == 404) {
                     LOGGER.debug("No release published on GitHub yet (HTTP 404).");
                 } else {
-                    LOGGER.warn("Failed to check for updates, HTTP response code: " + conn.getResponseCode());
+                    LOGGER.warn("Failed to check for updates, HTTP response code: " + responseCode);
                 }
             } catch (Exception e) {
                 LOGGER.error("Failed to check for updates", e);
+            } finally {
+                if (conn != null) conn.disconnect();
             }
         });
     }
 
     private static boolean isNewerVersion(String current, String latest) {
-        
-        
+        if (current == null || latest == null || "Unknown".equalsIgnoreCase(current)) return false;
         try {
-            String[] currParts = current.split("\\.");
-            String[] lateParts = latest.split("\\.");
+            String[] currParts = current.split("-")[0].split("\\.");
+            String[] lateParts = latest.split("-")[0].split("\\.");
             
             int length = Math.max(currParts.length, lateParts.length);
             for (int i = 0; i < length; i++) {
@@ -149,7 +150,7 @@ public class UpdateManager {
             }
             return false;
         } catch (Exception e) {
-            return !current.equals(latest); 
+            return false;
         }
     }
 

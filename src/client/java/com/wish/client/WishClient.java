@@ -8,6 +8,7 @@ import com.wish.client.features.FunChatCommands;
 import com.wish.client.features.GhostBlockManager;
 import com.wish.client.features.PrecursorCityLocator;
 import com.wish.client.features.SkyblockDetector;
+import com.wish.client.features.SlayerCarryManager;
 import com.wish.client.music.MusicManager;
 import com.wish.client.update.UpdateManager;
 import com.wish.client.util.ChatUtils;
@@ -34,16 +35,13 @@ public class WishClient implements ClientModInitializer {
 			.map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("Unknown");
 	public static final Logger LOGGER = LoggerFactory.getLogger("wish");
 
-	public static String currentSongText = null;
-
 	@Override
 	public void onInitializeClient() {
 		LOGGER.info("Initializing Wish Client Mod " + MOD_VERSION);
 
-		UpdateManager.checkForUpdates();
 		ModConfig.load();
+		UpdateManager.checkForUpdates();
 		com.wish.client.color.CustomPlayerManager.init();
-		com.wish.client.color.NameColorManager.init();
 		GhostBlockManager.init();
 		AutomatonManager.init();
 		com.wish.client.features.visual.LyricsManager.init();
@@ -57,16 +55,15 @@ public class WishClient implements ClientModInitializer {
 			DungeonLagTracker.onClientTick();
 			PrecursorCityLocator.onClientTick(mc);
 			AutomatonManager.onClientTick(mc);
-			com.wish.client.features.visual.LyricsManager.onClientTick(mc);
 			com.wish.client.color.CustomPlayerManager.onClientTick();
+			SlayerCarryManager.onClientTick(mc);
 		});
 
 		
 		ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
-			com.wish.client.color.NameColorManager.syncLocalPlayerColor();
 			com.wish.client.color.CustomPlayerManager.onPlayerJoin();
 			UpdateManager.checkForUpdates();
-			AutomatonManager.fetchBazaarPricesAsync();
+			AutomatonManager.fetchBazaarPricesAsync(false);
 		});
 
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
@@ -100,18 +97,6 @@ public class WishClient implements ClientModInitializer {
 				MusicManager.fetchAndSendSongWithDelay(prefix);
 			}
 			FunChatCommands.checkFunCommands(lower, message);
-		});
-
-		
-		ClientReceiveMessageEvents.MODIFY_GAME.register((message, overlay) -> {
-			if (overlay) return message;
-
-			String text = message.getString();
-			if (text != null && text.contains("[Wish]")) {
-				return message;
-			}
-
-			return com.wish.client.color.NameColorManager.colorizeText(message, true);
 		});
 
 		

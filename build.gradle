@@ -39,7 +39,6 @@ dependencies {
 
 	// DevAuth for development authentication (runtime only)
 	runtimeOnly "me.djtheredstoner:DevAuth-fabric:1.2.1"
-	implementation "org.apache.httpcomponents:httpclient:4.5.14"
 }
 
 processResources {

@@ -7,17 +7,17 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class DungeonLagTracker {
-    public static long clientLagMs = 0;
-    public static long serverLagMs = 0;
-    public static long pingLagMs = 0;
-    public static long lastScoreboardChangeRealTime = 0;
-    public static long lastRunEndTimeMs = 0;
+    public static volatile long clientLagMs = 0;
+    public static volatile long serverLagMs = 0;
+    public static volatile long pingLagMs = 0;
+    public static volatile long lastScoreboardChangeRealTime = 0;
+    public static volatile long lastRunEndTimeMs = 0;
     private static long startScoreboardTime = -1;
     private static long lastSeenScoreboardTime = -1;
     private static long realStartTimeMs = 0;
-    private static long officialServerTime = 0;
-    public static boolean inRun = false;
-    public static boolean hasRunEndedThisInstance = false;
+    private static volatile long officialServerTime = 0;
+    public static volatile boolean inRun = false;
+    public static volatile boolean hasRunEndedThisInstance = false;
     private static volatile boolean endTriggered = false;
     private static long lastTickTime = 0;
 
@@ -53,12 +53,10 @@ public class DungeonLagTracker {
                 lastScoreboardChangeRealTime = realStartTimeMs;
             } else if (isInRun() && timeMs > lastSeenScoreboardTime) {
                 long jump = timeMs - lastSeenScoreboardTime;
-                long currentSpike = 0;
                 
                 if (jump > 1000) {
                     long pingSpike = jump - 1000;
                     pingLagMs += pingSpike;
-                    currentSpike = pingSpike;
                 }
 
                 long totalServerElapsed = timeMs - startScoreboardTime;
@@ -116,7 +114,7 @@ public class DungeonLagTracker {
     public static void onChatMessage(String text) {
         if (!ModConfig.INSTANCE.enableLagTimeLost) return;
         if (text == null) return;
-        String clean = text.replaceAll("(?i)\\u00A7[0-9a-fk-or]", "").replace('\u00A0', ' ').trim();
+        String clean = SkyblockDetector.stripColorCodes(text).replace('\u00A0', ' ').trim();
         
         
         if (clean.contains("The Dungeon starts in") ||

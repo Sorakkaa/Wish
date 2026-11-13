@@ -45,17 +45,28 @@ public final class LyricsManager {
         return t;
     });
 
-    public static volatile boolean liveDebug = false;
-    public static volatile String lastDebugError = null;
-    public static volatile String lastDetectionMethod = "None";
-    public static volatile String lastRawOutput = "None";
-    public static volatile String lastLyricsSource = "None";
-    public static volatile int lastLyricsCount = 0;
-    public static volatile String lastAttemptedSong = "";
-    public static volatile String lastLrclibStatus = "None";
-    public static volatile String lastYtmStatus = "None";
-    public static volatile String lastNetEaseStatus = "None";
-    public static volatile long lastPollTimeMs = 0;
+    private static final Pattern WORD_TIMESTAMP_TAG_PATTERN = Pattern.compile("<\\d{1,2}:\\d{2}(?:[\\.:]\\d+)?>|<\\d+(?:[\\.:]\\d+)?>");
+    private static final Pattern NON_ALNUM_PATTERN = Pattern.compile("[^a-zA-Z0-9À-ÿ]");
+    private static final Pattern MPRIS_HEX_ESCAPE_PATTERN = Pattern.compile("_([0-9a-fA-F]{2})_");
+    private static final Pattern LRC_TAG_PATTERN = Pattern.compile("\\[(\\d{1,3}):(\\d{2}(?:[\\.:]\\d+)?)\\]");
+    private static final Pattern YTM_VIDEO_ID_PATTERN = Pattern.compile("\"videoId\":\\s*\"([a-zA-Z0-9_-]{11})\"");
+    private static final Pattern CLEAN_PARENS_PATTERN = Pattern.compile("(?i)\\s*[\\(\\[][^\\]\\)]*(?:speed|sped|slow|official|audio|video|lyrics?|music video|visualizer|clip|remix|prod|feat|ft\\.|with|hd|4k|version|ver\\.|edit|remaster|deluxe|anniversary|bonus|explicit|clean|live|from\\s)[^\\]\\)]*[\\)\\]]");
+    private static final Pattern CLEAN_FEAT_PATTERN = Pattern.compile("(?i)\\s*(?:[-–—]\\s*)?(?:ft\\.|feat\\.|featuring|with)\\s+.*$");
+    private static final Pattern CLEAN_SUFFIX_PATTERN = Pattern.compile("(?i)\\s*[-–—]\\s*(?:\\d{4}\\s+remaster|remastered|remaster|single|ep|album|radio\\s+edit|original\\s+mix|bonus\\s+track|live|mono|stereo|from\\s+|bande\\s+originale|version).*$");
+    private static final Pattern CLEAN_TOPIC_PATTERN = Pattern.compile("(?i)\\s*-\\s*topic$");
+    private static final Pattern PRIMARY_ARTIST_SPLIT_PATTERN = Pattern.compile("(?i)\\s*(?:,|;|/|&|\\bet\\b|\\bfeat\\.?\\b|\\bft\\.?\\b|\\bwith\\b|\\bx\\b)\\s*");
+    private static final Pattern SAFE_FILENAME_PATTERN = Pattern.compile("[^a-zA-Z0-9_-]");
+    private static final Pattern DIACRITICS_PATTERN = Pattern.compile("\\p{M}");
+    private static final Pattern NON_LETTER_DIGIT_PATTERN = Pattern.compile("[^\\p{L}\\p{N} ]");
+    private static final Pattern WIN_BROWSER_SUFFIX_PATTERN = Pattern.compile("(?i)\\s+[-\\u2013\\u2014]\\s+(Google Chrome|Microsoft\\u200B?\\s*Edge|Brave|Mozilla Firefox|Opera(\\s+GX)?|Vivaldi|Zen(\\s+Browser)?|Arc|Waterfox)$");
+    private static final Pattern WIN_DEEZER_TITLE_PATTERN = Pattern.compile("(?i)(?:[-\\u2013\\u2014|\\u2022]\\s*Deezer$|^Deezer\\s*[-\\u2013\\u2014|\\u2022])");
+    private static final Pattern WIN_SPOTIFY_TITLE_PATTERN = Pattern.compile("(?i)(?:[-\\u2013\\u2014|\\u2022]\\s*Spotify(?:\\s+Free|\\s+Premium)?$|^Spotify\\s*[-\\u2013\\u2014|\\u2022])");
+    private static final Pattern WIN_YTM_TITLE_PATTERN = Pattern.compile("(?i)(?:[-\\u2013\\u2014|\\u2022]\\s*YouTube Music$)");
+    private static final Pattern WIN_PLATFORM_AFFIX_PATTERN = Pattern.compile("(?i)(?:\\s+[-\\u2013\\u2014|\\u2022]\\s*(?:Deezer|YouTube Music|Spotify(?:\\s+Free|\\s+Premium)?)$|^(?:Deezer|Spotify(?:\\s+Free|\\s+Premium)?)\\s*[-\\u2013\\u2014|\\u2022]\\s+)");
+    private static final Pattern WIN_BULLET_SPLIT_PATTERN = Pattern.compile("^(.+?)\\s+\\u2022\\s+(.+)$");
+    private static final Pattern WIN_DASH_SPLIT_PATTERN = Pattern.compile("^(.+?)\\s+[-\\u2013\\u2014]\\s+(.+)$");
+    private static volatile boolean scriptExtractedOnce = false;
+    private static volatile long lastWindowsPsPollMs = 0;
 
     public static class LyricLine {
         public final long timeMs;
@@ -71,8 +82,7 @@ public final class LyricsManager {
         public LyricLine(long timeMs, long endTimeMs, String text) {
             this.timeMs = timeMs;
             this.endTimeMs = endTimeMs;
-            // Clean enhanced LRC word timestamp tags like <00:12.34> or <12.34>
-            String cleaned = text != null ? text.replaceAll("<\\d{1,2}:\\d{2}(?:[\\.:]\\d+)?>|<\\d+(?:[\\.:]\\d+)?>", " ").trim() : "";
+            String cleaned = text != null ? WORD_TIMESTAMP_TAG_PATTERN.matcher(text).replaceAll(" ").trim() : "";
             this.text = cleaned;
             this.words = new ArrayList<>();
             if (!this.text.isEmpty()) {
@@ -87,7 +97,7 @@ public final class LyricsManager {
                 float totalWeight = 0f;
                 for (int i = 0; i < this.words.size(); i++) {
                     String w = this.words.get(i);
-                    String clean = w.replaceAll("[^a-zA-Z0-9À-ÿ]", "");
+                    String clean = NON_ALNUM_PATTERN.matcher(w).replaceAll("");
                     int charLen = Math.max(1, Math.min(10, clean.length()));
                     float weight = 1.3f + (charLen * 0.25f);
                     if (w.endsWith(",") || w.endsWith(";") || w.endsWith(":") || w.endsWith(".") || w.endsWith("!") || w.endsWith("?")) {
@@ -112,21 +122,21 @@ public final class LyricsManager {
         public final int activeWordIndex;
         public final boolean active;
         public final String title;
-        public final String artist;
 
-        public LyricState(LyricLine currentLine, LyricLine nextLine, float lineProgress, int activeWordIndex, boolean active, String title, String artist) {
+        public LyricState(LyricLine currentLine, LyricLine nextLine, float lineProgress, int activeWordIndex, boolean active, String title) {
             this.currentLine = currentLine;
             this.nextLine = nextLine;
             this.lineProgress = lineProgress;
             this.activeWordIndex = activeWordIndex;
             this.active = active;
             this.title = title != null ? title : "";
-            this.artist = artist != null ? artist : "";
         }
     }
 
     private static final List<LyricLine> activeLyrics = new ArrayList<>();
     private static final List<LyricLine> demoLyrics = new ArrayList<>();
+    private static final LyricLine EMPTY_LINE = new LyricLine(0, "");
+    private static final LyricState INACTIVE_STATE = new LyricState(null, null, 0f, 0, false, "");
     private static String currentTrackKey = "";
     public static volatile String currentTitle = "";
     public static volatile String currentArtist = "";
@@ -138,8 +148,6 @@ public final class LyricsManager {
     public static volatile String currentDetectedPlayer = "";
     private static volatile String lastFetchedVideoId = "";
     private static long demoStartTime = 0;
-
-    private static final Pattern LRC_PATTERN = Pattern.compile("\\[(\\d{2}):(\\d{2}(?:[\\.:]\\d+)?)\\](.*)");
 
     static {
         // Sample demo track matching the aesthetic of the screenshots
@@ -157,35 +165,27 @@ public final class LyricsManager {
         EXECUTOR.scheduleWithFixedDelay(LyricsManager::pollMediaSource, 400, 400, TimeUnit.MILLISECONDS);
     }
 
-    public static void onClientTick(Minecraft mc) {
-        if (ModConfig.INSTANCE.lyricsDemoMode && demoStartTime == 0) {
-            demoStartTime = System.currentTimeMillis();
-        }
-    }
-
-    public static void toggleDemoMode() {
-        ModConfig.INSTANCE.lyricsDemoMode = !ModConfig.INSTANCE.lyricsDemoMode;
-        if (ModConfig.INSTANCE.lyricsDemoMode) {
-            demoStartTime = System.currentTimeMillis();
-        }
-        ModConfig.INSTANCE.save();
-    }
-
     private static volatile boolean isFetchingLyrics = false;
 
     public static boolean isFetchingLyrics() {
         return isFetchingLyrics;
     }
 
-    public static synchronized int getLyricsLineCount() {
-        return ModConfig.INSTANCE.lyricsDemoMode ? demoLyrics.size() : activeLyrics.size();
+    public static int getLyricsLineCount() {
+        if (ModConfig.INSTANCE.lyricsDemoMode) return demoLyrics.size();
+        synchronized (activeLyrics) {
+            return activeLyrics.size();
+        }
     }
 
     private static void pollMediaSource() {
         if (ModConfig.INSTANCE.lyricsDemoMode) return;
         Minecraft mc = Minecraft.getInstance();
         boolean inConfigScreen = mc != null && mc.gui != null && mc.gui.screen() instanceof com.wish.client.gui.WishConfigScreen;
-        if (!ModConfig.INSTANCE.enableLyrics && !inConfigScreen) return;
+        if (!ModConfig.INSTANCE.enableLyrics && !inConfigScreen) {
+            isPlaying = false;
+            return;
+        }
 
         try {
             String configuredProvider = ModConfig.INSTANCE.musicProvider != null ? ModConfig.INSTANCE.musicProvider.trim() : "";
@@ -205,11 +205,7 @@ public final class LyricsManager {
             }
 
             // 3. Fallback to OS-specific media listeners
-            if ("YTM".equalsIgnoreCase(configuredProvider)) {
-                pollYtmCompanion();
-            } else {
-                pollWindowsMedia();
-            }
+            pollWindowsMedia();
         } catch (Exception e) {
             LOGGER.debug("Error polling media source", e);
         }
@@ -256,7 +252,7 @@ public final class LyricsManager {
             : trackId.trim();
         segment = segment.replace("'", "").replace("\"", "");
         // Unescape D-Bus hex escape sequences like _2d_ (-) and _5f_ (_)
-        Matcher m = Pattern.compile("_([0-9a-fA-F]{2})_").matcher(segment);
+        Matcher m = MPRIS_HEX_ESCAPE_PATTERN.matcher(segment);
         StringBuilder sb = new StringBuilder();
         while (m.find()) {
             char c = (char) Integer.parseInt(m.group(1), 16);
@@ -286,14 +282,20 @@ public final class LyricsManager {
             long tStart = System.currentTimeMillis();
             String configuredProvider = ModConfig.INSTANCE.musicProvider != null ? ModConfig.INSTANCE.musicProvider.trim() : "";
 
-            ProcessBuilder pb = new ProcessBuilder("bash", "-c",
-                "playerctl --all-players metadata --format '{{playerName}}|||{{status}}|||{{position}}|||{{artist}}|||{{title}}|||{{mpris:length}}|||{{mpris:trackid}}' 2>/dev/null");
+            ProcessBuilder pb = new ProcessBuilder(
+                "playerctl", "--all-players", "metadata", "--format",
+                "{{playerName}}|||{{status}}|||{{position}}|||{{artist}}|||{{title}}|||{{mpris:length}}|||{{mpris:trackid}}"
+            );
             Process p = pb.start();
             List<String> lines = new ArrayList<>();
             try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
-                String l;
-                while ((l = br.readLine()) != null) {
-                    if (l.contains("|||")) lines.add(l);
+                if (p.waitFor(1500, TimeUnit.MILLISECONDS)) {
+                    String l;
+                    while ((l = br.readLine()) != null) {
+                        if (l.contains("|||")) lines.add(l);
+                    }
+                } else {
+                    p.destroyForcibly();
                 }
             } finally {
                 if (p.isAlive()) p.destroyForcibly();
@@ -474,6 +476,9 @@ public final class LyricsManager {
     }
 
     public static void ensureScriptExtracted(Path scriptPath) {
+        if (scriptExtractedOnce && Files.exists(scriptPath)) {
+            return;
+        }
         try {
             try (java.io.InputStream in = LyricsManager.class.getResourceAsStream("/assets/wish/scripts/get_song.ps1")) {
                 if (in != null) {
@@ -492,63 +497,237 @@ public final class LyricsManager {
                         Files.write(scriptPath, jarBytes, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
                         LOGGER.info("Extracted updated get_song.ps1 to {}", scriptPath.toAbsolutePath());
                     }
-                } else {
-                    lastDebugError = "get_song.ps1 missing from mod resources";
+                    scriptExtractedOnce = true;
                 }
             }
         } catch (Exception e) {
-            lastDebugError = "Failed to extract script: " + e.getMessage();
             LOGGER.warn("Failed to extract get_song.ps1: {}", e.getMessage());
         }
     }
 
+    private static boolean isIgnoredWindowsMediaTitle(String title) {
+        if (title == null) return true;
+        String low = title.trim().toLowerCase();
+        if (low.isEmpty()) return true;
+        switch (low) {
+            case "spotify":
+            case "spotify free":
+            case "spotify premium":
+            case "deezer":
+            case "deezer - music & podcasts":
+            case "youtube music":
+            case "youtube music desktop app":
+            case "advertisement":
+            case "publicité":
+            case "publicite":
+            case "pub":
+            case "audio ad":
+            case "default ime":
+            case "msctfime ui":
+            case "gdi+ window":
+            case "anglehiddenwindow":
+            case "systemtray_main":
+            case "activemovie window":
+            case "cicerouiwndframe":
+            case "mediacontextnotificationwindow":
+                return true;
+            default:
+                return low.startsWith("publicit") || low.startsWith("gdi+ window");
+        }
+    }
+
+    /**
+     * Native Win32 JNA window enumeration fallback (< 1ms, zero process spawning).
+     * Returns String[]{ matchedProvider, artist, title } or null if no active track window is found.
+     */
+    public static String[] detectWindowsTrackViaJna(String providerParam) {
+        String prov = providerParam != null ? providerParam.trim() : "ALL";
+        final List<String[]> candidates = new ArrayList<>();
+        try {
+            com.sun.jna.platform.win32.User32 user32 = com.sun.jna.platform.win32.User32.INSTANCE;
+            user32.EnumWindows((hWnd, data) -> {
+                try {
+                    if (!user32.IsWindowVisible(hWnd)) {
+                        return true;
+                    }
+                    int textLen = user32.GetWindowTextLength(hWnd);
+                    if (textLen <= 0 || textLen > 512) {
+                        return true;
+                    }
+                    char[] titleBuf = new char[textLen + 1];
+                    int readLen = user32.GetWindowText(hWnd, titleBuf, titleBuf.length);
+                    if (readLen <= 0) {
+                        return true;
+                    }
+                    String rawTitle = new String(titleBuf, 0, readLen).trim();
+                    if (rawTitle.isEmpty() || isIgnoredWindowsMediaTitle(rawTitle)) {
+                        return true;
+                    }
+
+                    com.sun.jna.ptr.IntByReference pidRef = new com.sun.jna.ptr.IntByReference();
+                    user32.GetWindowThreadProcessId(hWnd, pidRef);
+                    long pid = Integer.toUnsignedLong(pidRef.getValue());
+                    String exeName = "";
+                    try {
+                        exeName = ProcessHandle.of(pid)
+                            .flatMap(ph -> ph.info().command())
+                            .map(cmd -> {
+                                int slash = Math.max(cmd.lastIndexOf('\\'), cmd.lastIndexOf('/'));
+                                return (slash >= 0 ? cmd.substring(slash + 1) : cmd).toLowerCase();
+                            })
+                            .orElse("");
+                    } catch (Throwable ignored) {}
+                    if (exeName.isEmpty()) {
+                        try {
+                            String fp = com.sun.jna.platform.WindowUtils.getProcessFilePath(hWnd);
+                            if (fp != null && !fp.isEmpty()) {
+                                int slash = Math.max(fp.lastIndexOf('\\'), fp.lastIndexOf('/'));
+                                exeName = (slash >= 0 ? fp.substring(slash + 1) : fp).toLowerCase();
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+
+                    String cleanTitle = WIN_BROWSER_SUFFIX_PATTERN.matcher(rawTitle).replaceAll("").trim();
+
+                    String matchedProvider = "";
+                    boolean isNativeApp = false;
+                    if (exeName.contains("deezer")) {
+                        matchedProvider = "deezer";
+                        isNativeApp = true;
+                    } else if (exeName.contains("spotify")) {
+                        matchedProvider = "spotify";
+                        isNativeApp = true;
+                    } else if (exeName.contains("youtubemusic") || exeName.contains("youtube-music") || exeName.contains("youtube music")) {
+                        matchedProvider = "youtubemusic";
+                        isNativeApp = true;
+                    } else if (WIN_DEEZER_TITLE_PATTERN.matcher(cleanTitle).find()) {
+                        matchedProvider = "deezer";
+                    } else if (WIN_SPOTIFY_TITLE_PATTERN.matcher(cleanTitle).find()) {
+                        matchedProvider = "spotify";
+                    } else if (WIN_YTM_TITLE_PATTERN.matcher(cleanTitle).find()) {
+                        matchedProvider = "youtubemusic";
+                    }
+
+                    if (matchedProvider.isEmpty()) {
+                        return true;
+                    }
+
+                    if ("Deezer".equalsIgnoreCase(prov) && !"deezer".equals(matchedProvider)) return true;
+                    if (("YTM".equalsIgnoreCase(prov) || "YouTube Music".equalsIgnoreCase(prov)) && !"youtubemusic".equals(matchedProvider)) return true;
+                    if ("Spotify".equalsIgnoreCase(prov) && !"spotify".equals(matchedProvider)) return true;
+
+                    String clean = WIN_PLATFORM_AFFIX_PATTERN.matcher(cleanTitle).replaceAll("").trim();
+                    if (isIgnoredWindowsMediaTitle(clean)) {
+                        return true;
+                    }
+
+                    String artist = "";
+                    String title = clean;
+                    Matcher bulletMatcher = WIN_BULLET_SPLIT_PATTERN.matcher(clean);
+                    Matcher dashMatcher = WIN_DASH_SPLIT_PATTERN.matcher(clean);
+                    if (bulletMatcher.matches()) {
+                        title = bulletMatcher.group(1).trim();
+                        artist = bulletMatcher.group(2).trim();
+                    } else if (dashMatcher.matches()) {
+                        if ("spotify".equals(matchedProvider)) {
+                            artist = dashMatcher.group(1).trim();
+                            title = dashMatcher.group(2).trim();
+                        } else {
+                            title = dashMatcher.group(1).trim();
+                            artist = dashMatcher.group(2).trim();
+                        }
+                    } else if (isNativeApp && "spotify".equals(matchedProvider)) {
+                        // Native Spotify.exe always formats playing tracks as "Artist - Song Title"
+                        return true;
+                    }
+
+                    if (!isIgnoredWindowsMediaTitle(title)) {
+                        candidates.add(new String[]{ matchedProvider, artist, title, isNativeApp ? "1" : "0" });
+                    }
+                } catch (Throwable ignored) {}
+                return true;
+            }, null);
+        } catch (Throwable e) {
+            LOGGER.debug("JNA window enumeration fallback error", e);
+        }
+
+        if (candidates.isEmpty()) {
+            return null;
+        }
+        // Prefer native desktop apps over browser tabs
+        candidates.sort((a, b) -> b[3].compareTo(a[3]));
+        String[] best = candidates.get(0);
+        return new String[]{ best[0], best[1], best[2] };
+    }
+
     private static void pollWindowsMedia() {
         try {
+            long now = System.currentTimeMillis();
+            String providerParam = ModConfig.INSTANCE.musicProvider != null && !ModConfig.INSTANCE.musicProvider.equalsIgnoreCase("None")
+                ? ModConfig.INSTANCE.musicProvider.trim() : "ALL";
+
+            // 1. Fast native Win32 JNA check (< 1ms) on every poll to detect track changes without process overhead
+            String[] jnaTrack = detectWindowsTrackViaJna(providerParam);
+            boolean jnaTrackChanged = false;
+            if (jnaTrack != null) {
+                String jnaKey = (jnaTrack[2] + "|||" + jnaTrack[1]).toLowerCase().trim();
+                jnaTrackChanged = !jnaKey.equals(currentTrackKey);
+            }
+
+            // Throttle PowerShell execution to once every 1500ms unless a new track was just detected
+            if (!jnaTrackChanged && (now - lastWindowsPsPollMs < 1500)) {
+                if (jnaTrack != null) {
+                    currentDetectedPlayer = jnaTrack[0];
+                    if (!jnaTrack[0].contains("ytm") && !jnaTrack[0].contains("youtube")) {
+                        lastYtmVideoId = "";
+                    }
+                    updateTrackState(jnaTrack[2], jnaTrack[1], -1, currentDurationMs, true);
+                }
+                return;
+            }
+            lastWindowsPsPollMs = now;
+
             long tStart = System.currentTimeMillis();
-            lastPollTimeMs = tStart;
             Path scriptPath = Path.of("config", "wish", "get_song.ps1");
             ensureScriptExtracted(scriptPath);
 
-            if (!Files.exists(scriptPath)) {
-                lastDebugError = "get_song.ps1 missing at " + scriptPath.toAbsolutePath();
-                return;
-            }
-
-            String providerParam = ModConfig.INSTANCE.musicProvider != null && !ModConfig.INSTANCE.musicProvider.equalsIgnoreCase("None")
-                ? ModConfig.INSTANCE.musicProvider.trim() : "ALL";
-            ProcessBuilder pb = new ProcessBuilder(
-                getPowerShellExecutable(), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                "-File", scriptPath.toAbsolutePath().toString(),
-                "-provider", providerParam, "-detailed"
-            );
-            Process p = pb.start();
             String line = null;
-            String errorLine = null;
-            try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8));
-                 BufferedReader er = new BufferedReader(new InputStreamReader(p.getErrorStream(), StandardCharsets.UTF_8))) {
-                boolean finished = p.waitFor(3000, TimeUnit.MILLISECONDS);
-                if (!finished) {
-                    p.destroyForcibly();
-                    lastDebugError = "PowerShell timed out (>3000ms)";
-                    return;
+            if (Files.exists(scriptPath)) {
+                ProcessBuilder pb = new ProcessBuilder(
+                    getPowerShellExecutable(), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                    "-File", scriptPath.toAbsolutePath().toString(),
+                    "-provider", providerParam, "-detailed"
+                );
+                Process p = pb.start();
+                try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8));
+                     BufferedReader er = new BufferedReader(new InputStreamReader(p.getErrorStream(), StandardCharsets.UTF_8))) {
+                    boolean finished = p.waitFor(3000, TimeUnit.MILLISECONDS);
+                    if (finished) {
+                        String l;
+                        while ((l = br.readLine()) != null) {
+                            String trimmed = l.trim();
+                            if (!trimmed.isEmpty() && !trimmed.startsWith("DEBUG:")) {
+                                line = trimmed;
+                                if (trimmed.contains("|||")) {
+                                    break;
+                                }
+                            }
+                        }
+                        String errorLine = er.readLine();
+                        if (errorLine != null && !errorLine.trim().isEmpty()) {
+                            LOGGER.debug("PowerShell stderr: {}", errorLine);
+                        }
+                    } else {
+                        p.destroyForcibly();
+                    }
+                } finally {
+                    if (p.isAlive()) p.destroyForcibly();
                 }
-                line = br.readLine();
-                errorLine = er.readLine();
-            } finally {
-                if (p.isAlive()) p.destroyForcibly();
-            }
-
-            if (errorLine != null && !errorLine.trim().isEmpty()) {
-                lastDebugError = "PowerShell error: " + errorLine.trim();
-                LOGGER.debug("PowerShell stderr: {}", errorLine);
             }
 
             long latency = System.currentTimeMillis() - tStart;
-            lastRawOutput = line != null ? line : (errorLine != null ? "ERR: " + errorLine : "null");
-            lastDetectionMethod = "Windows Media / Process";
 
             if (line != null && !line.trim().isEmpty()) {
-                lastDebugError = null;
                 if (line.contains("|||")) {
                     String[] parts = line.split("\\|\\|\\|", -1);
                     if (parts.length >= 6) {
@@ -598,9 +777,19 @@ public final class LyricsManager {
                     return;
                 }
             }
+
+            // 2. Fallback to JNA window title detection if PowerShell returned nothing or failed
+            if (jnaTrack != null) {
+                currentDetectedPlayer = jnaTrack[0];
+                if (!jnaTrack[0].contains("ytm") && !jnaTrack[0].contains("youtube")) {
+                    lastYtmVideoId = "";
+                }
+                updateTrackState(jnaTrack[2], jnaTrack[1], -1, 0, true);
+                return;
+            }
+
             isPlaying = false;
         } catch (Exception e) {
-            lastDebugError = "Poll exception: " + e.getMessage();
             LOGGER.debug("Error polling Windows media", e);
         }
     }
@@ -624,7 +813,7 @@ public final class LyricsManager {
         isPlaying = playing;
 
         String newKey = (currentTitle + "|||" + currentArtist).toLowerCase().trim();
-        boolean trackChanged = !newKey.isEmpty() && !newKey.equals(currentTrackKey);
+        boolean trackChanged = !currentTitle.isEmpty() && !newKey.equals(currentTrackKey);
         boolean videoChanged = !lastYtmVideoId.isEmpty() && !lastYtmVideoId.equals(lastFetchedVideoId);
 
         long now = System.currentTimeMillis();
@@ -661,34 +850,28 @@ public final class LyricsManager {
         if (trackChanged || videoChanged) {
             currentTrackKey = newKey;
             lastFetchedVideoId = lastYtmVideoId;
-            debugLog("Track changed: '" + currentTitle + "' by '" + currentArtist + "' [Player: " + currentDetectedPlayer + ", Status: " + (isPlaying ? "Playing" : "Paused") + "]");
-            fetchLyricsAsync(currentTitle, currentArtist, currentDurationMs);
+            LOGGER.debug("Track changed: '{}' by '{}' [Player: {}, Status: {}]", currentTitle, currentArtist, currentDetectedPlayer, isPlaying ? "Playing" : "Paused");
+            fetchLyricsAsync(currentTitle, currentArtist, currentDurationMs, newKey);
         }
     }
 
     public static String cleanTrackTitle(String title) {
         if (title == null) return "";
-        String s = title;
-        // Strip parenthesized or bracketed suffixes: (feat. ...), (ft. ...), (with ...), (speed up), (official video), (deluxe), etc.
-        s = s.replaceAll("(?i)\\s*[\\(\\[][^\\]\\)]*(?:speed|sped|slow|official|audio|video|lyrics?|music video|visualizer|clip|remix|prod|feat|ft\\.|with|hd|4k|version|ver\\.|edit|remaster|deluxe|anniversary|bonus|explicit|clean|live|from\\s)[^\\]\\)]*[\\)\\]]", "");
-        // Strip trailing ft./feat./with
-        s = s.replaceAll("(?i)\\s*(?:[-–—]\\s*)?(?:ft\\.|feat\\.|featuring|with)\\s+.*$", "");
-        // Strip trailing Spotify suffixes like - Remastered 2020, - 2011 Remaster, - Single, - EP, - Radio Edit, - From "..."
-        s = s.replaceAll("(?i)\\s*[-–—]\\s*(?:\\d{4}\\s+remaster|remastered|remaster|single|ep|album|radio\\s+edit|original\\s+mix|bonus\\s+track|live|mono|stereo|from\\s+|bande\\s+originale|version).*$", "");
+        String s = CLEAN_PARENS_PATTERN.matcher(title).replaceAll("");
+        s = CLEAN_FEAT_PATTERN.matcher(s).replaceAll("");
+        s = CLEAN_SUFFIX_PATTERN.matcher(s).replaceAll("");
         return s.trim();
     }
 
     public static String cleanTrackArtist(String artist) {
         if (artist == null) return "";
-        String s = artist;
-        s = s.replaceAll("(?i)\\s*-\\s*topic$", "");
-        return s.trim();
+        return CLEAN_TOPIC_PATTERN.matcher(artist).replaceAll("").trim();
     }
 
     public static String extractPrimaryArtist(String artist) {
         String clean = cleanTrackArtist(artist);
         if (clean.isEmpty()) return "";
-        String[] parts = clean.split("(?i)\\s*(?:,|;|/|&|\\bet\\b|\\bfeat\\.?\\b|\\bft\\.?\\b|\\bwith\\b|\\bx\\b)\\s*");
+        String[] parts = PRIMARY_ARTIST_SPLIT_PATTERN.split(clean);
         if (parts.length > 0 && !parts[0].trim().isEmpty()) {
             return parts[0].trim();
         }
@@ -697,7 +880,7 @@ public final class LyricsManager {
 
     private static final java.util.Map<String, List<LyricLine>> LYRICS_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
 
-    private static void fetchLyricsAsync(String title, String artist, long durationMs) {
+    private static void fetchLyricsAsync(String title, String artist, long durationMs, String expectedTrackKey) {
         String cacheKey = (title + "|||" + artist + "|||" + lastYtmVideoId).toLowerCase().trim();
         synchronized (activeLyrics) {
             activeLyrics.clear();
@@ -709,27 +892,26 @@ public final class LyricsManager {
                 activeLyrics.addAll(cached);
             }
             isFetchingLyrics = false;
-            lastLyricsSource = "Memory Cache";
-            lastLyricsCount = cached.size();
-            debugLog("Loaded " + cached.size() + " lyric lines from cache for '" + title + "'");
             return;
         }
 
         isFetchingLyrics = true;
         LYRICS_FETCH_EXECUTOR.execute(() -> {
             try {
-                debugLog("Searching lyrics for '" + title + "' by '" + artist + "' (duration: " + (durationMs / 1000) + "s)...");
                 List<LyricLine> parsed = fetchLyricsFromAllSources(title, artist, durationMs);
+                synchronized (LyricsManager.class) {
+                    if (!expectedTrackKey.equals(currentTrackKey)) {
+                        return;
+                    }
+                }
                 synchronized (activeLyrics) {
                     activeLyrics.clear();
                     if (parsed != null && !parsed.isEmpty()) {
                         activeLyrics.addAll(parsed);
+                        if (LYRICS_CACHE.size() >= 128) {
+                            LYRICS_CACHE.clear();
+                        }
                         LYRICS_CACHE.put(cacheKey, parsed);
-                        lastLyricsCount = parsed.size();
-                        debugLog("Loaded " + parsed.size() + " lyric lines from " + lastLyricsSource + " for '" + title + "'!");
-                    } else {
-                        lastLyricsCount = 0;
-                        debugLog("No synchronized lyrics found online for '" + title + "'. Showing floating music notes.");
                     }
                 }
             } finally {
@@ -739,12 +921,9 @@ public final class LyricsManager {
     }
 
     private static List<LyricLine> fetchLyricsFromAllSources(String title, String artist, long durationMs) {
-        lastAttemptedSong = title + (artist.isEmpty() ? "" : " - " + artist);
-
         // 0. Highest priority: User's local .lrc file in .minecraft/config/wish/lyrics/
         List<LyricLine> local = loadLocalLyrics(title, artist);
         if (local != null && !local.isEmpty()) {
-            lastLyricsSource = "Local LRC file (" + local.size() + " lines)";
             return local;
         }
 
@@ -764,13 +943,10 @@ public final class LyricsManager {
             || (lastYtmVideoId != null && !lastYtmVideoId.isEmpty())
         );
         if (isYtm) {
-            List<LyricLine> ytmLyrics = fetchLyricsFromYouTubeMusic(lastYtmVideoId, title, artist, durationMs, true);
+            List<LyricLine> ytmLyrics = fetchLyricsFromYouTubeMusic(lastYtmVideoId, title, artist, true);
             if (ytmLyrics != null && !ytmLyrics.isEmpty()) {
-                LOGGER.debug("Using official synchronized YouTube Music lyrics for '{}' ({} lines)", title, ytmLyrics.size());
-                lastLyricsSource = "YouTube Music (" + ytmLyrics.size() + " lines)";
                 return ytmLyrics;
             }
-            LOGGER.debug("No official YouTube Music lyrics found for '{}', falling back to LRCLIB and NetEase...", title);
         }
 
         String cleanTitle = cleanTrackTitle(title);
@@ -778,75 +954,46 @@ public final class LyricsManager {
         String primaryArtist = extractPrimaryArtist(artist);
         boolean isRemix = isRemixOrEdit(title);
 
-        List<LyricLine> res = null;
+        List<LyricLine> res;
 
         // 2. Primary for speedup / remix: Search LRCLIB with the exact full title first
-        // (If a speedup-specific synced .lrc exists, it is timed perfectly to the fast audio)
         if (isRemix) {
             res = fetchLyricsFromLrclib(title, cleanArtist, durationMs);
-            if (res != null && !res.isEmpty()) {
-                lastLyricsSource = "LRCLIB Remix (" + res.size() + " lines)";
-                return res;
-            }
+            if (res != null && !res.isEmpty()) return res;
 
             if (!primaryArtist.equalsIgnoreCase(cleanArtist)) {
                 res = fetchLyricsFromLrclib(title, primaryArtist, durationMs);
-                if (res != null && !res.isEmpty()) {
-                    lastLyricsSource = "LRCLIB Remix Primary (" + res.size() + " lines)";
-                    return res;
-                }
+                if (res != null && !res.isEmpty()) return res;
             }
 
             res = fetchLyricsFromNetEase(title, primaryArtist, durationMs);
-            if (res != null && !res.isEmpty()) {
-                lastLyricsSource = "NetEase Remix (" + res.size() + " lines)";
-                return res;
-            }
+            if (res != null && !res.isEmpty()) return res;
         }
 
         // 3. Primary for Spotify / Deezer: LRCLIB with clean title & artist (and primary artist fallback)
         res = fetchLyricsFromLrclib(cleanTitle, cleanArtist, durationMs);
-        if (res != null && !res.isEmpty()) {
-            lastLyricsSource = "LRCLIB (" + res.size() + " lines)";
-            return res;
-        }
+        if (res != null && !res.isEmpty()) return res;
         if (!primaryArtist.equalsIgnoreCase(cleanArtist) && !primaryArtist.isEmpty()) {
             res = fetchLyricsFromLrclib(cleanTitle, primaryArtist, durationMs);
-            if (res != null && !res.isEmpty()) {
-                lastLyricsSource = "LRCLIB Primary Artist (" + res.size() + " lines)";
-                return res;
-            }
+            if (res != null && !res.isEmpty()) return res;
         }
 
         // 4. Official Musixmatch / LyricFind timed lyrics via YouTube Music Songs catalog
-        // (Spotify uses Musixmatch, so tracks that have lyrics on Spotify but are missing on LRCLIB are found here!)
         if (!isRemix) {
-            res = fetchLyricsFromYouTubeMusic(null, cleanTitle, primaryArtist, durationMs, false);
-            if (res != null && !res.isEmpty()) {
-                LOGGER.debug("Using official Musixmatch/YTM timed lyrics for Spotify track '{}' ({} lines)", title, res.size());
-                lastLyricsSource = "Musixmatch/YTM (" + res.size() + " lines)";
-                return res;
-            }
+            res = fetchLyricsFromYouTubeMusic(null, cleanTitle, primaryArtist, false);
+            if (res != null && !res.isEmpty()) return res;
         }
 
         // 5. Fallback: NetEase Cloud Music with clean title & primary artist + duration matching
         res = fetchLyricsFromNetEase(cleanTitle, primaryArtist, durationMs);
-        if (res != null && !res.isEmpty()) {
-            lastLyricsSource = "NetEase (" + res.size() + " lines)";
-            return res;
-        }
+        if (res != null && !res.isEmpty()) return res;
 
         // 6. Final fallback: LRCLIB with raw title & primary artist
         if (!cleanTitle.equalsIgnoreCase(title)) {
             res = fetchLyricsFromLrclib(title, primaryArtist, durationMs);
-            if (res != null && !res.isEmpty()) {
-                lastLyricsSource = "LRCLIB Raw Title (" + res.size() + " lines)";
-                return res;
-            }
+            if (res != null && !res.isEmpty()) return res;
         }
 
-        // If no accurate lyrics found, return empty so only floating notes/emojis show!
-        lastLyricsSource = "None found";
         return Collections.emptyList();
     }
 
@@ -864,10 +1011,6 @@ public final class LyricsManager {
         return isSpeedUpTrack(title) || lower.contains("remix") || lower.contains("slowed")
             || lower.contains("edit") || lower.contains("flip") || lower.contains("mix")
             || lower.contains("mashup") || lower.contains("bootleg");
-    }
-
-    private static List<LyricLine> adjustTimingsForRemix(List<LyricLine> lines, String title, long actualDurationMs) {
-        return adjustTimingsForRemix(lines, title, actualDurationMs, 0);
     }
 
     private static List<LyricLine> adjustTimingsForRemix(List<LyricLine> lines, String title, long actualDurationMs, long candidateDurationMs) {
@@ -951,13 +1094,13 @@ public final class LyricsManager {
             }
 
             // 2. Specific song file matches: <title>.lrc, <clean_title>.lrc
-            String safeTitle = title.replaceAll("[^a-zA-Z0-9_-]", "_").toLowerCase();
-            String safeClean = cleanTrackTitle(title).replaceAll("[^a-zA-Z0-9_-]", "_").toLowerCase();
+            String safeTitle = SAFE_FILENAME_PATTERN.matcher(title).replaceAll("_").toLowerCase();
+            String safeClean = SAFE_FILENAME_PATTERN.matcher(cleanTrackTitle(title)).replaceAll("_").toLowerCase();
 
             File[] candidates = {
                 new File(dir, safeTitle + ".lrc"),
                 new File(dir, safeClean + ".lrc"),
-                new File(dir, (artist + "_" + safeClean).replaceAll("[^a-zA-Z0-9_-]", "_").toLowerCase() + ".lrc")
+                new File(dir, SAFE_FILENAME_PATTERN.matcher(artist + "_" + safeClean).replaceAll("_").toLowerCase() + ".lrc")
             };
 
             for (File f : candidates) {
@@ -1047,7 +1190,6 @@ public final class LyricsManager {
         if (lrc == null || lrc.isEmpty()) return list;
 
         String[] lines = lrc.split("\\r?\\n");
-        Pattern tagPattern = Pattern.compile("\\[(\\d{1,3}):(\\d{2}(?:[\\.:]\\d+)?)\\]");
 
         for (String line : lines) {
             line = line.trim();
@@ -1056,7 +1198,7 @@ public final class LyricsManager {
                 continue;
             }
 
-            Matcher tagMatcher = tagPattern.matcher(line);
+            Matcher tagMatcher = LRC_TAG_PATTERN.matcher(line);
             List<Long> timestamps = new ArrayList<>();
             int lastTagEnd = 0;
 
@@ -1193,21 +1335,16 @@ public final class LyricsManager {
     }
 
     private static String httpGet(String urlStr) {
+        HttpURLConnection conn = null;
         try {
             URI uri = URI.create(urlStr);
-            HttpURLConnection conn = (HttpURLConnection) uri.toURL().openConnection();
+            conn = (HttpURLConnection) uri.toURL().openConnection();
             conn.setRequestMethod("GET");
             conn.setConnectTimeout(2500);
             conn.setReadTimeout(2500);
             conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
             conn.setRequestProperty("Accept", "application/json");
-            int code = conn.getResponseCode();
-            if (urlStr.contains("lrclib.net")) {
-                lastLrclibStatus = "HTTP " + code;
-            } else if (urlStr.contains("163.com")) {
-                lastNetEaseStatus = "HTTP " + code;
-            }
-            if (code == 200) {
+            if (conn.getResponseCode() == 200) {
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
                     StringBuilder sb = new StringBuilder();
                     String l;
@@ -1215,20 +1352,18 @@ public final class LyricsManager {
                     return sb.toString();
                 }
             }
-        } catch (Exception e) {
-            if (urlStr.contains("lrclib.net")) {
-                lastLrclibStatus = "Error: " + e.getMessage();
-            } else if (urlStr.contains("163.com")) {
-                lastNetEaseStatus = "Error: " + e.getMessage();
-            }
+        } catch (Exception ignored) {
+        } finally {
+            if (conn != null) conn.disconnect();
         }
         return null;
     }
 
     private static String httpPostJson(String urlStr, String jsonBody) {
+        HttpURLConnection conn = null;
         try {
             URI uri = URI.create(urlStr);
-            HttpURLConnection conn = (HttpURLConnection) uri.toURL().openConnection();
+            conn = (HttpURLConnection) uri.toURL().openConnection();
             conn.setRequestMethod("POST");
             conn.setConnectTimeout(2500);
             conn.setReadTimeout(2500);
@@ -1246,20 +1381,20 @@ public final class LyricsManager {
                     return sb.toString();
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
         return null;
     }
 
     private static String normalizeForMatch(String text) {
         if (text == null) return "";
-        // Strip diacritical marks/accents (é -> e, ç -> c) so French and international titles match
-        String norm = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD)
-            .replaceAll("\\p{M}", "");
-        // Retain unicode letters and digits across all alphabets
-        return norm.replaceAll("[^\\p{L}\\p{N} ]", "").toLowerCase().trim();
+        String norm = DIACRITICS_PATTERN.matcher(java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD)).replaceAll("");
+        return NON_LETTER_DIGIT_PATTERN.matcher(norm).replaceAll("").toLowerCase().trim();
     }
 
-    private static List<LyricLine> fetchLyricsFromYouTubeMusic(String videoId, String title, String artist, long durationMs, boolean allowLocalYtmConfig) {
+    private static List<LyricLine> fetchLyricsFromYouTubeMusic(String videoId, String title, String artist, boolean allowLocalYtmConfig) {
         try {
             List<String> candidateVids = new ArrayList<>();
             if (videoId != null && videoId.length() == 11) {
@@ -1271,14 +1406,12 @@ public final class LyricsManager {
                 }
             }
 
-            // Search YouTube Music WEB_REMIX API using the "Songs" filter (EgWKAQIIAWoKEAkQBRAKEAMQBA==)
-            // so we get official album audio tracks (matching Spotify timing) instead of Music Videos!
             if (candidateVids.isEmpty()) {
                 String query = (title + (artist == null || artist.isEmpty() ? "" : " " + artist)).replace("\"", "\\\"").trim();
                 String searchSongsBody = "{\"query\":\"" + query + "\",\"params\":\"EgWKAQIIAWoKEAkQBRAKEAMQBA==\",\"context\":{\"client\":{\"clientName\":\"WEB_REMIX\",\"clientVersion\":\"1.20240101.01.00\"}}}";
                 String searchJson = httpPostJson("https://music.youtube.com/youtubei/v1/search", searchSongsBody);
                 if (searchJson != null) {
-                    Matcher vm = Pattern.compile("\"videoId\":\\s*\"([a-zA-Z0-9_-]{11})\"").matcher(searchJson);
+                    Matcher vm = YTM_VIDEO_ID_PATTERN.matcher(searchJson);
                     while (vm.find() && candidateVids.size() < 2) {
                         String found = vm.group(1);
                         if (!candidateVids.contains(found)) {
@@ -1290,7 +1423,7 @@ public final class LyricsManager {
                     String searchAnyBody = "{\"query\":\"" + query + "\",\"context\":{\"client\":{\"clientName\":\"WEB_REMIX\",\"clientVersion\":\"1.20240101.01.00\"}}}";
                     String searchAnyJson = httpPostJson("https://music.youtube.com/youtubei/v1/search", searchAnyBody);
                     if (searchAnyJson != null) {
-                        Matcher vm = Pattern.compile("\"videoId\":\\s*\"([a-zA-Z0-9_-]{11})\"").matcher(searchAnyJson);
+                        Matcher vm = YTM_VIDEO_ID_PATTERN.matcher(searchAnyJson);
                         if (vm.find()) {
                             candidateVids.add(vm.group(1));
                         }
@@ -1355,35 +1488,6 @@ public final class LyricsManager {
         } catch (Exception e) {
             LOGGER.debug("Failed to fetch lyrics directly from YouTube Music", e);
         }
-        return null;
-    }
-
-    private static List<LyricLine> parseYouTubeMusicStaticLyrics(JsonObject browseObj, long durationMs) {
-        try {
-            if (!browseObj.has("contents")) return null;
-            JsonObject contents = browseObj.getAsJsonObject("contents");
-            if (!contents.has("sectionListRenderer")) return null;
-            JsonArray sections = contents.getAsJsonObject("sectionListRenderer").getAsJsonArray("contents");
-            for (JsonElement secEl : sections) {
-                JsonObject sec = secEl.getAsJsonObject();
-                if (sec.has("musicDescriptionShelfRenderer")) {
-                    JsonObject shelf = sec.getAsJsonObject("musicDescriptionShelfRenderer");
-                    if (shelf.has("description") && shelf.getAsJsonObject("description").has("runs")) {
-                        JsonArray runs = shelf.getAsJsonObject("description").getAsJsonArray("runs");
-                        StringBuilder sb = new StringBuilder();
-                        for (JsonElement r : runs) {
-                            if (r.isJsonObject() && r.getAsJsonObject().has("text")) {
-                                sb.append(r.getAsJsonObject().get("text").getAsString());
-                            }
-                        }
-                        String plain = sb.toString().trim();
-                        if (!plain.isEmpty()) {
-                            return parsePlainLyrics(plain, durationMs);
-                        }
-                    }
-                }
-            }
-        } catch (Exception ignored) {}
         return null;
     }
 
@@ -1456,70 +1560,8 @@ public final class LyricsManager {
         return Collections.emptyList();
     }
 
-    public static List<LyricLine> parsePlainLyrics(String plain, long durationMs) {
-        List<LyricLine> list = new ArrayList<>();
-        if (plain == null || plain.isEmpty()) return list;
-
-        String[] rawLines = plain.split("\\r?\\n");
-        List<String> lines = new ArrayList<>();
-        for (String l : rawLines) {
-            String trimmed = l.trim();
-            if (!trimmed.isEmpty() && !trimmed.startsWith("[") && !trimmed.endsWith("]")) {
-                lines.add(trimmed);
-            }
-        }
-        if (lines.isEmpty()) return list;
-
-        long effectiveDuration = durationMs > 5000 ? durationMs : (long) lines.size() * 3500L;
-        // Natural intro offset so plain text lyrics never begin abruptly at 0:00
-        long introMs = Math.min(8000L, effectiveDuration / 12);
-        long vocalDuration = effectiveDuration - introMs - Math.min(6000L, effectiveDuration / 15);
-        long step = Math.max(1400L, vocalDuration / Math.max(1, lines.size()));
-        for (int i = 0; i < lines.size(); i++) {
-            long timeMs = introMs + (i * step);
-            list.add(new LyricLine(timeMs, lines.get(i)));
-        }
-        return list;
-    }
-
     public static List<LyricLine> parseLrcString(String lrc) {
-        List<LyricLine> list = new ArrayList<>();
-        if (lrc == null || lrc.isEmpty()) return list;
-
-        String[] lines = lrc.split("\\r?\\n");
-        Pattern tagPattern = Pattern.compile("\\[(\\d{1,3}):(\\d{2}(?:[\\.:]\\d+)?)\\]");
-
-        for (String line : lines) {
-            line = line.trim();
-            if (line.isEmpty() || line.startsWith("[ti:") || line.startsWith("[ar:") || line.startsWith("[al:")
-                    || line.startsWith("[by:") || line.startsWith("[offset:") || line.startsWith("[length:")) {
-                continue;
-            }
-
-            Matcher tagMatcher = tagPattern.matcher(line);
-            List<Long> timestamps = new ArrayList<>();
-            int lastTagEnd = 0;
-
-            while (tagMatcher.find()) {
-                try {
-                    int minutes = Integer.parseInt(tagMatcher.group(1));
-                    String secPart = tagMatcher.group(2).replace(':', '.');
-                    double seconds = Double.parseDouble(secPart);
-                    long totalMs = (long) (minutes * 60000 + seconds * 1000);
-                    timestamps.add(totalMs);
-                    lastTagEnd = tagMatcher.end();
-                } catch (Exception ignored) {}
-            }
-
-            if (!timestamps.isEmpty()) {
-                String text = line.substring(lastTagEnd).trim();
-                for (long t : timestamps) {
-                    list.add(new LyricLine(t, text));
-                }
-            }
-        }
-        list.sort(Comparator.comparingLong(a -> a.timeMs));
-        return list;
+        return parseNetEaseLrc(lrc);
     }
 
     public static long getCurrentProgressMs() {
@@ -1542,23 +1584,17 @@ public final class LyricsManager {
 
         synchronized (source) {
             if (source.isEmpty()) {
-                if (isDemo) {
-                    source = demoLyrics;
-                } else if (isPlaying && !currentTitle.isEmpty()) {
-                    // Fallback when no synced lyrics available: empty line so 3D music note emojis spawn
-                    LyricLine line1 = new LyricLine(0, "");
-                    return new LyricState(line1, null, 0.5f, 0, true, currentTitle, currentArtist);
-                } else {
-                    return new LyricState(null, null, 0f, 0, false, "", "");
+                if (!isDemo && isPlaying && !currentTitle.isEmpty()) {
+                    return new LyricState(EMPTY_LINE, null, 0.5f, 0, true, currentTitle);
                 }
+                return INACTIVE_STATE;
             }
 
             long progress = getCurrentProgressMs();
+            String title = isDemo ? "Chase Me" : currentTitle;
 
-            if (!source.isEmpty() && progress < source.get(0).timeMs) {
-                LyricLine first = source.get(0);
-                LyricLine introLine = new LyricLine(0, "");
-                return new LyricState(introLine, first, 0f, 0, isDemo || isPlaying, isDemo ? "Chase Me" : currentTitle, isDemo ? "Trapex" : currentArtist);
+            if (progress < source.get(0).timeMs) {
+                return new LyricState(EMPTY_LINE, source.get(0), 0f, 0, isDemo || isPlaying, title);
             }
 
             LyricLine cur = null;
@@ -1579,15 +1615,12 @@ public final class LyricsManager {
                         curEnd = (line.endTimeMs > curStart) ? line.endTimeMs : (curStart + 4000);
                     }
                 } else {
-                    if (cur == null && i == 0) {
-                        next = line;
-                    }
                     break;
                 }
             }
 
             if (cur == null) {
-                return new LyricState(null, null, 0f, 0, isDemo || isPlaying, isDemo ? "Chase Me" : currentTitle, isDemo ? "Trapex" : currentArtist);
+                return new LyricState(null, null, 0f, 0, isDemo || isPlaying, title);
             }
 
             long gap = (next != null) ? Math.max(150L, next.timeMs - curStart) : Math.max(150L, curEnd - curStart);
@@ -1605,10 +1638,8 @@ public final class LyricsManager {
                 vocalDur = Math.min((long) (effectiveGap * 0.85), Math.max(500L, wordEstimatedDur));
             }
 
-            // If line singing has completely finished and there's still a noticeable pause until next line, show pauseLine
             if (next != null && gap > 3800 && (progress - curStart) > (vocalDur + 700)) {
-                LyricLine pauseLine = new LyricLine(curStart + vocalDur + 700, "");
-                return new LyricState(pauseLine, next, 1f, 0, isDemo || isPlaying, isDemo ? "Chase Me" : currentTitle, isDemo ? "Trapex" : currentArtist);
+                return new LyricState(EMPTY_LINE, next, 1f, 0, isDemo || isPlaying, title);
             }
 
             float lineProg = Math.max(0f, Math.min(1f, (float) (progress - curStart) / vocalDur));
@@ -1625,9 +1656,7 @@ public final class LyricsManager {
                 wordIdx = Math.min(cur.words.size() - 1, (int) (lineProg * cur.words.size()));
             }
 
-            String title = isDemo ? "Chase Me" : currentTitle;
-            String artist = isDemo ? "Trapex" : currentArtist;
-            return new LyricState(cur, next, lineProg, wordIdx, isDemo || isPlaying, title, artist);
+            return new LyricState(cur, next, lineProg, wordIdx, isDemo || isPlaying, title);
         }
     }
 
@@ -1647,223 +1676,10 @@ public final class LyricsManager {
         return ModConfig.INSTANCE.lyricsDemoMode ? 184000L : currentDurationMs;
     }
 
-    public static synchronized boolean isTrackPlaying() {
-        return ModConfig.INSTANCE.lyricsDemoMode || isPlaying;
-    }
-
-    public static synchronized boolean hasSyncedLyrics() {
-        return ModConfig.INSTANCE.lyricsDemoMode || !activeLyrics.isEmpty();
-    }
-
-    public static void debugLog(String message) {
-        LOGGER.debug("[Wish-Lyrics] {}", message);
-        if (liveDebug) {
-            WishClient.sendLocalChatMessage("§d§l[Lyrics-Debug] §f" + message);
+    public static boolean hasSyncedLyrics() {
+        if (ModConfig.INSTANCE.lyricsDemoMode) return true;
+        synchronized (activeLyrics) {
+            return !activeLyrics.isEmpty();
         }
-    }
-
-    public static void toggleLiveDebug() {
-        liveDebug = !liveDebug;
-        if (liveDebug) {
-            WishClient.sendLocalChatMessage("§d§l🎵 WISH LYRICS §8» §aLive debug mode ENABLED! Detailed lyrics & player logs will appear in chat.");
-        } else {
-            WishClient.sendLocalChatMessage("§d§l🎵 WISH LYRICS §8» §cLive debug mode DISABLED.");
-        }
-    }
-
-    public static void runDiagnostics() {
-        WishClient.sendLocalChatMessage("§d§l🎵 WISH LYRICS §8» §eRunning full diagnostics, please wait...");
-        LYRICS_FETCH_EXECUTOR.execute(() -> {
-            try {
-                List<String> report = new ArrayList<>();
-                report.add("§d§l━━━━━━━━━━━━ WISH LYRICS DIAGNOSTICS ━━━━━━━━━━━━");
-
-                // 1. Mod Configuration
-                boolean lyricsOn = ModConfig.INSTANCE.enableLyrics;
-                String prov = ModConfig.INSTANCE.musicProvider != null ? ModConfig.INSTANCE.musicProvider : "None";
-                boolean demo = ModConfig.INSTANCE.lyricsDemoMode;
-
-                report.add("§7[Config] §f3D Lyrics: " + (lyricsOn ? "§aEnabled" : "§cDISABLED §7(/wish -> Visual)"));
-                report.add("§7[Config] §fMusic Provider: §b" + prov + ("None".equalsIgnoreCase(prov) ? " §c(No platform selected!)" : ""));
-                if (demo) {
-                    report.add("§7[Config] §eDemo Mode is currently ACTIVE §7(Looping Chase Me)");
-                }
-
-                // 2. OS & Script Check
-                String os = System.getProperty("os.name");
-                report.add("§7[System] §fOperating System: §e" + os);
-
-                boolean isWin = os.toLowerCase().contains("win");
-                boolean isLinux = os.toLowerCase().contains("linux");
-
-                if (isWin) {
-                    Path scriptPath = Path.of("config", "wish", "get_song.ps1");
-                    ensureScriptExtracted(scriptPath);
-                    boolean scriptExists = Files.exists(scriptPath);
-                    report.add("§7[System] §fPowerShell Script: " + (scriptExists ? "§aFound (" + scriptPath.toAbsolutePath() + ")" : "§cMISSING!"));
-                    report.add("§7[System] §fPowerShell Path: §e" + getPowerShellExecutable());
-
-                    report.add("§7[System] §fQuerying Windows Media & Processes...");
-                    try {
-                        String providerParam = !prov.equalsIgnoreCase("None") ? prov.trim() : "ALL";
-                        ProcessBuilder pb = new ProcessBuilder(
-                            getPowerShellExecutable(), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                            "-File", scriptPath.toAbsolutePath().toString(),
-                            "-provider", providerParam, "-detailed", "-debug"
-                        );
-                        pb.redirectErrorStream(true);
-                        Process p = pb.start();
-                        List<String> psOutput = new ArrayList<>();
-                        try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
-                            String l;
-                            while ((l = br.readLine()) != null) {
-                                psOutput.add(l.trim());
-                            }
-                        } finally {
-                            if (p.isAlive()) p.destroyForcibly();
-                        }
-
-                        boolean finished = p.waitFor(6000, TimeUnit.MILLISECONDS);
-                        if (!finished) {
-                            p.destroyForcibly();
-                            report.add("§7[System] §cPowerShell query timed out (>6000ms)!");
-                        }
-
-                        String detectedLine = null;
-                        List<String> debugLines = new ArrayList<>();
-                        List<String> errorLines = new ArrayList<>();
-                        for (String l : psOutput) {
-                            if (l.startsWith("DEBUG:")) {
-                                debugLines.add(l.substring(6).trim());
-                            } else if (l.contains("|||") || l.contains(" - ")) {
-                                detectedLine = l;
-                            } else if (!l.isEmpty()) {
-                                errorLines.add(l);
-                            }
-                        }
-
-                        int spotifyProcs = -1;
-                        for (String dbg : debugLines) {
-                            if (dbg.contains("Spotify processes:") || dbg.contains("Spotify processes running:")) {
-                                try {
-                                    String countStr = dbg.substring(dbg.lastIndexOf(':') + 1).trim();
-                                    spotifyProcs = Integer.parseInt(countStr);
-                                } catch (Exception ignored) {}
-                            }
-                        }
-
-                        if ("Spotify".equalsIgnoreCase(prov) || "ALL".equalsIgnoreCase(prov)) {
-                            if (spotifyProcs == 0) {
-                                report.add("§7[Spotify] §c❌ Spotify process not found! Is Spotify open?");
-                            } else if (spotifyProcs > 0) {
-                                report.add("§7[Spotify] §a✔ Spotify is running §7(" + spotifyProcs + " processes found)");
-                            }
-                        }
-
-                        if (detectedLine != null) {
-                            report.add("§7[Player] §a✔ Track detected: §f" + detectedLine);
-                        } else {
-                            report.add("§7[Player] §c❌ No media track detected by Windows Media / Processes.");
-                            for (String dbg : debugLines) {
-                                report.add("§8  ↳ " + dbg);
-                            }
-                            if (debugLines.isEmpty() && !errorLines.isEmpty()) {
-                                for (String err : errorLines) {
-                                    report.add("§c  ↳ " + err);
-                                }
-                            }
-                        }
-                    } catch (Exception e) {
-                        report.add("§7[System] §cError running PowerShell: " + e.getMessage());
-                    }
-                } else if (isLinux) {
-                    report.add("§7[Linux] §fUsing playerctl (MPRIS)");
-                }
-
-                // 3. Current Mod State
-                report.add("§7[Wish State] §fCurrent Track: §b" + (currentTitle.isEmpty() ? "None" : currentTitle + " §7by §b" + currentArtist));
-                report.add("§7[Wish State] §fDetected Player: §e" + (currentDetectedPlayer.isEmpty() ? "None" : currentDetectedPlayer));
-                report.add("§7[Wish State] §fPlayback Status: " + (isPlaying ? "§aPlaying" : "§ePaused/Idle"));
-                report.add("§7[Wish State] §fActive Lyric Lines: " + (activeLyrics.isEmpty() ? "§c0 loaded" : "§a" + activeLyrics.size() + " lines loaded"));
-                if (lastLyricsSource != null && !lastLyricsSource.equals("None")) {
-                    report.add("§7[Wish State] §fLast Lyrics Source: §a" + lastLyricsSource);
-                }
-                if (lastDebugError != null) {
-                    report.add("§7[Wish State] §cLast Recorded Error: §f" + lastDebugError);
-                }
-
-                // 4. Test Connectivity to LRCLIB
-                report.add("§7[Network] §fTesting LRCLIB API connectivity...");
-                try {
-                    String testUrl = "https://lrclib.net/api/get?track_name=Blinding+Lights&artist_name=The+Weeknd&duration=200";
-                    long t0 = System.currentTimeMillis();
-                    String json = httpGet(testUrl);
-                    long ping = System.currentTimeMillis() - t0;
-                    if (json != null && json.contains("syncedLyrics")) {
-                        report.add("§7[Network] §a✔ LRCLIB is reachable! (" + ping + "ms response)");
-                    } else {
-                        report.add("§7[Network] §e⚠ LRCLIB returned unexpected response (" + lastLrclibStatus + ")");
-                    }
-                } catch (Exception e) {
-                    report.add("§7[Network] §c❌ Could not reach LRCLIB: " + e.getMessage());
-                }
-
-                // 5. Actionable Advice
-                report.add("§d§l──────────────── DIAGNOSTIC SUMMARY ────────────────");
-                if (!lyricsOn) {
-                    report.add("§c⚠ 3D Lyrics is disabled! Go to /wish -> Visual -> 3D Lyrics and click the dot to enable.");
-                } else if ("None".equalsIgnoreCase(prov)) {
-                    report.add("§c⚠ No music provider selected! Open /wish -> Song Config or 3D Lyrics and select 'Spotify'.");
-                } else if ("YTM".equalsIgnoreCase(prov)) {
-                    report.add("§e⚠ Provider is set to 'YTM'. If using Spotify, switch Provider to 'Spotify' in /wish!");
-                } else if (currentTitle.isEmpty() && isWin) {
-                    report.add("§e💡 Spotify troubleshooting checklist:");
-                    report.add("§7  1. Make sure Spotify desktop app is open and playing music.");
-                    report.add("§7  2. In Spotify: Settings -> Display -> enable 'Show desktop overlay when using media keys'.");
-                    report.add("§7  3. If running Minecraft as Administrator, run Spotify as Administrator too (or vice versa).");
-                    report.add("§7  4. If using Spotify Web, note that Spotify Desktop application is required.");
-                } else if (!currentTitle.isEmpty() && activeLyrics.isEmpty()) {
-                    report.add("§e💡 Track is detected, but no synced lyrics exist on LRCLIB/NetEase for this song.");
-                    report.add("§7  You can put your own .lrc file in .minecraft/config/wish/lyrics/<title>.lrc!");
-                } else if (!activeLyrics.isEmpty()) {
-                    report.add("§a🎉 All systems OK! Lyrics are loaded and synced for '" + currentTitle + "'.");
-                }
-                report.add("§d§l━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-
-                for (String line : report) {
-                    WishClient.sendLocalChatMessage(line);
-                }
-            } catch (Exception e) {
-                LOGGER.error("Error running lyrics diagnostics", e);
-                WishClient.sendLocalChatMessage("§c[Wish] Diagnostics failed: " + e.getMessage());
-            }
-        });
-    }
-
-    public static void testFetchLyrics(String trackQuery) {
-        WishClient.sendLocalChatMessage("§d§l🎵 WISH LYRICS §8» §7Testing lyrics lookup for: §f\"" + trackQuery + "\"...");
-        LYRICS_FETCH_EXECUTOR.execute(() -> {
-            try {
-                String title = trackQuery;
-                String artist = "";
-                if (trackQuery.contains(" - ")) {
-                    String[] sp = trackQuery.split(" - ", 2);
-                    artist = sp[0].trim();
-                    title = sp[1].trim();
-                }
-                List<LyricLine> res = fetchLyricsFromAllSources(title, artist, 0);
-                if (res != null && !res.isEmpty()) {
-                    WishClient.sendLocalChatMessage("§d§l🎵 WISH LYRICS §8» §aFound " + res.size() + " lyric lines from " + lastLyricsSource + "!");
-                    WishClient.sendLocalChatMessage("§7Line 1: §f" + res.get(0).text + " §8(@" + res.get(0).timeMs + "ms)");
-                    if (res.size() > 1) {
-                        WishClient.sendLocalChatMessage("§7Line 2: §f" + res.get(1).text + " §8(@" + res.get(1).timeMs + "ms)");
-                    }
-                } else {
-                    WishClient.sendLocalChatMessage("§d§l🎵 WISH LYRICS §8» §cNo synced lyrics found for \"" + trackQuery + "\".");
-                }
-            } catch (Exception e) {
-                WishClient.sendLocalChatMessage("§cError testing lyrics: " + e.getMessage());
-            }
-        });
     }
 }

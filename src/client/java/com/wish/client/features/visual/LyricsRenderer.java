@@ -13,23 +13,34 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
+import java.util.regex.Pattern;
 
 public final class LyricsRenderer {
 
     private static final Random RNG = new Random();
+    private static final Pattern WORD_PUNCTUATION_PATTERN = Pattern.compile("[,.!?\"'();:]+");
 
     // Floating idle musical notes & stars during instrumental, pauses, or low word density
     private static final String[] IDLE_SYMBOLS = {
         "♪", "♫", "✦", "★", "✧", "♩", "♬"
     };
 
+    private static String cachedLyricsHex = null;
+    private static int cachedLyricsRgb = 0xFFFFFF;
+
     private static int getLyricsColor() {
         String hex = ModConfig.INSTANCE.lyricsColor;
+        if (hex != null && hex.equals(cachedLyricsHex)) {
+            return cachedLyricsRgb;
+        }
+        cachedLyricsHex = hex;
         if (hex != null && hex.length() == 7 && hex.startsWith("#")) {
             try {
-                return Integer.parseInt(hex.substring(1), 16);
+                cachedLyricsRgb = Integer.parseInt(hex.substring(1), 16);
+                return cachedLyricsRgb;
             } catch (Exception ignored) {}
         }
+        cachedLyricsRgb = 0xFFFFFF;
         return 0xFFFFFF;
     }
 
@@ -38,14 +49,12 @@ public final class LyricsRenderer {
         final float pitchOffsetDeg; // vertical angle in degrees (strictly negative = above horizon/crosshair)
         final float rollAngleDeg;   // visual tilt in degrees
         final float sizeScale;
-        final boolean isCenter;
 
-        Sector(float yaw, float pitch, float roll, float size, boolean isCenter) {
+        Sector(float yaw, float pitch, float roll, float size) {
             this.yawOffsetDeg = yaw;
             this.pitchOffsetDeg = pitch;
             this.rollAngleDeg = roll;
             this.sizeScale = size;
-            this.isCenter = isCenter;
         }
     }
 
@@ -54,46 +63,44 @@ public final class LyricsRenderer {
     // Every single sector is strictly negative (above crosshair/horizon) so words NEVER appear on the ground/floor!
     private static final Sector[] SECTORS = {
         // --- Row 1: High Sky (Top of screen, wide majestic banner across the clouds) ---
-        new Sector(-38.0f, -25.0f, -6.0f, 1.10f, false), // 0: Sky Upper Left
-        new Sector(  0.0f, -26.0f,  0.0f, 1.15f, true),  // 1: Sky Upper Center
-        new Sector( 38.0f, -25.0f,  6.0f, 1.10f, false), // 2: Sky Upper Right
+        new Sector(-38.0f, -25.0f, -6.0f, 1.10f), // 0: Sky Upper Left
+        new Sector(  0.0f, -26.0f,  0.0f, 1.15f), // 1: Sky Upper Center
+        new Sector( 38.0f, -25.0f,  6.0f, 1.10f), // 2: Sky Upper Right
 
         // --- Row 2: Upper Flanks (Wide aesthetic, high left and right) ---
-        new Sector(-46.0f, -18.0f, -10.0f, 1.10f, false), // 3: Far Upper Left
-        new Sector(-24.0f, -18.0f,  -4.0f, 1.05f, false), // 4: Mid Upper Left
-        new Sector( 24.0f, -18.0f,   4.0f, 1.05f, false), // 5: Mid Upper Right
-        new Sector( 46.0f, -18.0f,  10.0f, 1.10f, false), // 6: Far Upper Right
+        new Sector(-46.0f, -18.0f, -10.0f, 1.10f), // 3: Far Upper Left
+        new Sector(-24.0f, -18.0f,  -4.0f, 1.05f), // 4: Mid Upper Left
+        new Sector( 24.0f, -18.0f,   4.0f, 1.05f), // 5: Mid Upper Right
+        new Sector( 46.0f, -18.0f,  10.0f, 1.10f), // 6: Far Upper Right
 
         // --- Row 3: Mid Flanks (Eye level flanks, wide sides, spacious) ---
-        new Sector(-48.0f, -11.0f,  -8.0f, 1.05f, false), // 7: Mid Far Left
-        new Sector(-28.0f, -11.0f,  -3.0f, 1.00f, false), // 8: Inner Mid Left
-        new Sector( 28.0f, -11.0f,   3.0f, 1.00f, false), // 9: Inner Mid Right
-        new Sector( 48.0f, -11.0f,   8.0f, 1.05f, false), // 10: Mid Far Right
+        new Sector(-48.0f, -11.0f,  -8.0f, 1.05f), // 7: Mid Far Left
+        new Sector(-28.0f, -11.0f,  -3.0f, 1.00f), // 8: Inner Mid Left
+        new Sector( 28.0f, -11.0f,   3.0f, 1.00f), // 9: Inner Mid Right
+        new Sector( 48.0f, -11.0f,   8.0f, 1.05f), // 10: Mid Far Right
 
         // --- Row 4: Lower Flanks (Wide sides, slightly above crosshair level, NEVER on floor) ---
-        new Sector(-44.0f,  -4.0f,  -6.0f, 0.95f, false), // 11: Lower Far Left
-        new Sector(-22.0f,  -4.0f,  -2.0f, 0.95f, false), // 12: Lower Mid Left
-        new Sector( 22.0f,  -4.0f,   2.0f, 0.95f, false), // 13: Lower Mid Right
-        new Sector( 44.0f,  -4.0f,   6.0f, 0.95f, false), // 14: Lower Far Right
+        new Sector(-44.0f,  -4.0f,  -6.0f, 0.95f), // 11: Lower Far Left
+        new Sector(-22.0f,  -4.0f,  -2.0f, 0.95f), // 12: Lower Mid Left
+        new Sector( 22.0f,  -4.0f,   2.0f, 0.95f), // 13: Lower Mid Right
+        new Sector( 44.0f,  -4.0f,   6.0f, 0.95f), // 14: Lower Far Right
 
         // --- Center Upper (Above crosshair, floating gracefully in forward view) ---
-        new Sector(  0.0f, -14.0f,   0.0f, 1.10f, true)   // 15: Center Upper
+        new Sector(  0.0f, -14.0f,   0.0f, 1.10f)  // 15: Center Upper
     };
 
     private static class FloatingWord {
         final int sectorIdx;
         float yawOffset;
         float pitchOffset;
-        double dist;
 
         // Fixed in-world 3D coordinates
         double worldX, worldY, worldZ;
 
-        String text;
-        List<String> lines;
+        final Component singleComp;
+        final List<Component> lineComps;
         long spawnTime;
         long durationMs;
-        int color;
         float sizeMult;
         float rollAngle;
         boolean isCenterSymbol;
@@ -103,22 +110,27 @@ public final class LyricsRenderer {
         long fadeOutStartTime = 0;
         long fadeOutDurationMs = 180;
 
-        FloatingWord(int sectorIdx, float yawOffset, float pitchOffset, double dist,
+        FloatingWord(int sectorIdx, float yawOffset, float pitchOffset,
                      double worldX, double worldY, double worldZ,
-                     String text, List<String> lines, int color, float sizeMult, float rollAngle,
+                     String text, List<String> lines, float sizeMult, float rollAngle,
                      long durationMs, boolean isCenterSymbol, boolean isPhrase) {
             this.sectorIdx = sectorIdx;
             this.yawOffset = yawOffset;
             this.pitchOffset = pitchOffset;
-            this.dist = dist;
             this.worldX = worldX;
             this.worldY = worldY;
             this.worldZ = worldZ;
-            this.text = text;
-            this.lines = lines;
+            this.singleComp = Component.literal(text != null ? text : "");
+            if (lines != null && lines.size() > 1) {
+                this.lineComps = new ArrayList<>(lines.size());
+                for (String ln : lines) {
+                    this.lineComps.add(Component.literal(ln));
+                }
+            } else {
+                this.lineComps = null;
+            }
             this.spawnTime = System.currentTimeMillis();
             this.durationMs = durationMs;
-            this.color = color;
             this.sizeMult = sizeMult;
             this.rollAngle = rollAngle;
             this.isCenterSymbol = isCenterSymbol;
@@ -138,6 +150,7 @@ public final class LyricsRenderer {
     private static String lastSpawnedLine = "";
     private static long lastSpawnedLineTime = -1;
     private static int lastSpawnedWordIdx = -1;
+    private static int lastSpawnedPhrasePart = -1;
     private static long lastWordSpawnTime = 0;
     private static long lastCenterNoteTime = 0;
     private static int lastUsedSectorIdx = -1;
@@ -162,6 +175,7 @@ public final class LyricsRenderer {
             for (FloatingWord fw : floatingWords) {
                 fw.triggerDespawn(250);
             }
+            lastSpawnedPhrasePart = -1;
         } else {
             boolean hasWords = (state.currentLine != null && !state.currentLine.words.isEmpty());
             String curText = hasWords ? state.currentLine.text : "";
@@ -185,27 +199,66 @@ public final class LyricsRenderer {
                     int endIdx = Math.min(state.currentLine.words.size() - 1, state.activeWordIndex);
                     for (int wi = startIdx; wi <= endIdx; wi++) {
                         String rawWord = state.currentLine.words.get(wi);
-                        String clean = rawWord.replaceAll("[,.!?\"'();:]+", "").trim().toUpperCase();
+                        String clean = WORD_PUNCTUATION_PATTERN.matcher(rawWord).replaceAll("").trim().toUpperCase();
                         if (!clean.isEmpty()) {
                             long gap = now - lastWordSpawnTime;
                             lastWordSpawnTime = now;
-                            spawnWord(clean, configuredColor, 1.0f, gap, isSpeedUp, mc);
+                            spawnWord(clean, 1.0f, gap, isSpeedUp, mc);
                         }
                     }
                     lastSpawnedWordIdx = state.activeWordIndex;
                 }
             } else {
-                // Mode Phrases: Full phrase / line centered in view, disappearing fast as requested
-                if (hasWords && (!curText.equals(lastSpawnedLine) || curLineTime != lastSpawnedLineTime)) {
-                    lastSpawnedLine = curText;
-                    lastSpawnedLineTime = curLineTime;
-                    lastWordSpawnTime = now;
-                    long lineDur = (state.nextLine != null && state.nextLine.timeMs > state.currentLine.timeMs)
-                        ? (state.nextLine.timeMs - state.currentLine.timeMs) : (isSpeedUp ? 2200 : 2800);
-                    long phraseDuration = isSpeedUp
-                        ? Math.max(1300, Math.min(2300, (long)(lineDur * 0.80)))
-                        : Math.max(1500, Math.min(2800, lineDur));
-                    spawnPhrase(curText, configuredColor, phraseDuration, mc);
+                // Mode Phrases: Split long lines in two shorter punchy phrases (coupe en 2)
+                if (hasWords) {
+                    boolean lineChanged = (!curText.equals(lastSpawnedLine) || curLineTime != lastSpawnedLineTime);
+                    if (lineChanged) {
+                        lastSpawnedLine = curText;
+                        lastSpawnedLineTime = curLineTime;
+                        lastSpawnedPhrasePart = -1;
+                    }
+
+                    int splitIndex = findPhraseSplitIndex(state.currentLine);
+                    int currentPart = 0;
+                    float splitProgress = 0.50f;
+
+                    if (splitIndex > 0) {
+                        if (state.currentLine.wordProgressStarts != null && splitIndex < state.currentLine.wordProgressStarts.length) {
+                            float p = state.currentLine.wordProgressStarts[splitIndex];
+                            if (p >= 0.20f && p <= 0.80f) {
+                                splitProgress = p;
+                            }
+                        }
+                        if (state.activeWordIndex >= splitIndex || state.lineProgress >= splitProgress) {
+                            currentPart = 1;
+                        }
+                    }
+
+                    if (currentPart != lastSpawnedPhrasePart) {
+                        lastSpawnedPhrasePart = currentPart;
+                        lastWordSpawnTime = now;
+
+                        String phraseText = getPhrasePartText(state.currentLine, currentPart, splitIndex);
+                        long lineDur = (state.nextLine != null && state.nextLine.timeMs > state.currentLine.timeMs)
+                            ? (state.nextLine.timeMs - state.currentLine.timeMs) : (isSpeedUp ? 2200 : 2800);
+
+                        long phraseDuration;
+                        if (splitIndex <= 0) {
+                            phraseDuration = isSpeedUp
+                                ? Math.max(1300, Math.min(2300, (long)(lineDur * 0.80)))
+                                : Math.max(1500, Math.min(2800, lineDur));
+                        } else if (currentPart == 0) {
+                            long partDur = (long) (lineDur * splitProgress);
+                            phraseDuration = Math.max(900, Math.min(2200, (long)(partDur * 1.15)));
+                        } else {
+                            long partDur = (long) (lineDur * (1.0f - splitProgress));
+                            phraseDuration = isSpeedUp
+                                ? Math.max(900, Math.min(2000, (long)(partDur * 0.85)))
+                                : Math.max(1000, Math.min(2400, partDur));
+                        }
+
+                        spawnPhrase(phraseText, phraseDuration, mc);
+                    }
                 }
             }
 
@@ -215,7 +268,7 @@ public final class LyricsRenderer {
 
             if (totalOnScreen < MAX_TOTAL_SCREEN_ITEMS && (now - lastCenterNoteTime >= emojiInterval)) {
                 lastCenterNoteTime = now;
-                spawnIdleParticle(configuredColor, mc);
+                spawnIdleParticle(mc);
             }
         }
 
@@ -223,6 +276,7 @@ public final class LyricsRenderer {
 
         // 3. Render all active 3D floating words and notes (Floating mode)
         Quaternionf invRot = new Quaternionf(camera.rotation()).conjugate();
+        Vector3f camSpace = new Vector3f();
         double fovRad = Math.toRadians(mc.options.fov().get());
         double halfScreenH = screenH / 2.0;
         double halfScreenW = screenW / 2.0;
@@ -253,7 +307,7 @@ public final class LyricsRenderer {
             double cdy = curY - camPos.y;
             double cdz = curZ - camPos.z;
 
-            Vector3f camSpace = invRot.transform(new Vector3f((float) cdx, (float) cdy, (float) cdz));
+            invRot.transform(camSpace.set((float) cdx, (float) cdy, (float) cdz));
             float depth = -camSpace.z;
             if (depth <= 0.45f) continue; // Behind camera or clipping into player face
 
@@ -286,13 +340,12 @@ public final class LyricsRenderer {
 
             int col = (alpha << 24) | (configuredColor & 0x00FFFFFF);
 
-            if (fw.lines != null && fw.lines.size() > 1) {
+            if (fw.lineComps != null && fw.lineComps.size() > 1) {
                 int maxLineW = 0;
-                List<Component> lineComps = new ArrayList<>(fw.lines.size());
-                for (String ln : fw.lines) {
-                    Component lc = Component.literal(ln);
-                    lineComps.add(lc);
-                    int lw = font.width(lc);
+                int[] lineWidths = new int[fw.lineComps.size()];
+                for (int i = 0; i < fw.lineComps.size(); i++) {
+                    int lw = font.width(fw.lineComps.get(i));
+                    lineWidths[i] = lw;
                     if (lw > maxLineW) maxLineW = lw;
                 }
 
@@ -310,19 +363,16 @@ public final class LyricsRenderer {
                 g.pose().scale(scale, scale);
 
                 int lineStep = font.lineHeight + 3;
-                int totalH = fw.lines.size() * lineStep - 3;
+                int totalH = fw.lineComps.size() * lineStep - 3;
                 int startY = -totalH / 2;
 
-                for (int i = 0; i < lineComps.size(); i++) {
-                    Component lc = lineComps.get(i);
-                    int lw = font.width(lc);
-                    g.text(font, lc, -lw / 2, startY + i * lineStep, col, true);
+                for (int i = 0; i < fw.lineComps.size(); i++) {
+                    g.text(font, fw.lineComps.get(i), -lineWidths[i] / 2, startY + i * lineStep, col, true);
                 }
 
                 g.pose().popMatrix();
             } else {
-                Component textComp = Component.literal(fw.text);
-                int wW = font.width(textComp);
+                int wW = font.width(fw.singleComp);
 
                 float maxAllowedW = screenW * (fw.isPhrase ? 0.68f : 0.38f);
                 float screenWPixels = wW * scale;
@@ -337,11 +387,70 @@ public final class LyricsRenderer {
                 }
                 g.pose().scale(scale, scale);
 
-                g.text(font, textComp, -wW / 2, -font.lineHeight / 2, col, true);
+                g.text(font, fw.singleComp, -wW / 2, -font.lineHeight / 2, col, true);
 
                 g.pose().popMatrix();
             }
         }
+    }
+
+    private static int findPhraseSplitIndex(LyricsManager.LyricLine line) {
+        if (line == null || line.words == null) return -1;
+        int n = line.words.size();
+        if (n < 4 || line.text.length() < 16) return -1;
+
+        int targetMid = n / 2;
+        int minIdx = Math.max(1, n / 3);
+        int maxIdx = Math.min(n - 2, (2 * n + 2) / 3);
+
+        int bestPunctIdx = -1;
+        int bestPunctDist = Integer.MAX_VALUE;
+
+        for (int i = minIdx; i <= maxIdx; i++) {
+            String w = line.words.get(i);
+            if (w.endsWith(",") || w.endsWith(";") || w.endsWith(":") || w.endsWith("—") || w.endsWith("-") || w.endsWith("...")) {
+                int dist = Math.abs(i - targetMid);
+                if (dist < bestPunctDist) {
+                    bestPunctDist = dist;
+                    bestPunctIdx = i + 1; // Split right after word i
+                }
+            }
+        }
+
+        if (bestPunctIdx > 0 && bestPunctIdx < n) {
+            return bestPunctIdx;
+        }
+
+        // Split by character length balance closest to midpoint
+        int totalChars = 0;
+        for (String w : line.words) totalChars += w.length();
+        int halfChars = totalChars / 2;
+
+        int accum = 0;
+        int bestBalanceIdx = targetMid;
+        int bestBalanceDiff = Integer.MAX_VALUE;
+
+        for (int i = 0; i < n - 1; i++) {
+            accum += line.words.get(i).length();
+            int diff = Math.abs(accum - halfChars);
+            if (diff < bestBalanceDiff) {
+                bestBalanceDiff = diff;
+                bestBalanceIdx = i + 1;
+            }
+        }
+
+        return Math.max(1, Math.min(n - 1, bestBalanceIdx));
+    }
+
+    private static String getPhrasePartText(LyricsManager.LyricLine line, int part, int splitIndex) {
+        if (line == null) return "";
+        if (splitIndex <= 0 || line.words == null || splitIndex >= line.words.size()) {
+            return line.text;
+        }
+        List<String> sub = (part == 0)
+            ? line.words.subList(0, splitIndex)
+            : line.words.subList(splitIndex, line.words.size());
+        return String.join(" ", sub).trim();
     }
 
     private static List<String> wrapPhraseLines(String text, int maxCharsPerLine) {
@@ -371,7 +480,7 @@ public final class LyricsRenderer {
         return result;
     }
 
-    private static void spawnWord(String text, int color, float baseScaleMult, long gap, boolean isSpeedUp, Minecraft mc) {
+    private static void spawnWord(String text, float baseScaleMult, long gap, boolean isSpeedUp, Minecraft mc) {
         float lengthScale;
         int len = text.length();
         if (len <= 4) {
@@ -398,7 +507,6 @@ public final class LyricsRenderer {
 
         // Rolling FIFO queue: at most MAX_ACTIVE_WORDS (10) on screen simultaneously.
         // When there is an 11th word, immediately despawn the 1st word that spawned!
-        long now = System.currentTimeMillis();
         List<FloatingWord> activeWords = new ArrayList<>();
         for (FloatingWord fw : floatingWords) {
             if (!fw.isCenterSymbol && !fw.isPhrase && !fw.isFadingOut) {
@@ -503,11 +611,11 @@ public final class LyricsRenderer {
         float roll = sec.rollAngleDeg + (RNG.nextFloat() - 0.5f) * 2.5f;
         float finalScale = baseScaleMult * sec.sizeScale * lengthScale;
 
-        floatingWords.add(new FloatingWord(chosenSectorIdx, yawOffset, pitchOffset, spawnDist,
-            worldX, worldY, worldZ, text, null, color, finalScale, roll, durationMs, false, false));
+        floatingWords.add(new FloatingWord(chosenSectorIdx, yawOffset, pitchOffset,
+            worldX, worldY, worldZ, text, null, finalScale, roll, durationMs, false, false));
     }
 
-    private static void spawnPhrase(String text, int color, long durationMs, Minecraft mc) {
+    private static void spawnPhrase(String text, long durationMs, Minecraft mc) {
         // Fast fade-out of previous phrase (180ms) so phrases don't linger
         for (FloatingWord fw : floatingWords) {
             if (fw.isPhrase) {
@@ -518,8 +626,8 @@ public final class LyricsRenderer {
         var camera = mc.gameRenderer.mainCamera();
         var camPos = camera.position();
 
-        // Split long phrases into multiple wrapped lines (max ~28 chars per line)
-        List<String> wrappedLines = wrapPhraseLines(text, 28);
+        // Split long phrases into multiple wrapped lines (max ~24 chars per line)
+        List<String> wrappedLines = wrapPhraseLines(text, 24);
 
         lastPhrasePosition = (lastPhrasePosition == 0) ? 1 : 0;
         float pitch = (lastPhrasePosition == 0) ? -14.0f : -17.0f;
@@ -532,11 +640,11 @@ public final class LyricsRenderer {
         double worldZ = camPos.z + Math.cos(worldYawRad) * spawnDist;
         double worldY = camPos.y + 2.6;
 
-        floatingWords.add(new FloatingWord(15, yawOffset, pitch, spawnDist,
-            worldX, worldY, worldZ, text, wrappedLines, color, 0.90f, 0.0f, durationMs, false, true));
+        floatingWords.add(new FloatingWord(15, yawOffset, pitch,
+            worldX, worldY, worldZ, text, wrappedLines, 0.90f, 0.0f, durationMs, false, true));
     }
 
-    private static void spawnIdleParticle(int color, Minecraft mc) {
+    private static void spawnIdleParticle(Minecraft mc) {
         int wordCount = 0;
         int idleCount = 0;
         int[] sectorIdleCounts = new int[SECTORS.length];
@@ -586,7 +694,7 @@ public final class LyricsRenderer {
         double worldZ = camPos.z + Math.cos(worldYawRad) * spawnDist;
         double worldY = camPos.y + 1.8 + (Math.abs(pitchOffset) / 26.0) * 1.8;
 
-        floatingWords.add(new FloatingWord(chosenSectorIdx, yawOffset, pitchOffset, spawnDist,
-            worldX, worldY, worldZ, symbol, null, color, 1.05f, roll, duration, true, false));
+        floatingWords.add(new FloatingWord(chosenSectorIdx, yawOffset, pitchOffset,
+            worldX, worldY, worldZ, symbol, null, 1.05f, roll, duration, true, false));
     }
 }

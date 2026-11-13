@@ -46,34 +46,32 @@ public class PlayerRendererMixin {
         float scaleY = 1.0f;
         float scaleZ = 1.0f;
 
-        if (cosMode == 2) {
-            sizeable.wish$setScale(1.0f, 1.0f, 1.0f);
-            return;
+        if (cosMode != 2 && !(cosMode == 1 && !isLocalPlayer)) {
+            if (isCustomPlayer) {
+                scaleX = customData.scaleX();
+                scaleY = customData.scaleY();
+                scaleZ = customData.scaleZ();
+            } else if (isLocalPlayer && ModConfig.INSTANCE.playerSizeEnabled) {
+                scaleX = ModConfig.INSTANCE.playerSizeX;
+                scaleY = ModConfig.INSTANCE.playerSizeY;
+                scaleZ = ModConfig.INSTANCE.playerSizeZ;
+            }
         }
-
-        if (cosMode == 1 && !isLocalPlayer) {
-            sizeable.wish$setScale(1.0f, 1.0f, 1.0f);
-            return;
-        }
-
-        if (!ModConfig.INSTANCE.playerSizeEnabled && !isCustomPlayer) {
-            sizeable.wish$setScale(1.0f, 1.0f, 1.0f);
-            return;
-        }
-
-        if (isCustomPlayer) {
-            scaleX = customData.scaleX();
-            scaleY = customData.scaleY();
-            scaleZ = customData.scaleZ();
-        } else if (isLocalPlayer) {
-            scaleX = ModConfig.INSTANCE.playerSizeX;
-            scaleY = ModConfig.INSTANCE.playerSizeY;
-            scaleZ = ModConfig.INSTANCE.playerSizeZ;
-        }
-
         sizeable.wish$setScale(scaleX, scaleY, scaleZ);
 
-        boolean isGuiOpen = mc.gui.screen() != null && !(mc.gui.screen() instanceof net.minecraft.client.gui.screens.ChatScreen);
+        // Skip Smol People if the player (self or other) already has a modified scale (Wish custom size or vanilla scale)
+        boolean hasModifiedScale = Math.abs(scaleX - 1.0f) > 1e-4f
+                || Math.abs(scaleY - 1.0f) > 1e-4f
+                || Math.abs(scaleZ - 1.0f) > 1e-4f
+                || Math.abs(entity.getScale() - 1.0f) > 1e-4f;
+
+        boolean applySmol = ModConfig.INSTANCE.enableOtherPlayersSize
+                && !hasModifiedScale
+                && (!isLocalPlayer || ModConfig.INSTANCE.smolPeopleIncludeSelf);
+        sizeable.wish$setSmolPeople(applySmol);
+
+        var currentScreen = mc.gui != null ? mc.gui.screen() : null;
+        boolean isGuiOpen = currentScreen != null && !(currentScreen instanceof net.minecraft.client.gui.screens.ChatScreen);
         boolean canRenderNametag = (cosMode == 0 && (isLocalPlayer || isCustomPlayer)) || (cosMode == 1 && isLocalPlayer);
         if (canRenderNametag && !mc.options.getCameraType().isFirstPerson() && !isGuiOpen) {
             if (renderState.nameTag == null) {
@@ -85,10 +83,15 @@ public class PlayerRendererMixin {
             }
         }
 
-        if (sizeable.wish$hasCustomScale() && scaleY != 1.0f && renderState.nameTagAttachment != null) {
+        float effectiveScaleY = scaleY * (applySmol ? 0.5f : 1.0f);
+        if (applySmol) {
+            renderState.shadowRadius *= 0.5f;
+        }
+        if (effectiveScaleY != 1.0f && renderState.nameTagAttachment != null) {
+            double headCompensation = applySmol ? 0.25 : 0.0;
             renderState.nameTagAttachment = new net.minecraft.world.phys.Vec3(
                 renderState.nameTagAttachment.x,
-                renderState.nameTagAttachment.y * scaleY,
+                renderState.nameTagAttachment.y * effectiveScaleY + headCompensation,
                 renderState.nameTagAttachment.z
             );
         }
@@ -97,8 +100,17 @@ public class PlayerRendererMixin {
     @Inject(method = "scale(Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;)V", at = @At("RETURN"))
     private void onScale(AvatarRenderState state, PoseStack poseStack, CallbackInfo ci) {
         if (state instanceof ISizeableState sizeable) {
-            if (sizeable.wish$hasCustomScale()) {
-                poseStack.scale(sizeable.wish$getScaleX(), sizeable.wish$getScaleY(), sizeable.wish$getScaleZ());
+            float sx = sizeable.wish$hasCustomScale() ? sizeable.wish$getScaleX() : 1.0f;
+            float sy = sizeable.wish$hasCustomScale() ? sizeable.wish$getScaleY() : 1.0f;
+            float sz = sizeable.wish$hasCustomScale() ? sizeable.wish$getScaleZ() : 1.0f;
+            if (sizeable.wish$isSmolPeople()) {
+                sx *= 0.5f;
+                sy *= 0.5f;
+                sz *= 0.5f;
+            }
+            if (sx != 1.0f || sy != 1.0f || sz != 1.0f) {
+                // Scaling PoseStack at feet origin ensures third-party cosmetic RenderLayers (e.g. Essential) scale and anchor cleanly
+                poseStack.scale(sx, sy, sz);
             }
             int cosMode = ModConfig.INSTANCE.cosmeticVisibility;
             boolean doSpin = false;

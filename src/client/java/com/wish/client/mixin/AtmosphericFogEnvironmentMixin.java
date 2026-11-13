@@ -1,6 +1,7 @@
 package com.wish.client.mixin;
 
 import com.wish.client.config.ModConfig;
+import com.wish.client.features.visual.CustomSkyManager;
 import net.minecraft.client.Camera;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.fog.environment.AtmosphericFogEnvironment;
@@ -19,8 +20,7 @@ public class AtmosphericFogEnvironmentMixin {
     )
     private void wish$overrideFogBaseColor(ClientLevel level, Camera camera, int renderDistance, float partialTick, CallbackInfoReturnable<Integer> cir) {
         if (ModConfig.INSTANCE.enableCustomSky) {
-            // Pitch-black horizon fog matching the pitch-black sky
-            cir.setReturnValue(0xFF000000);
+            cir.setReturnValue(CustomSkyManager.getSkyColor());
         }
     }
 }

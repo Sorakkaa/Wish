@@ -28,6 +28,7 @@ run/
 logs/
 
 # java / crash
+*.log
 hs_err_*.log
 replay_*.log
 *.hprof
@@ -72,5 +73,6 @@ config/*.ps1
 config/*.txt
 *.class
 .github/
+.agents/
 mc-sources/
 odin_src/

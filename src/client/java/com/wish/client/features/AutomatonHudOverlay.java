@@ -33,6 +33,7 @@ public final class AutomatonHudOverlay {
     public static void render(GuiGraphicsExtractor g, Minecraft mc, int screenW, int screenH, int mx, int my, boolean inScreen) {
         if (!ModConfig.INSTANCE.enableMiningAutomaton || !ModConfig.INSTANCE.enableAutomatonTracker) {
             isModeHovered = false;
+            isResetHovered = false;
             isSellHovered = false;
             return;
         }
@@ -40,6 +41,7 @@ public final class AutomatonHudOverlay {
         var auto = HudStateContainer.getAutomatonSnapshot();
         if (!auto.isVisible()) {
             isModeHovered = false;
+            isResetHovered = false;
             isSellHovered = false;
             return;
         }

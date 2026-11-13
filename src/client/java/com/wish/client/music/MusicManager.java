@@ -8,7 +8,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -18,15 +17,15 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 public final class MusicManager {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("Wish-Music");
     private static final String APP_ID = "wish";
-    private static long lastRequestTime = 0;
+    private static volatile long lastRequestTime = 0;
     private static volatile boolean isPairingActive = false;
     private static volatile boolean isFetchingState = false;
-    public static String currentSongText = null;
 
     private MusicManager() {}
 
@@ -36,11 +35,7 @@ public final class MusicManager {
     }
 
     public static void fetchAndSendSongWithDelay(String chatPrefix) {
-        String provider = ModConfig.INSTANCE.musicProvider;
-        if (provider == null || "None".equalsIgnoreCase(provider)) {
-            WishClient.sendLocalChatMessage("§d§l🎵 WISH §8» §cNo music platform selected! Please go to /wish -> Song Config to select your platform.");
-            return;
-        }
+        String provider = ModConfig.INSTANCE.musicProvider != null ? ModConfig.INSTANCE.musicProvider.trim() : "None";
 
         long now = System.currentTimeMillis();
         if (now - lastRequestTime < 2500 || isFetchingState) {
@@ -53,9 +48,8 @@ public final class MusicManager {
             try {
                 Thread.sleep(1500); 
 
-                
-                // 1. Direct check: If 3D Lyrics is active, use the current playing song
-                if (!ModConfig.INSTANCE.lyricsDemoMode) {
+                // 1. Direct check: If 3D Lyrics is active and currently playing, use the cached playing song
+                if (ModConfig.INSTANCE.enableLyrics && !ModConfig.INSTANCE.lyricsDemoMode && com.wish.client.features.visual.LyricsManager.isPlaying) {
                     String lTitle = com.wish.client.features.visual.LyricsManager.getCurrentTitle();
                     String lArtist = com.wish.client.features.visual.LyricsManager.getCurrentArtist();
                     if (lTitle != null && !lTitle.trim().isEmpty()) {
@@ -90,14 +84,16 @@ public final class MusicManager {
                     }
                 }
 
-                if ("YTM".equalsIgnoreCase(provider)) {
+                if ("YTM".equalsIgnoreCase(provider) || "YouTube Music".equalsIgnoreCase(provider)) {
                     if (ModConfig.INSTANCE.authToken == null) {
-                        WishClient.sendLocalChatMessage("§e[Wish] §cYou haven't connected your API! Click 'Pair API' in /wish");
+                        WishClient.sendLocalChatMessage("§e[Wish] §cNo song detected on YouTube Music (or pair API in /wish).");
                     } else if (apiConnectionFailed) {
-                        WishClient.sendLocalChatMessage("§e[Wish] §cFailed to connect to YTM API! Is the Companion App open?");
+                        WishClient.sendLocalChatMessage("§e[Wish] §cFailed to connect to YTM API! Is YouTube Music open?");
                     } else {
                         WishClient.sendLocalChatMessage("§e[Wish] §cNo song currently playing on YTM. Start your music and try again!");
                     }
+                } else if ("None".equalsIgnoreCase(provider) || provider.isEmpty()) {
+                    WishClient.sendLocalChatMessage("§e[Wish] §cNo song detected on Spotify, Deezer, or YouTube Music. Start your music and try again!");
                 } else {
                     WishClient.sendLocalChatMessage("§e[Wish] §cNo song currently playing on " + provider + ". Start your music and try again!");
                 }
@@ -111,7 +107,7 @@ public final class MusicManager {
     }
 
     public static String fetchSystemMediaSong() {
-        if (!ModConfig.INSTANCE.lyricsDemoMode) {
+        if (ModConfig.INSTANCE.enableLyrics && !ModConfig.INSTANCE.lyricsDemoMode && com.wish.client.features.visual.LyricsManager.isPlaying) {
             String lTitle = com.wish.client.features.visual.LyricsManager.getCurrentTitle();
             String lArtist = com.wish.client.features.visual.LyricsManager.getCurrentArtist();
             if (lTitle != null && !lTitle.trim().isEmpty()) {
@@ -122,22 +118,30 @@ public final class MusicManager {
         try {
             String os = System.getProperty("os.name").toLowerCase();
             if (os.contains("linux")) {
-                String targetPlayers = "spotify,ytmdesktop,youtube-music,youtubemusic,deezer";
+                String targetPlayers = "spotify,spotifyd,spotify_player,ncspot,ytmdesktop,youtube-music,youtubemusic,youtube_music,deezer,deezer-desktop,deezplayer";
                 String prov = ModConfig.INSTANCE.musicProvider;
                 if ("Spotify".equalsIgnoreCase(prov)) {
-                    targetPlayers = "spotify,spotifyd,spotify_player";
-                } else if ("YTM".equalsIgnoreCase(prov)) {
+                    targetPlayers = "spotify,spotifyd,spotify_player,ncspot";
+                } else if ("YTM".equalsIgnoreCase(prov) || "YouTube Music".equalsIgnoreCase(prov)) {
                     targetPlayers = "ytmdesktop,youtube-music,youtubemusic,youtube_music";
                 } else if ("Deezer".equalsIgnoreCase(prov)) {
                     targetPlayers = "deezer,deezer-desktop,deezplayer";
                 }
 
-                ProcessBuilder pb = new ProcessBuilder("bash", "-c", "playerctl -p " + targetPlayers + " metadata --format '{{title}} - {{artist}}' 2>/dev/null | grep -v '^ - $' | head -n 1");
+                ProcessBuilder pb = new ProcessBuilder("playerctl", "-p", targetPlayers, "metadata", "--format", "{{title}} - {{artist}}");
                 Process p = pb.start();
                 try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
-                    String line = br.readLine();
-                    if (line != null && !line.trim().isEmpty() && !line.trim().equals("-")) {
-                        return line.trim();
+                    boolean finished = p.waitFor(2000, TimeUnit.MILLISECONDS);
+                    if (!finished) {
+                        p.destroyForcibly();
+                        return null;
+                    }
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        String trimmed = line.trim();
+                        if (!trimmed.isEmpty() && !trimmed.equals("-")) {
+                            return trimmed;
+                        }
                     }
                 } finally {
                     if (p.isAlive()) {
@@ -145,34 +149,43 @@ public final class MusicManager {
                     }
                 }
             } else if (os.contains("win")) {
+                String providerParam = ModConfig.INSTANCE.musicProvider != null && !ModConfig.INSTANCE.musicProvider.equalsIgnoreCase("None")
+                    ? ModConfig.INSTANCE.musicProvider.trim() : "ALL";
                 Path scriptPath = Path.of("config", "wish", "get_song.ps1");
                 com.wish.client.features.visual.LyricsManager.ensureScriptExtracted(scriptPath);
 
-                if (!Files.exists(scriptPath)) return null;
+                if (Files.exists(scriptPath)) {
+                    ProcessBuilder pb = new ProcessBuilder(
+                        com.wish.client.features.visual.LyricsManager.getPowerShellExecutable(),
+                        "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                        "-File", scriptPath.toAbsolutePath().toString(),
+                        "-provider", providerParam
+                    );
+                    Process p = pb.start();
+                    try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+                        boolean finished = p.waitFor(3000, java.util.concurrent.TimeUnit.MILLISECONDS);
+                        if (finished) {
+                            String line;
+                            while ((line = br.readLine()) != null) {
+                                String trimmed = line.trim();
+                                if (!trimmed.isEmpty() && !trimmed.startsWith("DEBUG:")) {
+                                    return trimmed;
+                                }
+                            }
+                        } else {
+                            p.destroyForcibly();
+                        }
+                    } finally {
+                        if (p.isAlive()) {
+                            p.destroyForcibly();
+                        }
+                    }
+                }
 
-                String providerParam = ModConfig.INSTANCE.musicProvider != null && !ModConfig.INSTANCE.musicProvider.equalsIgnoreCase("None")
-                    ? ModConfig.INSTANCE.musicProvider : "ALL";
-                ProcessBuilder pb = new ProcessBuilder(
-                    com.wish.client.features.visual.LyricsManager.getPowerShellExecutable(),
-                    "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                    "-File", scriptPath.toAbsolutePath().toString(),
-                    "-provider", providerParam
-                );
-                Process p = pb.start();
-                try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
-                    boolean finished = p.waitFor(3000, java.util.concurrent.TimeUnit.MILLISECONDS);
-                    if (!finished) {
-                        p.destroyForcibly();
-                        return null;
-                    }
-                    String line = br.readLine();
-                    if (line != null && !line.trim().isEmpty()) {
-                        return line.trim();
-                    }
-                } finally {
-                    if (p.isAlive()) {
-                        p.destroyForcibly();
-                    }
+                // Fallback to native Win32 JNA window title detection if PowerShell returned nothing
+                String[] jnaTrack = com.wish.client.features.visual.LyricsManager.detectWindowsTrackViaJna(providerParam);
+                if (jnaTrack != null && jnaTrack.length >= 3 && !jnaTrack[2].isEmpty()) {
+                    return !jnaTrack[1].isEmpty() ? jnaTrack[2] + " - " + jnaTrack[1] : jnaTrack[2];
                 }
             }
         } catch (Exception e) {
@@ -209,9 +222,11 @@ public final class MusicManager {
         isPairingActive = true;
 
         CompletableFuture.runAsync(() -> {
+            boolean handedOff = false;
+            HttpURLConnection conn = null;
             try {
                 URL url = URI.create(getBaseUrl() + "/auth/requestcode").toURL();
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection(java.net.Proxy.NO_PROXY);
+                conn = (HttpURLConnection) url.openConnection(java.net.Proxy.NO_PROXY);
                 conn.setRequestMethod("POST");
                 conn.setDoOutput(true);
                 conn.setConnectTimeout(2000);
@@ -228,23 +243,29 @@ public final class MusicManager {
                     os.write(jsonBody.toString().getBytes(StandardCharsets.UTF_8));
                 }
 
-                if (conn.getResponseCode() == 200) {
+                int codeStatus = conn.getResponseCode();
+                if (codeStatus == 200) {
                     String respStr = readResponse(conn);
                     JsonObject respJson = JsonParser.parseString(respStr).getAsJsonObject();
                     if (respJson.has("code")) {
                         String code = respJson.get("code").getAsString();
                         WishClient.sendLocalChatMessage("§d§l🎵 WISH §8» §fCode: §e§l" + code + " §8(§aApprove in " + provider + " popup!§8)");
+                        handedOff = true;
                         exchangeCodeForToken(code);
                         return;
                     }
                 } else {
-                    WishClient.sendLocalChatMessage("§d§l🎵 WISH §8» §cFailed to request " + provider + " (code " + conn.getResponseCode() + ")");
+                    WishClient.sendLocalChatMessage("§d§l[Wish] §cFailed to request " + provider + " (code " + codeStatus + ")");
                 }
             } catch (Exception e) {
                 LOGGER.error("Failed to pair with music provider " + provider, e);
-                WishClient.sendLocalChatMessage("§d§l🎵 WISH §8» §cError: Make sure " + provider + " application is open!");
+                WishClient.sendLocalChatMessage("§d§l[Wish] §cError: Make sure " + provider + " application is open!");
+            } finally {
+                if (conn != null) conn.disconnect();
+                if (!handedOff) {
+                    isPairingActive = false;
+                }
             }
-            isPairingActive = false;
         });
     }
 
@@ -345,8 +366,6 @@ public final class MusicManager {
             }
 
             if (!title.isEmpty()) {
-                currentSongText = "§f🎵 §b" + title + (artist.isEmpty() ? "" : " §7- " + artist);
-                WishClient.currentSongText = currentSongText;
                 String format = ModConfig.INSTANCE.messageFormat;
                 if (format == null || format.trim().isEmpty()) {
                     format = "{title} - {artist}";
@@ -367,8 +386,6 @@ public final class MusicManager {
     }
 
     private static void sendWinMediaSongToChat(String winMediaSong, String chatPrefix) {
-        currentSongText = "§f🎵 §b" + winMediaSong;
-        WishClient.currentSongText = currentSongText;
         String format = ModConfig.INSTANCE.messageFormat;
         if (format == null || format.trim().isEmpty()) {
             format = "{title} - {artist}";

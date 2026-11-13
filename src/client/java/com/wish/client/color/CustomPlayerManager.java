@@ -22,9 +22,11 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class CustomPlayerManager {
 
@@ -47,9 +49,6 @@ public final class CustomPlayerManager {
             float scaleZ,
             float spinSpeedY
     ) {
-        public boolean hasCustomScale() {
-            return scaleX != 1.0f || scaleY != 1.0f || scaleZ != 1.0f;
-        }
     }
 
     private static volatile Map<UUID, CustomPlayerData> byUuid = Collections.emptyMap();
@@ -57,12 +56,8 @@ public final class CustomPlayerManager {
     private static volatile List<CustomPlayerData> allPlayers = Collections.emptyList();
 
     private static volatile long lastFetchTimeMs = 0L;
-    private static volatile boolean fetchInProgress = false;
+    private static final AtomicBoolean fetchInProgress = new AtomicBoolean(false);
     private static boolean initialized = false;
-
-    static {
-        loadEmbeddedFallback();
-    }
 
     private CustomPlayerManager() {}
 
@@ -71,20 +66,20 @@ public final class CustomPlayerManager {
         initialized = true;
         loadEmbeddedFallback();
         loadDevFileIfPresent();
-        fetchAsync(false);
+        fetchAsync();
     }
 
     public static void onClientTick() {
         long now = System.currentTimeMillis();
-        if (now - lastFetchTimeMs >= REFRESH_INTERVAL_MS && !fetchInProgress) {
-            fetchAsync(false);
+        if (now - lastFetchTimeMs >= REFRESH_INTERVAL_MS && !fetchInProgress.get()) {
+            fetchAsync();
         }
     }
 
     public static void onPlayerJoin() {
         long now = System.currentTimeMillis();
-        if (now - lastFetchTimeMs >= JOIN_COOLDOWN_MS && !fetchInProgress) {
-            fetchAsync(false);
+        if (now - lastFetchTimeMs >= JOIN_COOLDOWN_MS && !fetchInProgress.get()) {
+            fetchAsync();
         }
     }
 
@@ -124,16 +119,16 @@ public final class CustomPlayerManager {
         return false;
     }
 
-    public static void fetchAsync(boolean notifyInChat) {
-        if (fetchInProgress) return;
-        fetchInProgress = true;
+    public static void fetchAsync() {
+        if (!fetchInProgress.compareAndSet(false, true)) return;
         lastFetchTimeMs = System.currentTimeMillis();
 
         CompletableFuture.runAsync(() -> {
+            HttpURLConnection conn = null;
             try {
                 String urlWithCacheBust = REMOTE_URL + "?t=" + (System.currentTimeMillis() / 30000L);
                 URL url = URI.create(urlWithCacheBust).toURL();
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
                 conn.setRequestProperty("User-Agent", "Wish-Client/" + WishClient.MOD_VERSION);
                 conn.setRequestProperty("Cache-Control", "no-cache, no-store, must-revalidate");
@@ -150,38 +145,17 @@ public final class CustomPlayerManager {
                             sb.append(line).append('\n');
                         }
                     }
-                    boolean ok = parseAndApply(sb.toString(), false);
-                    // In dev environment, also overlay local file if newer/being edited
-                    loadDevFileIfPresent();
-                    if (notifyInChat) {
-                        if (ok) {
-                            WishClient.sendLocalChatMessage("Custom players reloaded from GitHub! (" + allPlayers.size() + " players)");
-                        } else {
-                            WishClient.sendLocalChatMessage("§cFailed to parse custom_players.json from GitHub.");
-                        }
-                    }
-                } else {
-                    boolean loadedDev = loadDevFileIfPresent();
-                    if (notifyInChat) {
-                        if (loadedDev) {
-                            WishClient.sendLocalChatMessage("Custom players reloaded from local dev file! (" + allPlayers.size() + " players)");
-                        } else {
-                            WishClient.sendLocalChatMessage("§cGitHub custom_players.json returned HTTP " + code + " (using cached list: " + allPlayers.size() + " players).");
-                        }
-                    }
+                    parseAndApply(sb.toString(), false);
                 }
+                loadDevFileIfPresent();
             } catch (Exception e) {
                 LOGGER.debug("[Wish] Could not fetch remote custom_players.json: {}", e.getMessage());
-                boolean loadedDev = loadDevFileIfPresent();
-                if (notifyInChat) {
-                    if (loadedDev) {
-                        WishClient.sendLocalChatMessage("Custom players reloaded from local dev file! (" + allPlayers.size() + " players)");
-                    } else {
-                        WishClient.sendLocalChatMessage("§cCould not reach GitHub for custom_players.json (using cached list).");
-                    }
-                }
+                loadDevFileIfPresent();
             } finally {
-                fetchInProgress = false;
+                if (conn != null) {
+                    conn.disconnect();
+                }
+                fetchInProgress.set(false);
             }
         });
     }
@@ -217,11 +191,11 @@ public final class CustomPlayerManager {
                 
                 boolean badge = true;
                 String badgeIcon = "\uE001";
-                if (obj.has("badge")) {
+                if (obj.has("badge") && !obj.get("badge").isJsonNull()) {
                     if (obj.get("badge").isJsonPrimitive() && obj.get("badge").getAsJsonPrimitive().isBoolean()) {
                         badge = obj.get("badge").getAsBoolean();
                     } else {
-                        String bStr = obj.get("badge").getAsString();
+                        String bStr = getString(obj, "badge", "");
                         if ("false".equalsIgnoreCase(bStr) || "off".equalsIgnoreCase(bStr) || "none".equalsIgnoreCase(bStr)) {
                             badge = false;
                         } else {
@@ -232,9 +206,9 @@ public final class CustomPlayerManager {
                         }
                     }
                 }
-                if (obj.has("badgeIcon")) {
-                    String bStr = obj.get("badgeIcon").getAsString();
-                    if ("shield".equalsIgnoreCase(bStr) || "square".equalsIgnoreCase(bStr) || "2".equals(bStr) || bStr.contains("\uE002")) {
+                String bIconStr = getString(obj, "badgeIcon", null);
+                if (bIconStr != null) {
+                    if ("shield".equalsIgnoreCase(bIconStr) || "square".equalsIgnoreCase(bIconStr) || "2".equals(bIconStr) || bIconStr.contains("\uE002")) {
                         badgeIcon = "\uE002";
                     }
                 }
@@ -249,7 +223,7 @@ public final class CustomPlayerManager {
                 );
 
                 newByUuid.put(uuid, data);
-                newByName.put(name.toLowerCase(), data);
+                newByName.put(name.toLowerCase(Locale.ROOT), data);
             }
 
             if (newByUuid.isEmpty()) {
@@ -277,18 +251,14 @@ public final class CustomPlayerManager {
             if (byId != null) return byId;
         }
         if (name != null && !name.isEmpty()) {
-            return byNameLower.get(name.toLowerCase());
+            return byNameLower.get(name.toLowerCase(Locale.ROOT));
         }
         return null;
     }
 
-    public static CustomPlayerData getPlayerByUuid(UUID uuid) {
-        return uuid != null ? byUuid.get(uuid) : null;
-    }
-
     public static CustomPlayerData getPlayerByName(String name) {
         if (name == null || name.isEmpty()) return null;
-        return byNameLower.get(name.toLowerCase());
+        return byNameLower.get(name.toLowerCase(Locale.ROOT));
     }
 
     private static String sanitizeString(String s, int maxLen) {
@@ -333,15 +303,6 @@ public final class CustomPlayerManager {
             try {
                 float v = obj.get(key).getAsFloat();
                 return Float.isFinite(v) ? v : def;
-            } catch (Exception ignored) {}
-        }
-        return def;
-    }
-
-    private static boolean getBoolean(JsonObject obj, String key, boolean def) {
-        if (obj.has(key) && !obj.get(key).isJsonNull()) {
-            try {
-                return obj.get(key).getAsBoolean();
             } catch (Exception ignored) {}
         }
         return def;

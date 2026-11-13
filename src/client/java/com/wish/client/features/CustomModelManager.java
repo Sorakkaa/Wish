@@ -80,12 +80,10 @@ public class CustomModelManager {
         }
     }
 
-    public static final List<SkyblockItem> SKYBLOCK_PRESETS = new ArrayList<>();
     public static final Map<String, SkyblockItem> SKYBLOCK_MAP = new HashMap<>();
 
     private static void registerSb(String id, String name, Item item, String color) {
         SkyblockItem sb = new SkyblockItem(id, name, item, color);
-        SKYBLOCK_PRESETS.add(sb);
         SKYBLOCK_MAP.put(id.toUpperCase(Locale.ROOT), sb);
     }
 
@@ -298,21 +296,6 @@ public class CustomModelManager {
         return (data != null && !data.id.isEmpty()) ? data.id : null;
     }
 
-    public static String getSkyblockUuid(ItemStack stack) {
-        SkyblockData data = extractSkyblockData(stack);
-        return (data != null && !data.uuid.isEmpty()) ? data.uuid : null;
-    }
-
-    public static String getItemId(ItemStack stack) {
-        if (stack == null || stack.isEmpty()) return "";
-        SkyblockData data = extractSkyblockData(stack);
-        if (data != null && !data.id.isEmpty()) {
-            return data.id;
-        }
-        Identifier id = BuiltInRegistries.ITEM.getKey(stack.getItem());
-        return id != null ? id.toString() : "";
-    }
-
     public static String getItemTargetKey(ItemStack stack) {
         if (stack == null || stack.isEmpty()) return "";
         SkyblockData data = extractSkyblockData(stack);
@@ -335,10 +318,6 @@ public class CustomModelManager {
             return "§e" + data.id;
         }
         return stack.getHoverName().getString();
-    }
-
-    public static ItemStack createItemStackForModel(String modelId) {
-        return createItemStackForModel(modelId, null);
     }
 
     public static ItemStack createItemStackForModel(String modelId, ItemStack fallbackStack) {
@@ -471,10 +450,11 @@ public class CustomModelManager {
                 replacementCache.put(stack, result);
                 return result;
             }
+            if (sbData != null && (!sbData.id.isEmpty() || !sbData.uuid.isEmpty())) {
+                replacementCache.put(stack, stack);
+            }
         } catch (Exception ignored) {}
 
-        
-        replacementCache.put(stack, stack);
         return stack;
     }
 
@@ -490,6 +470,7 @@ public class CustomModelManager {
             overrides.put(targetId, modelId.trim());
         }
         replacementCache.clear();
+        sbDataCache.clear();
         saveJson();
     }
 
@@ -516,6 +497,7 @@ public class CustomModelManager {
         glowOverrides.remove(targetId.toUpperCase(Locale.ROOT));
         glowOverrides.remove(targetId.toLowerCase(Locale.ROOT));
         replacementCache.clear();
+        sbDataCache.clear();
         saveJson();
     }
 
@@ -539,18 +521,7 @@ public class CustomModelManager {
             glowOverrides.put(targetKey, glow);
         }
         replacementCache.clear();
-        saveJson();
-    }
-
-    public static synchronized void clearAllOverrides() {
-        overrides.clear();
-        glowOverrides.clear();
-        replacementCache.clear();
         sbDataCache.clear();
         saveJson();
-    }
-
-    public static synchronized Map<String, String> getAllOverrides() {
-        return new LinkedHashMap<>(overrides);
     }
 }

@@ -49,7 +49,9 @@ A modern, high-performance Fabric client mod designed for **Hypixel Skyblock** u
 
 ### 🌌 Visual & Environment Controls
 - **Time Changer**: Set custom client-side daytime/nighttime (0-24,000 ticks) with instant live preview and optional time freeze.
-- **Custom Sky**: Deep space pitch-black sky dome and horizon fog while preserving the sun and moon.
+- **Weather Changer**: Client-side 3D rain and snow simulation up to 60 blocks with `64x64` custom textures, particle count/size sliders, block collision splashes, and dynamic shifting wind.
+- **Custom Sky**: Replace the sky dome and horizon fog with custom atmospheres (*Black Sky*, *Lofi Dusk*, *Midnight Breeze*, *Cloudy Pastel*, *Sunset Clouds*, *Ocean Mirage*, *Sakura Twilight*), with optional star, sun/moon, and slow rotation toggles.
+- **Smol People**: Classic mini-player scaling with oversized heads and Essential cosmetics compatibility.
 
 ### 💬 Social & Music Chat Commands
 - `!song`: Share your currently playing track directly to Party (`/pc`), Guild (`/gc`), or All Chat (`/ac`).
@@ -71,7 +73,7 @@ A modern, high-performance Fabric client mod designed for **Hypixel Skyblock** u
 
 1. Install **Fabric Loader** (version `0.19.5` or newer).
 2. Ensure you are using **Minecraft 26.2** and **Java 25+**.
-3. Download the latest `wish-1.1.2.jar` from the [Releases](https://github.com/Sorakkaa/Wish/releases) page.
+3. Download the latest `wish-1.1.4.jar` from the [Releases](https://github.com/Sorakkaa/Wish/releases) page.
 4. Place the jar into your `.minecraft/mods` folder along with **Fabric API**.
 5. Launch your game and type `/wish` to configure your options!
 
@@ -90,7 +92,7 @@ cd Wish
 ./gradlew build
 ```
 
-The compiled mod jar will be in `build/libs/wish-1.1.2.jar`.
+The compiled mod jar will be in `build/libs/wish-1.1.4.jar`.
 
 ---
 

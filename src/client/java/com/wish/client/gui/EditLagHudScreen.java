@@ -13,8 +13,8 @@ public class EditLagHudScreen extends Screen {
     private int draggingId = -1; 
     private int dragOffsetX = 0;
     private int dragOffsetY = 0;
-    private final String mockText = "1000ms";
-    private final String[] mockAutoLines = {
+    private static final String MOCK_TEXT = "1000ms";
+    private static final String[] MOCK_AUTO_LINES = {
         "Automaton Tracker",
         "Kills: 45 (180/h)",
         "Profit: 1.25M (5.00M/h)",
@@ -29,24 +29,6 @@ public class EditLagHudScreen extends Screen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor g, int mx, int my, float pt) {
         super.extractRenderState(g, mx, my, pt);
-
-        // Process active dragging directly in render loop for instant responsiveness
-        if (draggingId != -1) {
-            long window = Minecraft.getInstance().getWindow().handle();
-            if (org.lwjgl.glfw.GLFW.glfwGetMouseButton(window, org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_LEFT) == org.lwjgl.glfw.GLFW.GLFW_PRESS) {
-                if (draggingId == 0) {
-                    ModConfig.INSTANCE.lagHudX = (int) (mx - dragOffsetX);
-                    ModConfig.INSTANCE.lagHudY = (int) (my - dragOffsetY);
-                } else if (draggingId == 2) {
-                    ModConfig.INSTANCE.automatonHudX = (int) (mx - dragOffsetX);
-                    ModConfig.INSTANCE.automatonHudY = (int) (my - dragOffsetY);
-                }
-            } else {
-                draggingId = -1;
-                setDragging(false);
-                ModConfig.INSTANCE.save();
-            }
-        }
         
         g.fill(0, 0, this.width, this.height, 0x44000000);
 
@@ -68,8 +50,47 @@ public class EditLagHudScreen extends Screen {
         int hintW = font.width(hint);
         g.text(font, hint, (this.width - hintW) / 2, 20, 0xFFFFFF);
 
-        renderHudBox(g, font, mx, my, ModConfig.INSTANCE.lagHudX, ModConfig.INSTANCE.lagHudY, ModConfig.INSTANCE.lagHudScale, mockText, 0);
+        renderHudBox(g, font, mx, my, ModConfig.INSTANCE.lagHudX, ModConfig.INSTANCE.lagHudY, ModConfig.INSTANCE.lagHudScale, MOCK_TEXT, 0);
         renderAutoHudBox(g, font, mx, my, ModConfig.INSTANCE.automatonHudX, ModConfig.INSTANCE.automatonHudY, ModConfig.INSTANCE.automatonHudScale);
+        renderBossHudBox(g, font, mx, my, ModConfig.INSTANCE.bossHudX, ModConfig.INSTANCE.bossHudY, ModConfig.INSTANCE.bossHudScale);
+    }
+
+    private void renderBossHudBox(GuiGraphicsExtractor g, net.minecraft.client.gui.Font font, int mx, int my, int x, int y, float scale) {
+        if (scale <= 0.1f) scale = 1.0f;
+        net.minecraft.network.chat.Component line1 = Component.literal("Boss Spawn").withStyle(s -> s.withColor(0xFFFF55FF).withBold(true));
+        net.minecraft.network.chat.Component line2 = Component.literal("Player").withStyle(s -> s.withColor(0xFF55FF55).withBold(false));
+        int w1 = font.width(line1);
+        int w2 = font.width(line2);
+        int padX = 8;
+        int padY = 5;
+        int cardW = Math.max(w1, w2) + padX * 2;
+        int cardH = font.lineHeight * 2 + 2 + padY * 2;
+        int boxW = (int) (cardW * scale);
+        int boxH = (int) (cardH * scale);
+
+        boolean hovering = mx >= x - 2 && mx <= x + boxW + 2 && my >= y - 2 && my <= y + boxH + 2;
+        if (hovering || draggingId == 3) {
+            int colHudGuide = 0x33AAAAAA;
+            g.fill(x, 0, x + 1, g.guiHeight(), colHudGuide);
+            g.fill(x + boxW, 0, x + boxW + 1, g.guiHeight(), colHudGuide);
+            g.fill(0, y, g.guiWidth(), y + 1, colHudGuide);
+            g.fill(0, y + boxH, g.guiWidth(), y + boxH + 1, colHudGuide);
+            g.fill(x - 2, y - 2, x + boxW + 2, y + boxH + 2, 0x44FFFFFF);
+        }
+
+        g.pose().pushMatrix();
+        g.pose().translate(x, y);
+        g.pose().scale(scale, scale);
+
+        g.text(font, line1, (cardW - w1) / 2, padY, 0xFFFFFFFF);
+        g.text(font, "Player", (cardW - w2) / 2, padY + font.lineHeight + 2, 0xFF55FF55);
+
+        g.pose().popMatrix();
+
+        if (hovering || draggingId == 3) {
+            String scaleHint = String.format(java.util.Locale.US, "Scale: %.1fx", scale);
+            g.text(font, scaleHint, x, y + boxH + 4, 0xFFAAAAAA);
+        }
     }
     
     private void renderHudBox(GuiGraphicsExtractor g, net.minecraft.client.gui.Font font, int mx, int my, int x, int y, float scale, String text, int id) {
@@ -80,22 +101,21 @@ public class EditLagHudScreen extends Screen {
         
         int textW = (int) (cardW * scale);
         int textH = (int) (cardH * scale);
-        int leftX = x;
         
-        boolean hovering = mx >= leftX - 2 && mx <= leftX + textW + 2 && my >= y - 2 && my <= y + textH + 2;
+        boolean hovering = mx >= x - 2 && mx <= x + textW + 2 && my >= y - 2 && my <= y + textH + 2;
 
         if (hovering || draggingId == id) {
             int colHudGuide = 0x33AAAAAA;
-            g.fill(leftX, 0, leftX + 1, g.guiHeight(), colHudGuide);
-            g.fill(leftX + textW, 0, leftX + textW + 1, g.guiHeight(), colHudGuide);
+            g.fill(x, 0, x + 1, g.guiHeight(), colHudGuide);
+            g.fill(x + textW, 0, x + textW + 1, g.guiHeight(), colHudGuide);
             g.fill(0, y, g.guiWidth(), y + 1, colHudGuide);
             g.fill(0, y + textH, g.guiWidth(), y + textH + 1, colHudGuide);
 
-            g.fill(leftX - 2, y - 2, leftX + textW + 2, y + textH + 2, 0x44FFFFFF);
+            g.fill(x - 2, y - 2, x + textW + 2, y + textH + 2, 0x44FFFFFF);
         }
 
         g.pose().pushMatrix();
-        g.pose().translate(leftX, y);
+        g.pose().translate(x, y);
         g.pose().scale(scale, scale);
 
         g.text(font, text, 0, 0, 0xFFFF5555);
@@ -104,51 +124,50 @@ public class EditLagHudScreen extends Screen {
 
         if (hovering || draggingId == id) {
             String scaleHint = String.format(java.util.Locale.US, "Scale: %.1fx", scale);
-            g.text(font, scaleHint, leftX, y + textH + 4, 0xFFAAAAAA);
+            g.text(font, scaleHint, x, y + textH + 4, 0xFFAAAAAA);
         }
     }
 
     private void renderAutoHudBox(GuiGraphicsExtractor g, net.minecraft.client.gui.Font font, int mx, int my, int x, int y, float scale) {
         if (scale <= 0.1f) scale = 1.0f;
         int maxW = 0;
-        for (String s : mockAutoLines) {
+        for (String s : MOCK_AUTO_LINES) {
             maxW = Math.max(maxW, font.width(s));
         }
         int cardW = maxW + 4;
-        int cardH = mockAutoLines.length * font.lineHeight + (mockAutoLines.length - 1);
+        int cardH = MOCK_AUTO_LINES.length * font.lineHeight + (MOCK_AUTO_LINES.length - 1);
         int textW = (int) (cardW * scale);
         int textH = (int) (cardH * scale);
-        int leftX = x;
 
-        boolean hovering = mx >= leftX - 2 && mx <= leftX + textW + 2 && my >= y - 2 && my <= y + textH + 2;
+        boolean hovering = mx >= x - 2 && mx <= x + textW + 2 && my >= y - 2 && my <= y + textH + 2;
         if (hovering || draggingId == 2) {
             int colHudGuide = 0x33AAAAAA;
-            g.fill(leftX, 0, leftX + 1, g.guiHeight(), colHudGuide);
-            g.fill(leftX + textW, 0, leftX + textW + 1, g.guiHeight(), colHudGuide);
+            g.fill(x, 0, x + 1, g.guiHeight(), colHudGuide);
+            g.fill(x + textW, 0, x + textW + 1, g.guiHeight(), colHudGuide);
             g.fill(0, y, g.guiWidth(), y + 1, colHudGuide);
             g.fill(0, y + textH, g.guiWidth(), y + textH + 1, colHudGuide);
 
-            g.fill(leftX - 2, y - 2, leftX + textW + 2, y + textH + 2, 0x44FFFFFF);
+            g.fill(x - 2, y - 2, x + textW + 2, y + textH + 2, 0x44FFFFFF);
         }
 
         g.pose().pushMatrix();
-        g.pose().translate(leftX, y);
+        g.pose().translate(x, y);
         g.pose().scale(scale, scale);
 
         int curY = 0;
-        g.text(font, mockAutoLines[0], 0, curY, 0xFFFFAA00);
+        g.text(font, MOCK_AUTO_LINES[0], 0, curY, 0xFFFFAA00);
         curY += font.lineHeight + 1;
-        g.text(font, mockAutoLines[1], 0, curY, 0xFF55FF55);
+        g.text(font, MOCK_AUTO_LINES[1], 0, curY, 0xFF55FF55);
         curY += font.lineHeight + 1;
-        g.text(font, mockAutoLines[2], 0, curY, 0xFFFFAA00);
+        g.text(font, MOCK_AUTO_LINES[2], 0, curY, 0xFFFFAA00);
         curY += font.lineHeight + 1;
-        g.text(font, mockAutoLines[3], 0, curY, 0xFF55FFFF);
+        g.text(font, MOCK_AUTO_LINES[3], 0, curY, 0xFF55FFFF);
 
         g.pose().popMatrix();
 
         if (hovering || draggingId == 2) {
             String scaleHint = String.format(java.util.Locale.US, "Scale: %.1fx", scale);
-            g.text(font, scaleHint, leftX, y + textH + 4, 0xFFAAAAAA);
+            g.text(font, scaleHint, x, y + textH + 4, 0xFFAAAAAA);
         }
     }
 
@@ -162,6 +181,7 @@ public class EditLagHudScreen extends Screen {
                 float scale = 1.0f;
                 if (hoveredId == 0) scale = ModConfig.INSTANCE.lagHudScale;
                 else if (hoveredId == 2) scale = ModConfig.INSTANCE.automatonHudScale;
+                else if (hoveredId == 3) scale = ModConfig.INSTANCE.bossHudScale;
                 
                 if (scale <= 0.1f) scale = 1.0f;
                 scale += (scrollY > 0) ? 0.1f : -0.1f;
@@ -171,6 +191,7 @@ public class EditLagHudScreen extends Screen {
                 
                 if (hoveredId == 0) ModConfig.INSTANCE.lagHudScale = scale;
                 else if (hoveredId == 2) ModConfig.INSTANCE.automatonHudScale = scale;
+                else if (hoveredId == 3) ModConfig.INSTANCE.bossHudScale = scale;
                 
                 return true;
             }
@@ -179,17 +200,23 @@ public class EditLagHudScreen extends Screen {
     }
     
     private int getHoveredId(double mx, double my, net.minecraft.client.gui.Font font) {
+        float s3 = ModConfig.INSTANCE.bossHudScale; if (s3 <= 0.1f) s3 = 1.0f;
+        int x3 = ModConfig.INSTANCE.bossHudX; int y3 = ModConfig.INSTANCE.bossHudY;
+        int bossW = (int)((Math.max(font.width("Boss Spawn") + 10, font.width("Player")) + 16) * s3);
+        int bossH = (int)((font.lineHeight * 2 + 2 + 10) * s3);
+        if (mx >= x3 - 2 && mx <= x3 + bossW + 2 && my >= y3 - 2 && my <= y3 + bossH + 2) return 3;
+
         float s2 = ModConfig.INSTANCE.automatonHudScale; if (s2 <= 0.1f) s2 = 1.0f;
         int x2 = ModConfig.INSTANCE.automatonHudX; int y2 = ModConfig.INSTANCE.automatonHudY;
         int maxW2 = 0;
-        for (String s : mockAutoLines) maxW2 = Math.max(maxW2, font.width(s));
+        for (String s : MOCK_AUTO_LINES) maxW2 = Math.max(maxW2, font.width(s));
         int autoW = (int)((maxW2 + 4) * s2);
-        int autoH = (int)((mockAutoLines.length * font.lineHeight + (mockAutoLines.length - 1)) * s2);
+        int autoH = (int)((MOCK_AUTO_LINES.length * font.lineHeight + (MOCK_AUTO_LINES.length - 1)) * s2);
         if (mx >= x2 - 2 && mx <= x2 + autoW + 2 && my >= y2 - 2 && my <= y2 + autoH + 2) return 2;
 
         float s0 = ModConfig.INSTANCE.lagHudScale; if (s0 <= 0.1f) s0 = 1.0f;
         int x0 = ModConfig.INSTANCE.lagHudX; int y0 = ModConfig.INSTANCE.lagHudY;
-        int lagW = (int)(font.width(mockText) * s0);
+        int lagW = (int)(font.width(MOCK_TEXT) * s0);
         int lagH = (int)(font.lineHeight * s0);
         if (mx >= x0 - 2 && mx <= x0 + lagW + 2 && my >= y0 - 2 && my <= y0 + lagH + 2) return 0;
 
@@ -212,6 +239,7 @@ public class EditLagHudScreen extends Screen {
             int x = 0; int y = 0;
             if (hoveredId == 0) { x = ModConfig.INSTANCE.lagHudX; y = ModConfig.INSTANCE.lagHudY; }
             else if (hoveredId == 2) { x = ModConfig.INSTANCE.automatonHudX; y = ModConfig.INSTANCE.automatonHudY; }
+            else if (hoveredId == 3) { x = ModConfig.INSTANCE.bossHudX; y = ModConfig.INSTANCE.bossHudY; }
             dragOffsetX = (int) (mx - x);
             dragOffsetY = (int) (my - y);
             return true;
@@ -231,6 +259,9 @@ public class EditLagHudScreen extends Screen {
             } else if (draggingId == 2) {
                 ModConfig.INSTANCE.automatonHudX = (int) (mx - dragOffsetX);
                 ModConfig.INSTANCE.automatonHudY = (int) (my - dragOffsetY);
+            } else if (draggingId == 3) {
+                ModConfig.INSTANCE.bossHudX = (int) (mx - dragOffsetX);
+                ModConfig.INSTANCE.bossHudY = (int) (my - dragOffsetY);
             }
             return true;
         }

@@ -5,7 +5,7 @@ import net.minecraft.client.Minecraft;
 
 public final class TimeManager {
 
-    private static long unfrozenBaseTicks = 6000L;
+    private static long unfrozenBaseTicks = -1L;
     private static long lastRealTime = System.currentTimeMillis();
 
     private TimeManager() {}
@@ -16,10 +16,15 @@ public final class TimeManager {
 
     public static long getCustomTicks() {
         if (!ModConfig.INSTANCE.enableCustomTime) {
+            lastRealTime = System.currentTimeMillis();
             return 0L;
         }
 
         long targetTicks = ModConfig.INSTANCE.customTimeTicks;
+        if (unfrozenBaseTicks < 0L) {
+            unfrozenBaseTicks = targetTicks;
+            lastRealTime = System.currentTimeMillis();
+        }
 
         if (ModConfig.INSTANCE.customTimeFrozen) {
             unfrozenBaseTicks = targetTicks;
@@ -34,6 +39,8 @@ public final class TimeManager {
                     unfrozenBaseTicks = (unfrozenBaseTicks + ticksToAdd) % 24000L;
                     lastRealTime = now - (elapsed % 50L);
                 }
+            } else {
+                lastRealTime = now;
             }
             return unfrozenBaseTicks;
         }
@@ -49,6 +56,9 @@ public final class TimeManager {
     }
 
     public static void setFrozen(boolean frozen) {
+        if (frozen && !ModConfig.INSTANCE.customTimeFrozen && unfrozenBaseTicks >= 0L) {
+            ModConfig.INSTANCE.customTimeTicks = (int) unfrozenBaseTicks;
+        }
         ModConfig.INSTANCE.customTimeFrozen = frozen;
         unfrozenBaseTicks = ModConfig.INSTANCE.customTimeTicks;
         lastRealTime = System.currentTimeMillis();
@@ -62,6 +72,13 @@ public final class TimeManager {
             try {
                 mc.level.environmentAttributes().invalidateTickCache();
                 mc.level.updateSkyBrightness();
+                if (mc.gameRenderer != null) {
+                    var camera = mc.gameRenderer.mainCamera();
+                    if (camera != null) {
+                        camera.attributeProbe().reset();
+                        camera.attributeProbe().tick(mc.level, camera.position());
+                    }
+                }
             } catch (Exception ignored) {}
         }
     }

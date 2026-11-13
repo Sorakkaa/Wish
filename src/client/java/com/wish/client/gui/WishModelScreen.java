@@ -82,12 +82,13 @@ public class WishModelScreen extends Screen {
             if (id == null) continue;
 
             String path = id.getPath().toLowerCase(Locale.ROOT);
-            String name = new ItemStack(item).getHoverName().getString();
+            ItemStack stack = new ItemStack(item);
+            String name = stack.getHoverName().getString();
             if (name == null || name.isEmpty()) {
                 name = path;
             }
 
-            ALL_OPTIONS.add(new ModelOption(id.toString(), name, new ItemStack(item)));
+            ALL_OPTIONS.add(new ModelOption(id.toString(), name, stack));
         }
     }
 
@@ -292,7 +293,9 @@ public class WishModelScreen extends Screen {
             Identifier mid = Identifier.tryParse(assignedModelId.contains(":") ? assignedModelId : "minecraft:" + assignedModelId);
             if (mid != null) {
                 Item mItem = BuiltInRegistries.ITEM.getValue(mid);
-                if (mItem != null) mName = new ItemStack(mItem).getHoverName().getString();
+                if (mItem != null && mItem != Items.AIR) {
+                    mName = new ItemStack(mItem).getHoverName().getString();
+                }
             }
             modelStatus = "Model: §a" + mName;
         } else {
@@ -511,6 +514,7 @@ public class WishModelScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean focused) {
+        if (event == null || event.button() != 0) return super.mouseClicked(event, focused);
         double mx = event.x();
         double my = event.y();
 
@@ -524,7 +528,7 @@ public class WishModelScreen extends Screen {
         int closeX = winX + winW - closeBtnSize - 12;
         int closeY = winY + 10;
         if (mx >= closeX && mx <= closeX + closeBtnSize && my >= closeY && my <= closeY + closeBtnSize) {
-            super.onClose();
+            this.onClose();
             return true;
         }
 
@@ -693,7 +697,7 @@ public class WishModelScreen extends Screen {
                 searchFocused = false;
                 return true;
             }
-            super.onClose();
+            this.onClose();
             return true;
         }
 

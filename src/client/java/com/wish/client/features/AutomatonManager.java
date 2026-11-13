@@ -12,7 +12,6 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.animal.golem.IronGolem;
 import net.minecraft.world.entity.decoration.ArmorStand;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemLore;
@@ -77,6 +76,15 @@ public class AutomatonManager {
     }
 
     public static final String[] ALL_PARTS = ALL_TRACKED_ITEMS.toArray(new String[0]);
+    private static final String[] ALL_PARTS_LOWER = new String[ALL_PARTS.length];
+    private static final String[] ALL_PARTS_SHORT_LOWER = new String[ALL_PARTS.length];
+    static {
+        for (int i = 0; i < ALL_PARTS.length; i++) {
+            String lower = ALL_PARTS[i].toLowerCase(Locale.ROOT);
+            ALL_PARTS_LOWER[i] = lower;
+            ALL_PARTS_SHORT_LOWER[i] = lower.endsWith(" gemstone") ? lower.substring(0, lower.length() - 9) : lower;
+        }
+    }
 
     private static final Map<String, String> PART_TO_BAZAAR_ID = new HashMap<>();
     static {
@@ -176,9 +184,17 @@ public class AutomatonManager {
 
     private static final Pattern STORED_PATTERN = Pattern.compile("(?:Stored|Amount|Quantity|Count|Total|In Sack)[:\\s]+([0-9,]+)", Pattern.CASE_INSENSITIVE);
     private static final Pattern STORED_SLASH_PATTERN = Pattern.compile("([0-9,]+)\\s*/\\s*[0-9,]+");
+    private static final Pattern PREFIX_COUNT_PATTERN = Pattern.compile("([0-9,]+)\\s*(?:x\\s*)?[^0-9a-zA-Z]*$", Pattern.CASE_INSENSITIVE);
+    private static final Pattern ANY_NUM_BEFORE_PATTERN = Pattern.compile("([0-9,]+)(?!.*[0-9])");
+    private static final Pattern AFTER_COUNT_PATTERN = Pattern.compile("^(?:\\s*[x:–\\-\\+]\\s*|\\s*\\(x?\\s*)([0-9,]+)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern AFTER_NUM_PATTERN = Pattern.compile("^\\s*([0-9,]+)");
+    private static final Pattern MAGIC_FIND_PATTERN = Pattern.compile("(?i)\\(\\+[0-9,]+%?\\s*[^)]*magic find[^)]*\\)");
 
     private static final Set<Integer> trackedAutomatonIds = ConcurrentHashMap.newKeySet();
+    private static final Set<Integer> visibleAutomatonIds = ConcurrentHashMap.newKeySet();
     private static final Map<Integer, Long> recentlyKilledEntityIds = new ConcurrentHashMap<>();
+    private static String cachedGlowHex = null;
+    private static int cachedGlowRgb = 0xFFFFFF;
 
     private static final Map<String, Double> bazaarSellOfferPrices = new ConcurrentHashMap<>();
     private static final Map<String, Double> bazaarInstaSellPrices = new ConcurrentHashMap<>();
@@ -212,8 +228,12 @@ public class AutomatonManager {
     private static long lastActiveTickTime = 0;
     private static long lastConfigAutoSave = 0;
     private static volatile boolean isPaused = false;
-    private static long lastBazaarFetch = 0;
-    private static final ScheduledExecutorService BAZAAR_EXECUTOR = Executors.newSingleThreadScheduledExecutor();
+    private static volatile long lastBazaarFetch = 0;
+    private static final ScheduledExecutorService BAZAAR_EXECUTOR = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "Wish-BazaarFetcher");
+        t.setDaemon(true);
+        return t;
+    });
 
     public static void init() {
         fetchBazaarPricesAsync(false);
@@ -224,19 +244,16 @@ public class AutomatonManager {
         }, 10, 30, TimeUnit.SECONDS);
     }
 
-    public static void fetchBazaarPricesAsync() {
-        fetchBazaarPricesAsync(false);
-    }
-
     public static void fetchBazaarPricesAsync(boolean force) {
         CompletableFuture.runAsync(() -> {
+            HttpURLConnection conn = null;
             try {
                 long now = System.currentTimeMillis();
                 long cooldown = force ? 3_000 : (bazaarSellOfferPrices.isEmpty() ? 4_000 : 20_000);
                 if (now - lastBazaarFetch < cooldown) return;
 
                 URI uri = URI.create("https://api.hypixel.net/v2/skyblock/bazaar");
-                HttpURLConnection conn = (HttpURLConnection) uri.toURL().openConnection();
+                conn = (HttpURLConnection) uri.toURL().openConnection();
                 conn.setRequestMethod("GET");
                 conn.setRequestProperty("User-Agent", "Wish-Client/" + WishClient.MOD_VERSION);
                 conn.setRequestProperty("Accept-Encoding", "gzip");
@@ -305,7 +322,10 @@ public class AutomatonManager {
                         }
                     }
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            } finally {
+                if (conn != null) conn.disconnect();
+            }
         });
     }
 
@@ -364,51 +384,67 @@ public class AutomatonManager {
     
     public static String findTrackedItem(String rawName) {
         if (rawName == null) return null;
-        String clean = SkyblockDetector.stripColorCodes(rawName).trim().toLowerCase();
+        String clean = SkyblockDetector.stripColorCodes(rawName).trim().toLowerCase(Locale.ROOT);
         
         clean = clean.replace("⬡", "").replace("•", "").trim();
 
-        for (String item : ALL_TRACKED_ITEMS) {
-            String itemLower = item.toLowerCase();
-            String shortLower = itemLower.endsWith(" gemstone") ? itemLower.substring(0, itemLower.length() - 9) : itemLower;
+        for (int i = 0; i < ALL_PARTS.length; i++) {
+            String itemLower = ALL_PARTS_LOWER[i];
+            String shortLower = ALL_PARTS_SHORT_LOWER[i];
 
             if (clean.equals(itemLower) || clean.equals(shortLower)) {
-                return item;
+                return ALL_PARTS[i];
             }
             if (clean.contains(shortLower) && shortLower.length() >= 4) {
-                return item;
+                return ALL_PARTS[i];
             }
         }
         return null;
     }
 
+    public static boolean isGlowingAutomaton(Entity entity) {
+        return entity instanceof IronGolem && visibleAutomatonIds.contains(entity.getId());
+    }
+
+    public static int getGlowColorRgb() {
+        String glow = ModConfig.INSTANCE.automatonGlowColor;
+        if (glow != null && glow.equals(cachedGlowHex)) {
+            return cachedGlowRgb;
+        }
+        cachedGlowHex = glow;
+        if (glow != null && glow.length() == 7 && glow.charAt(0) == '#') {
+            try {
+                cachedGlowRgb = Integer.parseInt(glow, 1, 7, 16);
+                return cachedGlowRgb;
+            } catch (Exception ignored) {}
+        }
+        cachedGlowRgb = 0xFFFFFF;
+        return 0xFFFFFF;
+    }
+
     public static boolean isAutomaton(Entity entity) {
-        if (!ModConfig.INSTANCE.enableMiningAutomaton || entity == null) return false;
-        if (entity instanceof Player || entity instanceof ArmorStand) return false;
-        if (entity instanceof net.minecraft.world.entity.Display || entity instanceof net.minecraft.world.entity.item.ItemEntity) return false;
+        if (!ModConfig.INSTANCE.enableMiningAutomaton || !(entity instanceof IronGolem)) return false;
 
         int id = entity.getId();
         if (trackedAutomatonIds.contains(id)) return true;
 
-        if (entity instanceof IronGolem) {
-            if (entity.hasCustomName()) {
-                String name = SkyblockDetector.stripColorCodes(entity.getCustomName().getString()).toLowerCase();
-                if (name.contains("automaton")) {
-                    trackedAutomatonIds.add(id);
-                    return true;
-                }
+        if (entity.hasCustomName() && entity.getCustomName() != null) {
+            String name = SkyblockDetector.stripColorCodes(entity.getCustomName().getString()).toLowerCase(Locale.ROOT);
+            if (name.contains("automaton")) {
+                trackedAutomatonIds.add(id);
+                return true;
             }
-            if (entity.level() != null) {
-                Minecraft mc = Minecraft.getInstance();
-                if (mc.level != null) {
-                    for (Entity nearby : mc.level.entitiesForRendering()) {
-                        if (nearby instanceof ArmorStand && nearby.hasCustomName()) {
-                            if (nearby.distanceToSqr(entity) <= 12.25) { 
-                                String name = SkyblockDetector.stripColorCodes(nearby.getCustomName().getString()).toLowerCase();
-                                if (name.contains("automaton")) {
-                                    trackedAutomatonIds.add(id);
-                                    return true;
-                                }
+        }
+        if (entity.level() != null) {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.level != null) {
+                for (Entity nearby : mc.level.entitiesForRendering()) {
+                    if (nearby instanceof ArmorStand && nearby.hasCustomName() && nearby.getCustomName() != null) {
+                        if (nearby.distanceToSqr(entity) <= 12.25) { 
+                            String name = SkyblockDetector.stripColorCodes(nearby.getCustomName().getString()).toLowerCase(Locale.ROOT);
+                            if (name.contains("automaton")) {
+                                trackedAutomatonIds.add(id);
+                                return true;
                             }
                         }
                     }
@@ -606,12 +642,13 @@ public class AutomatonManager {
         String clean = SkyblockDetector.stripColorCodes(rawLine).trim();
         if (clean.isEmpty()) return;
 
-        String lower = clean.toLowerCase();
+        String lower = clean.toLowerCase(Locale.ROOT);
         if (lower.contains("bazaar") || lower.contains("coins")) return;
 
-        for (String part : ALL_TRACKED_ITEMS) {
-            String partLower = part.toLowerCase();
-            String shortLower = partLower.endsWith(" gemstone") ? partLower.substring(0, partLower.length() - 9) : partLower;
+        for (int i = 0; i < ALL_PARTS.length; i++) {
+            String part = ALL_PARTS[i];
+            String partLower = ALL_PARTS_LOWER[i];
+            String shortLower = ALL_PARTS_SHORT_LOWER[i];
 
             int partIdx = lower.indexOf(partLower);
             int matchLen = partLower.length();
@@ -625,13 +662,13 @@ public class AutomatonManager {
 
                 
                 String before = clean.substring(0, partIdx).trim();
-                Matcher mPrefix = Pattern.compile("([0-9,]+)\\s*(?:x\\s*)?[^0-9a-zA-Z]*$", Pattern.CASE_INSENSITIVE).matcher(before);
+                Matcher mPrefix = PREFIX_COUNT_PATTERN.matcher(before);
                 if (mPrefix.find()) {
                     try {
                         count = Integer.parseInt(mPrefix.group(1).replace(",", ""));
                     } catch (Exception ignored) {}
                 } else {
-                    Matcher mAnyNum = Pattern.compile("([0-9,]+)(?!.*[0-9])").matcher(before);
+                    Matcher mAnyNum = ANY_NUM_BEFORE_PATTERN.matcher(before);
                     if (mAnyNum.find()) {
                         try {
                             count = Integer.parseInt(mAnyNum.group(1).replace(",", ""));
@@ -642,13 +679,13 @@ public class AutomatonManager {
                 
                 if (count == -1) {
                     String after = clean.substring(partIdx + matchLen).trim();
-                    Matcher mAfterCount = Pattern.compile("^(?:\\s*[x:–\\-\\+]\\s*|\\s*\\(x?\\s*)([0-9,]+)", Pattern.CASE_INSENSITIVE).matcher(after);
+                    Matcher mAfterCount = AFTER_COUNT_PATTERN.matcher(after);
                     if (mAfterCount.find()) {
                         try {
                             count = Integer.parseInt(mAfterCount.group(1).replace(",", ""));
                         } catch (Exception ignored) {}
                     } else {
-                        Matcher mAfterNum = Pattern.compile("^\\s*([0-9,]+)").matcher(after);
+                        Matcher mAfterNum = AFTER_NUM_PATTERN.matcher(after);
                         if (mAfterNum.find()) {
                             try {
                                 count = Integer.parseInt(mAfterNum.group(1).replace(",", ""));
@@ -866,26 +903,21 @@ public class AutomatonManager {
         return false;
     }
 
-    public static boolean processSackDropMessage(String rawText) {
-        if (!isSackNotification(rawText)) return false;
-        return parseDropLine(rawText);
-    }
-
     public static boolean parseDropLine(String rawLine) {
         if (rawLine == null || rawLine.isEmpty()) return false;
         String clean = SkyblockDetector.stripColorCodes(rawLine).replace('\u00A0', ' ').trim();
         if (clean.isEmpty()) return false;
 
         
-        clean = clean.replaceAll("(?i)\\(\\+[0-9,]+%?\\s*[^)]*magic find[^)]*\\)", "").trim();
+        clean = MAGIC_FIND_PATTERN.matcher(clean).replaceAll("").trim();
 
-        String lower = clean.toLowerCase();
+        String lower = clean.toLowerCase(Locale.ROOT);
         boolean isRareDrop = lower.contains("rare drop");
-        boolean matchedAny = false;
 
-        for (String item : ALL_TRACKED_ITEMS) {
-            String itemLower = item.toLowerCase();
-            String shortLower = itemLower.endsWith(" gemstone") ? itemLower.substring(0, itemLower.length() - 9) : itemLower;
+        for (int i = 0; i < ALL_PARTS.length; i++) {
+            String item = ALL_PARTS[i];
+            String itemLower = ALL_PARTS_LOWER[i];
+            String shortLower = ALL_PARTS_SHORT_LOWER[i];
 
             int idx = lower.indexOf(itemLower);
             String matchedTarget = itemLower;
@@ -899,14 +931,14 @@ public class AutomatonManager {
 
                 
                 String before = clean.substring(0, idx).trim();
-                Matcher mBefore = Pattern.compile("([0-9,]+)\\s*(?:x\\s*)?[^0-9a-zA-Z]*$", Pattern.CASE_INSENSITIVE).matcher(before);
+                Matcher mBefore = PREFIX_COUNT_PATTERN.matcher(before);
                 if (mBefore.find()) {
                     try {
                         count = Integer.parseInt(mBefore.group(1).replace(",", ""));
                     } catch (Exception ignored) {}
                 } else {
                     
-                    Matcher mAnyNum = Pattern.compile("([0-9,]+)(?!.*[0-9])").matcher(before);
+                    Matcher mAnyNum = ANY_NUM_BEFORE_PATTERN.matcher(before);
                     if (mAnyNum.find()) {
                         try {
                             count = Integer.parseInt(mAnyNum.group(1).replace(",", ""));
@@ -914,16 +946,16 @@ public class AutomatonManager {
                     } else {
                         
                         String after = clean.substring(idx + matchedTarget.length()).trim();
-                        Matcher mAfter = Pattern.compile("^(?:\\s*[x:–\\-\\+]\\s*|\\s*\\(x?\\s*)([0-9,]+)", Pattern.CASE_INSENSITIVE).matcher(after);
+                        Matcher mAfter = AFTER_COUNT_PATTERN.matcher(after);
                         if (mAfter.find()) {
                             try {
                                 count = Integer.parseInt(mAfter.group(1).replace(",", ""));
                             } catch (Exception ignored) {}
                         } else {
-                            Matcher mAfterNum = Pattern.compile("^\\s*([0-9,]+)").matcher(after);
+                            Matcher mAfterNum = AFTER_NUM_PATTERN.matcher(after);
                             if (mAfterNum.find()) {
                                 try {
-                                    count = Integer.parseInt(mAfterNum.group(1).replace(",", ""));
+                                                                        count = Integer.parseInt(mAfterNum.group(1).replace(",", ""));
                                 } catch (Exception ignored) {}
                             }
                         }
@@ -985,10 +1017,6 @@ public class AutomatonManager {
         return false;
     }
 
-    public static void recordDrop(String partName) {
-        recordDrop(partName, 1);
-    }
-
     public static void recordDrop(String partName, int count) {
         if (count <= 0) count = 1;
         long now = System.currentTimeMillis();
@@ -1005,10 +1033,6 @@ public class AutomatonManager {
         }
         ModConfig.INSTANCE.automatonTotalDrops.merge(partName, count, Integer::sum);
         ModConfig.INSTANCE.save();
-
-        if (totalKills == 0) {
-            totalKills = 1;
-        }
     }
 
     public static void recordKill() {
@@ -1027,10 +1051,6 @@ public class AutomatonManager {
         if (wasPaused) {
             refreshHudState();
         }
-    }
-
-    public static void resetStats() {
-        resetSessionStats();
     }
 
     public static void resetSessionStats() {
@@ -1070,6 +1090,7 @@ public class AutomatonManager {
     public static void onClientTick(Minecraft mc) {
         if (!ModConfig.INSTANCE.enableMiningAutomaton) {
             trackedAutomatonIds.clear();
+            visibleAutomatonIds.clear();
             trackedAutomatons.clear();
             HudStateContainer.updateAutomatonState(false, 0, 0, 0, 0, 0, null);
             return;
@@ -1077,6 +1098,7 @@ public class AutomatonManager {
 
         if (mc.level == null || mc.player == null) {
             trackedAutomatonIds.clear();
+            visibleAutomatonIds.clear();
             trackedAutomatons.clear();
             HudStateContainer.updateAutomatonState(false, 0, 0, 0, 0, 0, null);
             return;
@@ -1135,6 +1157,7 @@ public class AutomatonManager {
 
         if (!inPrecursor) {
             trackedAutomatonIds.clear();
+            visibleAutomatonIds.clear();
             trackedAutomatons.clear();
             HudStateContainer.updateAutomatonState(false, 0, 0, 0, 0, 0, null);
             return;
@@ -1204,6 +1227,7 @@ public class AutomatonManager {
             boolean isDeadOrGone = (mob == null || !mob.isAlive() || (mob instanceof LivingEntity living && living.isDeadOrDying()));
             if (isDeadOrGone) {
                 trackedAutomatonIds.remove(id);
+                visibleAutomatonIds.remove(id);
                 if (!recentlyKilledEntityIds.containsKey(id)) {
                     recentlyKilledEntityIds.put(id, now);
                     boolean wasAttacked = info.damagedByPlayer && (now - info.lastDamagedTime < 10_000);
@@ -1219,6 +1243,16 @@ public class AutomatonManager {
             }
             return false;
         });
+
+        visibleAutomatonIds.clear();
+        if (ModConfig.INSTANCE.enableAutomatonGlow) {
+            for (Integer id : trackedAutomatonIds) {
+                Entity mob = mc.level.getEntity(id);
+                if (mob instanceof IronGolem && mob.isAlive() && mc.player.hasLineOfSight(mob)) {
+                    visibleAutomatonIds.add(id);
+                }
+            }
+        }
 
         
         refreshHudState();
@@ -1263,19 +1297,6 @@ public class AutomatonManager {
         long sec = getSessionElapsedSeconds();
         if (sec == 0 || totalKills == 0) return 0.0;
         return (totalKills * 3600.0) / (double) sec;
-    }
-
-    public static double getAverageProfitPerKill() {
-        double sum = 0;
-        int count = 0;
-        for (String part : PRECURSOR_PARTS) {
-            if (!part.equals(PART_BOBOMB)) {
-                sum += getPrice(part);
-                count++;
-            }
-        }
-        double avgPartPrice = count > 0 ? (sum / count) : 167000.0;
-        return avgPartPrice * 0.1526;
     }
 
     public static double getTotalProfit() {
@@ -1372,14 +1393,6 @@ public class AutomatonManager {
         return Collections.unmodifiableMap(dropCounts);
     }
 
-    public static Map<String, Double> getAllPrices() {
-        Map<String, Double> result = new HashMap<>();
-        for (String item : ALL_TRACKED_ITEMS) {
-            result.put(item, getPrice(item));
-        }
-        return Collections.unmodifiableMap(result);
-    }
-
     public static String getDisplayName(String itemName) {
         if (itemName == null) return "";
         if (itemName.endsWith(" Gemstone")) {
@@ -1398,14 +1411,6 @@ public class AutomatonManager {
         } else {
             return String.format(Locale.US, "%.0f", coins);
         }
-    }
-
-    public static long getLastKillTime() {
-        return lastKillTime;
-    }
-
-    public static boolean isSessionActive() {
-        return sessionStartTime > 0 && lastKillTime > 0;
     }
 
     public static String formatTime(long seconds) {

@@ -44,8 +44,7 @@ public class ModConfig {
 	public boolean enableSleep = true;
 	public boolean enableYuri = true;
 	public boolean enableNameColor = true; 
-	public boolean enableBadge = true;
-	public boolean enableF5NameTag = true; 
+	public boolean enableBadge = false;
 	public String spoofedName = "";
 	public int pseudoFont = 0; 
 	public int pseudoAnimation = 0; 
@@ -57,9 +56,7 @@ public class ModConfig {
 	public int cosmeticVisibility = 0; 
 	
 	public boolean enablePlayerSpin = false;
-	public float playerSpinSpeedX = 0.0f;
 	public float playerSpinSpeedY = 0.00f;
-	public float playerSpinSpeedZ = 0.0f;
 	
 	public boolean enableCustomBlocksF7M7 = true;
 	public boolean enableGlassBlocksF7M7 = true;
@@ -71,14 +68,7 @@ public class ModConfig {
 	public boolean enableUpdateCheck = true;
 	public String customHexColor = "#FFFFFF"; 
 	public String customHexColor2 = "#FFFFFF"; 
-	public boolean enableGradient = true; 
-	public boolean enableSlayerCarry = true;
-	public boolean enableBossSpawnHud = true;
-	public String slayerGlowColor = "#FFFFFF";
 	public String menuAccentColor = "#FFFFFF"; 
-	public int bossHudX = 100;
-	public int bossHudY = 50;
-	public float bossHudScale = 2.0f;
 	public boolean alwaysInM7F7 = false;
 	public boolean enableCustomItemModels = true;
 	public java.util.Map<String, String> itemModelOverrides = new java.util.HashMap<>();
@@ -89,18 +79,12 @@ public class ModConfig {
 	public boolean enablePrecursorCityScanner = true;
 	public boolean enableAutomatonGlow = true;
 	public String automatonGlowColor = "#FFFFFF";
-	public boolean enableAutomatonProfitTracker = true;
-	public boolean enableAutomatonKillsHud = true;
-	public boolean enableAutomatonDropsDetail = false;
-	public boolean enableAutomatonSoundAlert = true;
 	public int automatonHudX = 10;
 	public int automatonHudY = 60;
 	public float automatonHudScale = 1.0f;
 	public boolean automatonUseInstaSell = false;
 	public boolean automatonHideSackChat = false;
-	public boolean automatonSendDropChat = false;
 	public boolean automatonSackMode = true; 
-	public boolean automatonTrackInventoryDrops = false;
 	public boolean automatonShowTotalStats = false;
 	public int automatonTotalKills = 0;
 	public long automatonTotalActiveMs = 0;
@@ -110,7 +94,6 @@ public class ModConfig {
 
 	// Visual / Lyrics Settings
 	public boolean enableLyrics = false;
-	public int lyricsDisplayMode = 1; // 1: 3D World / Opponent
 	public int lyricsMode = 0; // 0: Word by word, 1: Line by line
 	public String lyricsColor = "#FFFFFF";
 	public float lyricsScale = 3.0f;
@@ -119,14 +102,44 @@ public class ModConfig {
 
 	// Time Changer Settings
 	public boolean enableCustomTime = false;
-	public int customTimePreset = 0; // 0: Day (1000), 1: Noon (6000), 2: Sunset (12000), 3: Night (14000), 4: Midnight (18000), 5: Sunrise (23000), 6: Custom
 	public int customTimeTicks = 6000; // 0 to 24000
 	public boolean customTimeFrozen = true;
 
+	// Weather Changer Settings
+	public boolean enableCustomWeather = false;
+	public int customWeatherMode = 0; // 0: None, 1: Rain, 2: Snow
+	public float customWeatherCount = 1.0f; // 0.1 to 3.0
+	public float customWeatherSize = 1.0f; // 0.25 to 2.5
+	public boolean customWeatherWind = true;
+	public float customWeatherWindStrength = 1.0f; // 0.25 to 2.0
+
 	// Custom Sky Settings
 	public boolean enableCustomSky = false;
+	public int customSkyMode = 0; // 0: Black Sky, 1: Lofi Dusk, 2: Midnight Breeze, 3: Cloudy Pastel, 4: Sunset Clouds, 5: Ocean Mirage, 6: Sakura Twilight
+	public boolean customSkyRotate = false;
 
-	private static final java.util.concurrent.ScheduledExecutorService SAVE_EXECUTOR = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
+	// Slayer Carry Settings
+	public boolean enableSlayerCarry = true;
+	public boolean enableBossSpawnHud = true;
+	public int bossHudX = 200;
+	public int bossHudY = 60;
+	public float bossHudScale = 1.0f;
+	public boolean enableSlayerGlow = true;
+	public boolean enableSlayerAutoCoords = true;
+	public String slayerGlowColor = "#FF55AA";
+	public boolean customSkyShowStars = true;
+	public boolean customSkyShowSunMoon = true;
+
+	// SmolPeople (Skytils style)
+	public boolean enableOtherPlayersSize = false;
+	public boolean smolPeopleIncludeSelf = false;
+
+	private static final java.util.concurrent.ScheduledExecutorService SAVE_EXECUTOR =
+			java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+				Thread t = new Thread(r, "Wish-Config-Save");
+				t.setDaemon(true);
+				return t;
+			});
 	private static java.util.concurrent.ScheduledFuture<?> pendingSaveTask = null;
 	private static final Object SAVE_LOCK = new Object();
 
@@ -168,6 +181,18 @@ public class ModConfig {
 					}
 					if (INSTANCE.lyricsColor == null || !INSTANCE.lyricsColor.startsWith("#") || INSTANCE.lyricsColor.length() != 7) {
 						INSTANCE.lyricsColor = "#FFFFFF";
+					}
+					if (INSTANCE.customSkyMode > 6 || INSTANCE.customSkyMode < 0) {
+						INSTANCE.customSkyMode = 0;
+					}
+					if (Float.isNaN(INSTANCE.customWeatherCount) || INSTANCE.customWeatherCount < 0.1f || INSTANCE.customWeatherCount > 3.0f) {
+						INSTANCE.customWeatherCount = Float.isNaN(INSTANCE.customWeatherCount) ? 1.0f : Math.max(0.1f, Math.min(3.0f, INSTANCE.customWeatherCount));
+					}
+					if (Float.isNaN(INSTANCE.customWeatherSize) || INSTANCE.customWeatherSize < 0.25f || INSTANCE.customWeatherSize > 2.5f) {
+						INSTANCE.customWeatherSize = Float.isNaN(INSTANCE.customWeatherSize) ? 1.0f : Math.max(0.25f, Math.min(2.5f, INSTANCE.customWeatherSize));
+					}
+					if (Float.isNaN(INSTANCE.customWeatherWindStrength) || INSTANCE.customWeatherWindStrength < 0.25f || INSTANCE.customWeatherWindStrength > 2.0f) {
+						INSTANCE.customWeatherWindStrength = Float.isNaN(INSTANCE.customWeatherWindStrength) ? 1.0f : Math.max(0.25f, Math.min(2.0f, INSTANCE.customWeatherWindStrength));
 					}
 					
 					if (toRead.equals(OLD_CONFIG_FILE)) {

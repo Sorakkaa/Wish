@@ -14,7 +14,7 @@
 	},
 	"license": "CC0-1.0",
 	"icon": "assets/wish/icon.png",
-	"environment": "*",
+	"environment": "client",
 	"entrypoints": {
 		"client": [
 			"com.wish.client.WishClient"

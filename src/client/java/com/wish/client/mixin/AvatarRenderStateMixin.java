@@ -21,6 +21,8 @@ public class AvatarRenderStateMixin implements ISizeableState {
     private boolean wish$isCustomPlayer = false;
     @Unique
     private float wish$spinSpeedY = 0.0f;
+    @Unique
+    private boolean wish$smolPeople = false;
 
     @Override
     public float wish$getScaleX() {
@@ -78,5 +80,15 @@ public class AvatarRenderStateMixin implements ISizeableState {
     @Override
     public void wish$setSpinSpeedY(float spinSpeedY) {
         this.wish$spinSpeedY = spinSpeedY;
+    }
+
+    @Override
+    public boolean wish$isSmolPeople() {
+        return wish$smolPeople;
+    }
+
+    @Override
+    public void wish$setSmolPeople(boolean smolPeople) {
+        this.wish$smolPeople = smolPeople;
     }
 }

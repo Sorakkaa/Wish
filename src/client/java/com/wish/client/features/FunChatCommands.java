@@ -8,10 +8,13 @@ import net.minecraft.client.multiplayer.PlayerInfo;
 
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
+import java.util.regex.Pattern;
 
 public final class FunChatCommands {
 
     private static final Random RANDOM = new Random();
+    private static final Pattern USERNAME_PATTERN = Pattern.compile("^[a-zA-Z0-9_]{2,16}$");
+    private static final Pattern WHITESPACE_PATTERN = Pattern.compile("\\s+");
     private static long lastCommandTime = 0;
 
     private FunChatCommands() {}
@@ -79,11 +82,11 @@ public final class FunChatCommands {
         String explicitTarget = null;
         int cmdIdx = text.toLowerCase().indexOf(command);
         if (cmdIdx != -1 && text.length() > cmdIdx + command.length()) {
-            String afterCmd = text.substring(cmdIdx + command.length()).replaceAll("(?i)\\u00A7[0-9a-fk-or]", "").trim();
+            String afterCmd = SkyblockDetector.stripColorCodes(text.substring(cmdIdx + command.length())).trim();
             if (!afterCmd.isEmpty()) {
-                String[] words = afterCmd.split("\\s+");
+                String[] words = WHITESPACE_PATTERN.split(afterCmd);
                 String arg = words[0];
-                if (arg.matches("^[a-zA-Z0-9_]{2,16}$")) {
+                if (USERNAME_PATTERN.matcher(arg).matches()) {
                     explicitTarget = resolvePlayerName(arg, mc);
                 }
             }
@@ -135,9 +138,9 @@ public final class FunChatCommands {
                 String p2 = target;
                 boolean hasTwo = false;
                 if (cmdIdx != -1 && text.length() > cmdIdx + command.length()) {
-                    String afterCmd = text.substring(cmdIdx + command.length()).replaceAll("(?i)\\u00A7[0-9a-fk-or]", "").trim();
+                    String afterCmd = SkyblockDetector.stripColorCodes(text.substring(cmdIdx + command.length())).trim();
                     if (!afterCmd.isEmpty()) {
-                        String[] words = afterCmd.split("\\s+");
+                        String[] words = WHITESPACE_PATTERN.split(afterCmd);
                         if (words.length >= 2) {
                             hasTwo = true;
                             p1 = resolvePlayerName(words[0], mc);

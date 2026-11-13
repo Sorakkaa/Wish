@@ -33,7 +33,6 @@ public class PrecursorCityLocator {
 
     private static BlockPos foundCityPos = null;
     private static DetectionConfidence currentConfidence = null;
-    private static String detectionMethod = "";
     private static net.minecraft.client.multiplayer.ClientLevel lastLevel = null;
     private static long lastChunkScanTime = 0;
     private static int bestStructureCount = 0;
@@ -56,18 +55,9 @@ public class PrecursorCityLocator {
         return foundCityPos;
     }
 
-    public static String getDetectionMethod() {
-        return detectionMethod;
-    }
-
-    public static DetectionConfidence getConfidence() {
-        return currentConfidence;
-    }
-
     public static void reset() {
         foundCityPos = null;
         currentConfidence = null;
-        detectionMethod = "";
         bestStructureCount = 0;
         scannedChunks.clear();
     }
@@ -99,7 +89,7 @@ public class PrecursorCityLocator {
         }
 
         
-        if (foundCityPos != null && (!isInPrecursorBounds(foundCityPos.getX(), foundCityPos.getZ()) || isInNucleus(foundCityPos.getX(), foundCityPos.getZ()))) {
+        if (foundCityPos != null && !isInPrecursorBounds(foundCityPos.getX(), foundCityPos.getZ())) {
             reset();
         }
 
@@ -137,7 +127,7 @@ public class PrecursorCityLocator {
 
             BlockPos entityPos = entity.blockPosition();
             
-            if (!isInPrecursorBounds(entityPos.getX(), entityPos.getZ()) || isInNucleus(entityPos.getX(), entityPos.getZ())) {
+            if (!isInPrecursorBounds(entityPos.getX(), entityPos.getZ())) {
                 continue;
             }
 
@@ -231,10 +221,7 @@ public class PrecursorCityLocator {
         LevelChunkSection[] sections = chunk.getSections();
         if (sections == null || sections.length == 0) return false;
 
-        int stoneBrickCount = 0;
-        int deepslateCount = 0;
         int chiseledDeepslateCount = 0;
-        int ironBarsCount = 0;
         int ironBlockCount = 0;
 
         long sumX = 0, sumY = 0, sumZ = 0;
@@ -274,24 +261,18 @@ public class PrecursorCityLocator {
                                 || block == Blocks.CHISELED_STONE_BRICKS
                                 || block == Blocks.STONE_BRICK_STAIRS
                                 || block == Blocks.STONE_BRICK_SLAB
-                                || block == Blocks.STONE_BRICK_WALL) {
-                            stoneBrickCount++;
-                            isStructure = true;
-                        } else if (block == Blocks.POLISHED_DEEPSLATE
+                                || block == Blocks.STONE_BRICK_WALL
+                                || block == Blocks.POLISHED_DEEPSLATE
                                 || block == Blocks.POLISHED_DEEPSLATE_STAIRS
                                 || block == Blocks.POLISHED_DEEPSLATE_SLAB
                                 || block == Blocks.POLISHED_DEEPSLATE_WALL
                                 || block == Blocks.DEEPSLATE_BRICKS
                                 || block == Blocks.CRACKED_DEEPSLATE_BRICKS
-                                || block == Blocks.DEEPSLATE_TILES) {
-                            deepslateCount++;
+                                || block == Blocks.DEEPSLATE_TILES
+                                || block == Blocks.IRON_BARS) {
                             isStructure = true;
                         } else if (block == Blocks.CHISELED_DEEPSLATE) {
                             chiseledDeepslateCount++;
-                            deepslateCount++;
-                            isStructure = true;
-                        } else if (block == Blocks.IRON_BARS) {
-                            ironBarsCount++;
                             isStructure = true;
                         } else if (block == Blocks.IRON_BLOCK) {
                             ironBlockCount++;
@@ -365,7 +346,7 @@ public class PrecursorCityLocator {
 
     public static boolean setCityPos(BlockPos pos, DetectionConfidence confidence, String method) {
         if (pos == null) return false;
-        if (!isInPrecursorBounds(pos.getX(), pos.getZ()) || isInNucleus(pos.getX(), pos.getZ())) {
+        if (!isInPrecursorBounds(pos.getX(), pos.getZ())) {
             return false;
         }
 
@@ -376,7 +357,6 @@ public class PrecursorCityLocator {
 
         foundCityPos = pos;
         currentConfidence = confidence;
-        detectionMethod = method;
         return true;
     }
 
