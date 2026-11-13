@@ -1,61 +1,64 @@
 # Wish Mod 🌟
 
-A modern, high-performance Fabric client mod designed for **Hypixel Skyblock** utilities, dungeon QoL, Automaton farming tracking, 3D music lyrics, and cosmetic customizations.
+[![Version](https://img.shields.io/badge/version-1.1.4-ff69b4?style=flat-square)](https://github.com/Sorakkaa/Wish/releases)
+[![Minecraft](https://img.shields.io/badge/minecraft-26.2-55ff55?style=flat-square)](https://fabricmc.net/)
+[![Loader](https://img.shields.io/badge/loader-Fabric%200.19.5-dbd0b4?style=flat-square)](https://fabricmc.net/)
+[![Java](https://img.shields.io/badge/java-25%2B-orange?style=flat-square)](https://adoptium.net/)
+[![License](https://img.shields.io/badge/license-CC0--1.0-blue?style=flat-square)](LICENSE)
+
+A client-side **Fabric** mod for **Minecraft 26.2** bringing Hypixel Skyblock quality-of-life utilities, 3D weather & sky ambiance, synchronized in-world music lyrics, player cosmetics, and interactive chat triggers — all configurable in-game via `/wish`.
 
 ---
 
 ## ✨ Features
 
-### 🎵 3D In-World Floating Lyrics
-- **Live 3D Floating Lyrics**: Displays real-time lyrics floating seamlessly in the Minecraft 3D world around the player.
-- **Display Modes**:
-  - **Word by Word**: Dynamic, synchronized floating words with fluid animations and automatic despawn limits.
-  - **Line by Line**: Clean, centered karaoke-style floating lines.
-- **Provider Support**:
-  - **YouTube Music Desktop App** (via Companion API pairing).
-  - **Spotify** (Live web token & local status).
-  - **Deezer** (Desktop player integration).
-- **Custom Font Engine**: 9 built-in typography fonts rendered directly in 3D:
-  - *Lavender*, *Dreamy*, *Fight*, *Comic*, *Script*, *Fire*, *Ice*, *Royal*, and *Clean*.
-- **Sync & Customization**: Customizable sync offset (ms), height offset, floating radius, and rotation.
+### 🌌 Visual & Atmosphere (`Visual`)
 
-### 👤 Name Spoofer & Player Cosmetics
-- **Name Spoofer**: Custom nickname spoofer (up to 32 characters) that updates your in-game nametag, Tab list, and chat messages locally.
-- **Color & Animation Styles**:
-  - Animated styles: **Chroma**, **Wave**, **Gradient**, **Breathe**, and **Blink**.
-  - Dual custom Hex color stops with configurable cycle speed.
-- **Text Formatting**: Toggle **Bold**, **Italic**, **Underline**, and **Strikethrough** styles.
-- **Player Scaling & Spin**: Adjust individual X, Y, and Z model scale and enable continuous rotation.
-- **Custom Item Models (`/wish model`)**: Replace Skyblock item models, override textures, and toggle enchantment glints.
+- **Custom Sky** — Replace the vanilla sky with **7 procedural skyboxes** paired with matching horizon fog colors:
+  - `Black Sky` • `Lofi Dusk` • `Midnight Breeze` • `Cloudy Pastel` • `Sunset Clouds` • `Ocean Mirage` • `Sakura Twilight`
+  - Individual toggles for **Show Stars**, **Show Sun & Moon**, and **Slow Rotation**.
+- **3D Weather Simulation** — Client-side `Rain` and `Snow` simulation using custom `64x64` textures across a **60-block** radius:
+  - Adjustable **Count** and **Size** sliders.
+  - Real `MOTION_BLOCKING` heightmap collisions with ground impact splash particles.
+  - Toggleable **Dynamic Wind** with a **Wind Force** slider that shifts wind direction smoothly over time.
+- **Time Changer** — Set client world time anywhere along the `0–24000` tick cycle with an optional **Freeze Time** lock.
+- **Smol People** — Renders other players at miniature `0.5x` body scale with oversized `1.5x` heads, built with **Essential cosmetics compatibility** and an optional **Include Yourself** toggle.
+- **3D In-World Floating Lyrics** — Displays live, beat-synced song lyrics floating across 16 elevated sky & flank sectors (never clipping below the horizon), with animated music notes (`♪ ♫ ✦ ★ ✧ ♩ ♬`) during breaks:
+  - Supports **Spotify**, **YouTube Music** (companion API on port `9863` + MPRIS/window detection), and **Deezer** (port `9865` / desktop & browser detection).
+  - Multi-source lyrics lookup: local `.lrc` files, YouTube Music timed lyrics, **LRCLIB**, and **NetEase Cloud Music**.
+  - Configurable **Word by word** or **Line by line** display, custom hex color, scale, millisecond sync offset, and **Demo Mode**.
 
-### 🤖 Automaton Farming & Live Bazaar Tracker
-- **Real-Time HUD**: Live tracking of Automaton kills, rare drops (FTX 3070, Synthetic Heart, Robotron Reflector, Electron Transmitter, Control Switch, Superlite Motor, Bob-omb), and gemstones.
-- **Live Bazaar Valuation**: Asynchronously fetches Hypixel Bazaar prices to compute live earnings and coins per hour.
-- **Interactive On-Screen Controls**: One-click toggles between **[Session]** and **[Total]** tracking, and between **[Instasell]** and **[Sell Offer]** valuations.
-- **Automaton Mob Glow**: Highlights Automatons in the Precursor Remnants with a bright, customizable glow outline.
+---
 
-### 🏛️ Precursor City Locator
-- **Intelligent Structure Recognition**: Scans for the 6-altar Precursor City formation and recognizable structure signature blocks.
-- **Chat & Scoreboard Coordinate Parsing**: Automatically extracts coordinates shared in party/all chat (e.g., `city 650 82 720`).
-- **3D Waypoint & Directional Pointer**: In-world beacon beam and distance tracker pointing straight to the city altar.
+### 🎨 Cosmetics & Custom Models (`Pseudo`, `Skin`, `Misc Setting`, `/wish model`)
 
-### ⏱️ Dungeon Lag & Time Lost Tracker
-- **Precise Tick Lag Detection**: Compares real client time elapsed against Hypixel server tick progression during Floor 7 and Master Mode Floor 7 runs.
-- **Time Lost Calculation**: Tracks time lost to server lag and gate opening delays in real time.
-- **Configurable HUD**: Position and style the lag indicator using `/wish gui`.
+- **Name Spoofer & Formatting** — Replace your name client-side across chat, tab list, scoreboard, and nametags with `Bold`, `Italic`, `Underline`, and `Strikethrough` styles plus custom badges.
+- **Color & Animation Studio** — Pick dual hex colors (`Color 1` & `Color 2`) using HSB sliders or hex input with **6 animation modes** (`None`, `Chroma`, `Gradient`, `Wave`, `Breathe`, `Blink`) and adjustable animation speed (`0.1x–3.0x`).
+- **Player Transform (`Skin` & `Misc Setting`)** — Independent **Size X / Y / Z** sliders (`-1.0` to `3.0`) and **Spin Speed** (`-3.0` to `3.0`), plus **Cosmetics Visibility** (`Show All`, `Mine Only`, `Hide All`) and one-click **Copy Cosmetics Config** to clipboard in `Misc Setting`.
+- **Custom Item Models (`/wish model`)** — Override the visual model and texture of any held Skyblock item (matched by Skyblock ID) with any vanilla item or loaded resource-pack model.
 
-### 🏰 Dungeon Custom Blocks (F7 / M7)
-- **Glass Overlays**: Local visual block highlights for dungeon terminal phases and parkour pathways (e.g. green, red, yellow, purple routes).
+---
 
-### 🌌 Visual & Environment Controls
-- **Time Changer**: Set custom client-side daytime/nighttime (0-24,000 ticks) with instant live preview and optional time freeze.
-- **Weather Changer**: Client-side 3D rain and snow simulation up to 60 blocks with `64x64` custom textures, particle count/size sliders, block collision splashes, and dynamic shifting wind.
-- **Custom Sky**: Replace the sky dome and horizon fog with custom atmospheres (*Black Sky*, *Lofi Dusk*, *Midnight Breeze*, *Cloudy Pastel*, *Sunset Clouds*, *Ocean Mirage*, *Sakura Twilight*), with optional star, sun/moon, and slow rotation toggles.
-- **Smol People**: Classic mini-player scaling with oversized heads and Essential cosmetics compatibility.
+### ⚔️ Hypixel Skyblock & Dungeons (`Slayer`, `Mining`, `Dungeon`)
 
-### 💬 Social & Music Chat Commands
-- `!song`: Share your currently playing track directly to Party (`/pc`), Guild (`/gc`), or All Chat (`/ac`).
-- **Interactive Social Commands**: Fun triggers including `!kiss`, `!hug`, `!pat`, `!poke`, `!feed`, `!wanted`, `!sus`, `!rizz`, `!jerry`, `!soraka`, `!meow`, and more.
+- **Slayer Carry Helper** — Manage carry runs cleanly with `/wish slayer carry <player> <amount>`:
+  - Automatic boss spawn detection via armor-stand tags, **Boss Spawn Notification** HUD + audio alert, and party-chat progress messages.
+  - **Auto Send Coords** to `/pc` when your own Slayer boss spawns.
+  - Custom hex **Slayer Glow** highlighting for active bosses.
+- **Automaton Farming & Live Bazaar Tracker** — Real-time Crystal Hollows Automaton overlay tracking kills, kills/hour, drops (7 Precursor parts + 17 tracked Gemstone variants), coins, and profit/hour:
+  - Interactive HUD controls for **Session / Total** stats, **Reset**, and live Hypixel Bazaar **Instasell / Sell Offer** pricing.
+  - **Crystal Hollows Sack** mode (prevents Bazaar sell offers from counting as drops), configurable **Pause Timeout** (`1–20s`), and customizable hex **Automaton Glow**.
+- **Precursor City Locator** — Scans loaded Crystal Hollows chunks and chat callouts to locate the Precursor City and render a 3D waypoint.
+- **Dungeon Lag & Time Lost Tracker** — Monitors client tick lag, server lag, and ping spikes during F7/M7 runs in a movable HUD, with optional end-of-run chat summary and **Always in M7/F7 (Simulators)** mode.
+- **F7/M7 Custom Blocks** — Client-side custom block & **Glass Pad** overlays for F7/M7 phases.
+
+---
+
+### 💬 Chat & Music Commands (`Command`)
+
+- **Channel Controls** — Independently enable or disable chat command triggers for **All Chat (`/ac`)**, **Guild Chat (`/gc`)**, and **Party Chat (`/pc`)**.
+- **`!song`** — Posts your currently playing track (`{title} - {artist}` customizable format) in chat.
+- **Fun Triggers** — `!meow`, `!wanted`, `!kiss`, `!feed`, `!poke`, `!pat`, `!hug`, `!sus`, `!rizz`, `!jerry` (temporarily renders nearby players as Villagers), `!soraka` (temporarily applies the Soraka model), `!iq`, `!sleep`, and `!yuri`.
 
 ---
 
@@ -63,39 +66,49 @@ A modern, high-performance Fabric client mod designed for **Hypixel Skyblock** u
 
 | Command | Description |
 | :--- | :--- |
-| `/wish` | Opens the main configuration screen |
-| `/wish gui` | Opens the interactive HUD layout editor |
-| `/wish model` | Opens the item model customizer for the held item |
+| `/wish` | Open the main configuration GUI |
+| `/wish gui` | Open the interactive HUD editor (drag to reposition and scroll wheel to scale the Lag, Automaton Tracker, and Boss Spawn HUDs) |
+| `/wish model` | Open the custom item model & texture picker for the held Skyblock item |
+| `/wish slayer carry <player> <amount>` | Start tracking Slayer carry bosses for `<player>` over `<amount>` kills |
+| `/wish slayer stopcarry [player]` | Stop Slayer carry tracking for `[player]` or clear all tracked carries |
 
 ---
 
 ## 📥 Installation
 
-1. Install **Fabric Loader** (version `0.19.5` or newer).
-2. Ensure you are using **Minecraft 26.2** and **Java 25+**.
-3. Download the latest `wish-1.1.4.jar` from the [Releases](https://github.com/Sorakkaa/Wish/releases) page.
-4. Place the jar into your `.minecraft/mods` folder along with **Fabric API**.
-5. Launch your game and type `/wish` to configure your options!
+### Requirements
+- **Minecraft** `26.2`
+- **Fabric Loader** `0.19.5` (or compatible `>= 0.19.3`)
+- **Fabric API** (`0.161.0+26.2`)
+- **Java** `25` or newer
+
+### Steps
+1. Download `wish-1.1.4.jar` from the [Releases](https://github.com/Sorakkaa/Wish/releases) page.
+2. Place `wish-1.1.4.jar` and **Fabric API** inside your `.minecraft/mods` folder.
+3. Launch Minecraft `26.2` with Fabric and run `/wish` in-game to customize everything.
 
 ---
 
 ## 🛠️ Building from Source
 
-To compile Wish yourself:
-
 ```bash
-# Clone the repository
 git clone https://github.com/Sorakkaa/Wish.git
 cd Wish
-
-# Build with Gradle
 ./gradlew build
 ```
 
-The compiled mod jar will be in `build/libs/wish-1.1.4.jar`.
+The compiled mod JAR will be output to `build/libs/wish-1.1.4.jar`.
+
+---
+
+## ⚙️ Configuration
+
+- Main configuration: `config/wish/config.json`
+- Custom item model overrides: `config/wish/models.json`
+- Optional update checker (`Check for Updates` in `Misc Setting`) queries GitHub Releases for `Sorakkaa/Wish` on startup and can be disabled at any time.
 
 ---
 
 ## 📄 License
 
-This project is licensed under the [CC0 1.0 Universal License](LICENSE).
+This project is open source under the [CC0 1.0 Universal License](LICENSE).
