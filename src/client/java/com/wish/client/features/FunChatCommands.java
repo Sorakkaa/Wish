@@ -1,0 +1,201 @@
+package com.wish.client.features;
+
+import com.wish.client.WishClient;
+import com.wish.client.config.ModConfig;
+import com.wish.client.util.ChatUtils;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.PlayerInfo;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Random;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
+
+public final class FunChatCommands {
+
+    private static final Random RANDOM = new Random();
+    private static final Pattern USERNAME_PATTERN = Pattern.compile("^[a-zA-Z0-9_]{2,16}$");
+    private static final Pattern WHITESPACE_PATTERN = Pattern.compile("\\s+");
+    private static volatile long lastCommandTime = 0;
+    private static volatile String cachedSpoofKey = "";
+    private static volatile Pattern cachedFullSpoofPattern = null;
+    private static volatile List<Pattern> cachedWordSpoofPatterns = Collections.emptyList();
+
+    private FunChatCommands() {}
+
+    public static void checkFunCommands(String lower, String text) {
+        if (lower == null || text == null) return;
+        if (lower.contains("!meow") && ModConfig.INSTANCE.enableMeow) processFunCommand(text, "!meow");
+        else if (lower.contains("!wanted") && ModConfig.INSTANCE.enableWanted) processFunCommand(text, "!wanted");
+        else if (lower.contains("!kiss") && ModConfig.INSTANCE.enableKiss) processFunCommand(text, "!kiss");
+        else if (lower.contains("!feed") && ModConfig.INSTANCE.enableFeed) processFunCommand(text, "!feed");
+        else if (lower.contains("!poke") && ModConfig.INSTANCE.enablePoke) processFunCommand(text, "!poke");
+        else if (lower.contains("!pat") && ModConfig.INSTANCE.enablePat) processFunCommand(text, "!pat");
+        else if (lower.contains("!hug") && ModConfig.INSTANCE.enableHug) processFunCommand(text, "!hug");
+        else if (lower.contains("!sus") && ModConfig.INSTANCE.enableSus) processFunCommand(text, "!sus");
+        else if (lower.contains("!rizz") && ModConfig.INSTANCE.enableRizz) processFunCommand(text, "!rizz");
+        else if (lower.contains("!jerry") && ModConfig.INSTANCE.enableJerry) processFunCommand(text, "!jerry");
+        else if (lower.contains("!soraka") && ModConfig.INSTANCE.enableSoraka) processFunCommand(text, "!soraka");
+        else if (lower.contains("!iq") && ModConfig.INSTANCE.enableIq) processFunCommand(text, "!iq");
+        else if (lower.contains("!sleep") && ModConfig.INSTANCE.enableSleep) processFunCommand(text, "!sleep");
+        else if (lower.contains("!yuri") && ModConfig.INSTANCE.enableYuri) processFunCommand(text, "!yuri");
+    }
+
+    private static String resolvePlayerName(String arg, Minecraft mc) {
+        if (arg == null || arg.isEmpty()) return arg;
+        if (mc != null && mc.player != null && mc.player.getScoreboardName().equalsIgnoreCase(arg)) {
+            return mc.player.getScoreboardName();
+        }
+        if (mc != null && mc.player != null && mc.player.connection != null) {
+            for (PlayerInfo info : mc.player.connection.getOnlinePlayers()) {
+                if (info != null && info.getProfile() != null && info.getProfile().name() != null) {
+                    String pName = info.getProfile().name();
+                    if (pName.equalsIgnoreCase(arg) || pName.toLowerCase().startsWith(arg.toLowerCase())) {
+                        return pName;
+                    }
+                }
+            }
+        }
+        return arg;
+    }
+
+    private static void processFunCommand(String text, String command) {
+        long now = System.currentTimeMillis();
+        if (now - lastCommandTime < 1500) return;
+        lastCommandTime = now;
+
+        Minecraft mc = Minecraft.getInstance();
+        String myName = (mc != null && mc.player != null) ? mc.player.getScoreboardName() : "Me";
+        String spoof = (ModConfig.INSTANCE.spoofedName != null) ? ModConfig.INSTANCE.spoofedName.trim() : "";
+
+        if (!spoof.isEmpty() && !spoof.equalsIgnoreCase(myName)) {
+            text = replaceSpoofedName(text, spoof, myName);
+        }
+
+        String lower = text.replace('\u00A0', ' ').toLowerCase().trim();
+        String explicitTarget = null;
+        int cmdIdx = text.toLowerCase().indexOf(command);
+        if (cmdIdx != -1 && text.length() > cmdIdx + command.length()) {
+            String afterCmd = SkyblockDetector.stripColorCodes(text.substring(cmdIdx + command.length())).trim();
+            if (!afterCmd.isEmpty()) {
+                String[] words = WHITESPACE_PATTERN.split(afterCmd);
+                String arg = words[0];
+                if (USERNAME_PATTERN.matcher(arg).matches()) {
+                    explicitTarget = resolvePlayerName(arg, mc);
+                }
+            }
+        }
+
+        String senderName = ChatUtils.extractNameFromChat(text);
+
+        String target = explicitTarget != null ? explicitTarget : (senderName != null ? senderName : myName);
+        String actor = senderName != null ? senderName : myName;
+        boolean isSelfTarget = actor.equalsIgnoreCase(target);
+
+        String msg = "";
+        switch (command) {
+            case "!meow" -> {
+                int pct = RANDOM.nextInt(101);
+                msg = target + " is " + pct + "% cat... " + (pct > 80 ? "nyaa :3" : (pct < 20 ? "closet barker." : "mrp?"));
+            }
+            case "!wanted" -> msg = "WANTED: " + target + " for ninjaing Necron's Handle (Bounty: 1 coin and a stick).";
+            case "!kiss" -> msg = isSelfTarget ? actor + " kissed their reflection in the mirror... Narcissist." : actor + " gave " + target + " a little kiss <3";
+            case "!feed" -> msg = isSelfTarget ? actor + " ate a pack of cookies in secret." : actor + " fed " + target + " a cookie. Eat and be quiet.";
+            case "!poke" -> msg = isSelfTarget ? actor + " pinched themself. Yeah, you're awake." : actor + " poked " + target + "! Hey, wake up!";
+            case "!pat" -> msg = isSelfTarget ? actor + " patted their own head. Good job champ." : actor + " gently patted " + target + "'s head. Good boy/girl.";
+            case "!hug" -> msg = isSelfTarget ? actor + " is hugging a body pillow while crying." : actor + " gave " + target + " a big warm hug!";
+            case "!sus" -> {
+                int pct = RANDOM.nextInt(101);
+                msg = target + " is " + pct + "% sus " + (pct > 75 ? "(vote them out right now)" : (pct < 25 ? "(clean)" : "(kinda iffy..)"));
+            }
+            case "!rizz" -> {
+                int rizz = RANDOM.nextInt(101);
+                msg = target + " has " + rizz + "% rizz " + (rizz > 85 ? "(W rizz)" : (rizz < 25 ? "(Negative rizz, stop talking)" : ""));
+            }
+            case "!jerry" -> {
+                SorakaModeManager.deactivate();
+                JerryModeManager.activate();
+                msg = "[Jerry] Jerry has taken full control.";
+            }
+            case "!soraka" -> {
+                JerryModeManager.deactivate();
+                SorakaModeManager.activate();
+                msg = "[Soraka] Yes, that was a banana. Nobody expects the banana.";
+            }
+            case "!iq" -> {
+                int iq = RANDOM.nextInt(180) + 1;
+                msg = target + "'s IQ: " + iq + (iq < 50 ? " (can't find the W key)" : (iq > 140 ? " (galaxy brain)" : " (average Skyblock player)"));
+            }
+            case "!sleep" -> msg = actor + ": 'Wake up, my bed exploded.'";
+            case "!yuri" -> {
+                String p1 = actor;
+                String p2 = target;
+                boolean hasTwo = false;
+                if (cmdIdx != -1 && text.length() > cmdIdx + command.length()) {
+                    String afterCmd = SkyblockDetector.stripColorCodes(text.substring(cmdIdx + command.length())).trim();
+                    if (!afterCmd.isEmpty()) {
+                        String[] words = WHITESPACE_PATTERN.split(afterCmd);
+                        if (words.length >= 2) {
+                            hasTwo = true;
+                            p1 = resolvePlayerName(words[0], mc);
+                            p2 = resolvePlayerName(words[1], mc);
+                        } else if (words.length == 1) {
+                            String resolved = resolvePlayerName(words[0], mc);
+                            if (!actor.equalsIgnoreCase(resolved)) {
+                                hasTwo = true;
+                                p1 = actor;
+                                p2 = resolved;
+                            }
+                        }
+                    }
+                }
+                if (hasTwo) {
+                    msg = p1 + " & " + p2 + ": " + RANDOM.nextInt(101) + "% yuri!";
+                } else {
+                    msg = target + ": " + RANDOM.nextInt(101) + "% yuri.";
+                }
+            }
+            default -> {}
+        }
+
+        String prefix = ChatUtils.getChatPrefix(lower);
+        final String finalMsg = msg;
+        CompletableFuture.delayedExecutor(300, TimeUnit.MILLISECONDS).execute(() -> {
+            if (prefix.equals("/pc ") && ModConfig.INSTANCE.enablePc) {
+                WishClient.sendServerChatMessage("/pc ", finalMsg);
+            } else if (prefix.equals("/gc ") && ModConfig.INSTANCE.enableGc) {
+                WishClient.sendServerChatMessage("/gc ", finalMsg);
+            } else if (prefix.equals("/ac ") && ModConfig.INSTANCE.enableAc) {
+                WishClient.sendServerChatMessage("/ac ", finalMsg);
+            }
+        });
+    }
+
+    private static String replaceSpoofedName(String text, String spoof, String myName) {
+        if (!spoof.equals(cachedSpoofKey)) {
+            cachedFullSpoofPattern = Pattern.compile("(?i)" + Pattern.quote(spoof));
+            String[] words = WHITESPACE_PATTERN.split(spoof);
+            if (words.length > 1) {
+                List<Pattern> wordPatterns = new ArrayList<>();
+                for (String w : words) {
+                    if (w.length() >= 3) {
+                        wordPatterns.add(Pattern.compile("(?i)\\b" + Pattern.quote(w) + "\\b"));
+                    }
+                }
+                cachedWordSpoofPatterns = List.copyOf(wordPatterns);
+            } else {
+                cachedWordSpoofPatterns = Collections.emptyList();
+            }
+            cachedSpoofKey = spoof;
+        }
+        String quotedReplacement = java.util.regex.Matcher.quoteReplacement(myName);
+        String result = cachedFullSpoofPattern != null ? cachedFullSpoofPattern.matcher(text).replaceAll(quotedReplacement) : text;
+        for (Pattern wp : cachedWordSpoofPatterns) {
+            result = wp.matcher(result).replaceAll(quotedReplacement);
+        }
+        return result;
+    }
+}

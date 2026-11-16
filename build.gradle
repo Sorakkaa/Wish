@@ -1,0 +1,101 @@
+plugins {
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+	id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+repositories {
+	maven {
+		name = "DevAuth"
+		url = "https://pkgs.dev.azure.com/djtheredstoner/DevAuth/_packaging/public/maven/v1"
+	}
+}
+
+loom {
+	splitEnvironmentSourceSets()
+
+	mods {
+		"wish" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+	}
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+	runtimeOnly "me.djtheredstoner:DevAuth-fabric:1.2.1"
+
+	testImplementation platform("org.junit:junit-bom:5.11.4")
+	testImplementation "org.junit.jupiter:junit-jupiter"
+	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+sourceSets {
+	test {
+		compileClasspath += sourceSets.client.output + configurations.clientCompileClasspath
+		runtimeClasspath += sourceSets.client.output + configurations.clientRuntimeClasspath
+	}
+}
+
+test {
+	useJUnitPlatform()
+}
+
+processResources {
+	def version = project.version
+	inputs.property "version", version
+
+	filesMatching("fabric.mod.json") {
+		expand "version": version
+	}
+
+	from("custom_players.json") {
+		into "assets/wish"
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 25
+}
+
+tasks.withType(JavaExec).configureEach {
+	systemProperty "devauth.enabled", "true"
+	systemProperty "devauth.account", "main"
+}
+
+java {
+	withSourcesJar()
+
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(25)
+	}
+}
+
+jar {
+	def projectName = project.name
+	inputs.property "projectName", projectName
+
+	from("LICENSE") {
+		rename { "${it}_$projectName"}
+	}
+}
+
+publishing {
+	publications {
+		create("mavenJava", MavenPublication) {
+			from components.java
+		}
+	}
+
+	repositories {
+	}
+}
+
+

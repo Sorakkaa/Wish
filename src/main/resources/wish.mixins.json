@@ -1,0 +1,40 @@
+{
+	"required": true,
+	"package": "com.wish.client.mixin",
+	"compatibilityLevel": "JAVA_25",
+	"client": [
+		"EntityRendererMixin",
+		"EntityRenderDispatcherMixin",
+		"PlayerRendererMixin",
+		"HumanoidModelMixin",
+		"AvatarRenderStateMixin",
+		"RenderSectionRegionMixin",
+		"SodiumLevelSliceMixin",
+		"GuiMixin",
+		"ChatComponentMixin",
+		"EntityMixin",
+		"ItemStackMixin",
+		"ItemModelResolverMixin",
+		"ModelManagerAccessor",
+		"ClientLevelAccessor",
+		"MultiPlayerGameModeMixin",
+		"AbstractContainerScreenMixin",
+		"ScreenMixin",
+		"GuiMessageLineMixin",
+		"PlayerTabOverlayMixin",
+		"ClientClockManagerMixin",
+		"AttributeTrackSamplerMixin",
+		"LevelWeatherMixin",
+		"ClientLevelWeatherMixin",
+		"SkyRendererMixin",
+		"AtmosphericFogEnvironmentMixin",
+		"WeatherEffectRendererMixin",
+		"WeatherRenderStateMixin",
+		"GuiGraphicsExtractorMixin",
+		"PlayerInfoMixin",
+		"FontMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}
