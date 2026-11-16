@@ -93,6 +93,7 @@
     "color": "WAVE:#FF9EC3:#FF0F74",
     "font": 0,
     "animSpeed": 1.2534091,
+    "badge": false,
     "scaleX": 0.6666666,
     "scaleY": 0.6666666,
     "scaleZ": 0.6666666,
