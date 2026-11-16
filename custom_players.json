@@ -88,5 +88,14 @@
     "scaleY": 0.5,
     "scaleZ": 0.01,
     "spinSpeedY": 0.0
+  },
+  "e17b2d2d-0b86-4a4e-bf77-8f7776e15943": {
+    "color": "WAVE:#FF9EC3:#FF0F74",
+    "font": 0,
+    "animSpeed": 1.2534091,
+    "scaleX": 0.6666666,
+    "scaleY": 0.6666666,
+    "scaleZ": 0.6666666,
+    "spinSpeedY": 0.0
   }
 }
