@@ -1,5 +1,6 @@
 package com.wish.client.gui;
 
+import com.wish.client.color.ColorUtils;
 import com.wish.client.config.ModConfig;
 import com.wish.client.features.CustomModelManager;
 import net.minecraft.client.Minecraft;
@@ -10,155 +11,63 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
-import net.minecraft.client.renderer.item.ItemModel;
-import net.minecraft.client.renderer.item.MissingItemModel;
-import com.wish.client.mixin.ModelManagerAccessor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.*;
+import java.util.regex.Pattern;
 
 public class WishModelScreen extends Screen {
+
+    private static final Pattern NEWLINE_PATTERN = Pattern.compile("[\\n\\r]");
+    private static final Pattern LINE_SPLIT_PATTERN = Pattern.compile("\n");
 
     private final Screen lastScreen;
     private final ItemStack heldStack;
     private final String targetKey;
     private final String targetDisplayName;
 
-    
     private String searchQuery = "";
     private boolean searchFocused = false;
 
-    
     private int currentPage = 0;
     private static final int COLS = 8;
     private static final int ROWS = 4;
-    private static final int ITEMS_PER_PAGE = COLS * ROWS; 
+    private static final int ITEMS_PER_PAGE = COLS * ROWS;
+    private static final int PREVIEW_W = 152;
+    private static final int PAGE_JUMP_STEP = 5;
+    private static final int PAGE_BTN_W = 22;
+    private static final int PAGE_JUMP_BTN_W = 28;
+    private static final int PAGE_BTN_H = 16;
+    private static final int PAGE_BTN_GAP = 4;
+    private static final int PAGE_CENTER_HALF_GAP = 28;
 
-    
+    private int activeSectionTab = 0;
+    private final WishModelNameTab nameTab;
+
     private String cachedPreviewModelId = null;
     private ItemStack cachedPreviewStack = null;
+    private Boolean cachedPreviewGlow = null;
+    private boolean cachedPreviewHasOverride = false;
+    private ItemStack cachedPreviewDisplayStack = null;
+    private String cachedPreviewName = null;
+    private int cachedPreviewNameWidth = 0;
+    private String cachedPreviewCustomRaw = null;
+    private Component cachedPreviewCustomComp = null;
+    private int cachedPreviewCustomWidth = 0;
 
-    
     private String hoveredTooltipTitle = null;
     private String hoveredTooltipDesc = null;
 
-    public static class ModelOption {
-        public final String id;
-        public final String name;
-        public final ItemStack stack;
-        public final boolean isTexturePack;
-
-        public ModelOption(String id, String name, ItemStack stack, boolean isTexturePack) {
-            this.id = id;
-            this.name = name;
-            this.stack = stack;
-            this.isTexturePack = isTexturePack;
-        }
-
-        public ModelOption(String id, String name, ItemStack stack) {
-            this(id, name, stack, false);
-        }
-    }
-
-    private static final List<ModelOption> ALL_OPTIONS = new ArrayList<>();
-    private static final List<ModelOption> PACK_OPTIONS = new ArrayList<>();
-    private static boolean packModelsLoaded = false;
-    private static final ModelOption CUSTOM_INPUT_OPTION = new ModelOption(
-        "wish:custom_pack_input", 
-        "§d+ Enter Pack Model ID", 
-        new ItemStack(Items.NAME_TAG), 
-        true
-    );
-
-    private final List<ModelOption> filteredOptions = new ArrayList<>();
-
-    static {
-        
-        for (Item item : BuiltInRegistries.ITEM) {
-            if (item == Items.AIR) continue;
-            Identifier id = BuiltInRegistries.ITEM.getKey(item);
-            if (id == null) continue;
-
-            String path = id.getPath().toLowerCase(Locale.ROOT);
-            ItemStack stack = new ItemStack(item);
-            String name = stack.getHoverName().getString();
-            if (name == null || name.isEmpty()) {
-                name = path;
-            }
-
-            ALL_OPTIONS.add(new ModelOption(id.toString(), name, stack));
-        }
-    }
-
-    public static synchronized void loadTexturePackModels() {
-        PACK_OPTIONS.clear();
-        Minecraft mc = Minecraft.getInstance();
-        if (mc == null || mc.getModelManager() == null) return;
-
-        Set<String> seenIds = new HashSet<>();
-        Set<String> vanillaKeys = new HashSet<>();
-        for (Item item : BuiltInRegistries.ITEM) {
-            Identifier vid = BuiltInRegistries.ITEM.getKey(item);
-            if (vid != null) {
-                vanillaKeys.add(vid.toString());
-                vanillaKeys.add(vid.getPath());
-            }
-        }
-
-        try {
-            var bakedMap = ((ModelManagerAccessor) mc.getModelManager()).getBakedItemStackModels();
-            if (bakedMap != null) {
-                for (Map.Entry<Identifier, ItemModel> entry : bakedMap.entrySet()) {
-                    Identifier resId = entry.getKey();
-                    ItemModel model = entry.getValue();
-
-                    
-                    if (model == null || model instanceof MissingItemModel) {
-                        continue;
-                    }
-
-                    String ns = resId.getNamespace();
-                    String path = resId.getPath();
-
-                    
-                    if (path.contains("_pulling") || path.endsWith("_cast") || path.contains("_firework") 
-                            || path.contains("_arrow") || path.contains("_charged") || path.contains("_standby")) {
-                        continue;
-                    }
-
-                    
-                    if (ns.equals("minecraft") && vanillaKeys.contains(path)) {
-                        continue;
-                    }
-
-                    String fullModelId = resId.toString();
-                    if (!seenIds.add(fullModelId)) continue;
-
-                    String rawName = path.substring(path.lastIndexOf('/') + 1).replace('_', ' ');
-                    String displayName = rawName.isEmpty() ? fullModelId : Character.toUpperCase(rawName.charAt(0)) + rawName.substring(1);
-
-                    ItemStack iconStack = new ItemStack(Items.DIAMOND_SWORD);
-                    iconStack.set(DataComponents.ITEM_MODEL, resId);
-
-                    PACK_OPTIONS.add(new ModelOption(fullModelId, displayName + " §7(" + ns + ")", iconStack, true));
-                }
-            }
-        } catch (Exception ignored) {}
-
-        
-        PACK_OPTIONS.sort(Comparator.comparing(a -> a.name));
-        packModelsLoaded = true;
-    }
+    private final List<WishModelCatalog.ModelOption> filteredOptions = new ArrayList<>();
 
     public WishModelScreen(Screen lastScreen) {
         super(Component.literal("Item Model Customizer"));
         this.lastScreen = lastScreen;
 
-        if (!packModelsLoaded) {
-            loadTexturePackModels();
-        }
+        WishModelCatalog.ensurePackModelsLoaded();
 
         var player = Minecraft.getInstance().player;
         if (player != null && !player.getMainHandItem().isEmpty()) {
@@ -169,59 +78,35 @@ public class WishModelScreen extends Screen {
 
         this.targetKey = CustomModelManager.getItemTargetKey(this.heldStack);
         this.targetDisplayName = CustomModelManager.getItemDisplayName(this.heldStack);
+        this.nameTab = new WishModelNameTab(this.targetKey, this.targetDisplayName);
 
         updateFilteredOptions();
     }
 
     private void updateFilteredOptions() {
-        filteredOptions.clear();
-        String q = searchQuery.trim().toLowerCase(Locale.ROOT);
-
-        if (q.isEmpty()) {
-            filteredOptions.addAll(ALL_OPTIONS);
-            filteredOptions.addAll(PACK_OPTIONS);
-            filteredOptions.add(CUSTOM_INPUT_OPTION);
-        } else {
-            
-            if (q.contains(":") || q.contains("/")) {
-                Identifier typedId = Identifier.tryParse(q.contains(":") ? q : "minecraft:" + q);
-                if (typedId != null) {
-                    var mm = Minecraft.getInstance().getModelManager();
-                    if (mm != null) {
-                        var model = mm.getItemModel(typedId);
-                        if (model != null && !(model instanceof MissingItemModel)) {
-                            ItemStack previewStack = new ItemStack(heldStack.getItem());
-                            previewStack.set(DataComponents.ITEM_MODEL, typedId);
-                            filteredOptions.add(new ModelOption(typedId.toString(), "§d[Custom Pack ID] §f" + typedId, previewStack, true));
-                        }
-                    }
-                }
-            }
-
-            for (ModelOption opt : ALL_OPTIONS) {
-                if (opt.name.toLowerCase(Locale.ROOT).contains(q) || opt.id.toLowerCase(Locale.ROOT).contains(q)) {
-                    filteredOptions.add(opt);
-                }
-            }
-            for (ModelOption opt : PACK_OPTIONS) {
-                if (opt.name.toLowerCase(Locale.ROOT).contains(q) || opt.id.toLowerCase(Locale.ROOT).contains(q)) {
-                    filteredOptions.add(opt);
-                }
-            }
-            if ("texture pack model enter id".contains(q)) {
-                filteredOptions.add(CUSTOM_INPUT_OPTION);
-            }
-        }
+        WishModelCatalog.populateFilteredOptions(searchQuery, heldStack, filteredOptions);
         currentPage = 0;
     }
 
     private int getAccentColor() {
-        if (ModConfig.INSTANCE.menuAccentColor != null && ModConfig.INSTANCE.menuAccentColor.startsWith("#") && ModConfig.INSTANCE.menuAccentColor.length() == 7) {
-            try {
-                return 0xFF000000 | Integer.parseInt(ModConfig.INSTANCE.menuAccentColor.substring(1), 16);
-            } catch (Exception ignored) {}
+        String accent = ModConfig.INSTANCE.menuAccentColor;
+        if (accent != null && accent.startsWith("#")) {
+            int rgb = ColorUtils.parseHexRgb(accent, -1);
+            if (rgb >= 0) {
+                return 0xFF000000 | rgb;
+            }
         }
         return 0xFF9D00FF;
+    }
+
+    @Override
+    public boolean isInGameUi() {
+        return this.minecraft != null && this.minecraft.level != null;
+    }
+
+    @Override
+    public void extractTransparentBackground(GuiGraphicsExtractor g) {
+        g.fillGradient(0, 0, this.width, this.height, 0x340A0A12, 0x460A0A14);
     }
 
     @Override
@@ -234,6 +119,39 @@ public class WishModelScreen extends Screen {
         }
     }
 
+    private int getWinW() {
+        return Math.min(this.width - 24, 600);
+    }
+
+    private int getWinH() {
+        return Math.min(this.height - 24, 372);
+    }
+
+    private boolean isItemGlowActive() {
+        Boolean customGlow = CustomModelManager.getGlowOverride(targetKey);
+        if (customGlow != null) {
+            return customGlow;
+        }
+        return heldStack.isEnchanted()
+                || (heldStack.has(DataComponents.ENCHANTMENT_GLINT_OVERRIDE)
+                        && Boolean.TRUE.equals(heldStack.get(DataComponents.ENCHANTMENT_GLINT_OVERRIDE)));
+    }
+
+    private Component resolveCachedCustomName(String customNameRaw) {
+        if (customNameRaw == null || customNameRaw.isEmpty()) {
+            cachedPreviewCustomRaw = null;
+            cachedPreviewCustomComp = null;
+            cachedPreviewCustomWidth = 0;
+            return null;
+        }
+        if (!customNameRaw.equals(cachedPreviewCustomRaw)) {
+            cachedPreviewCustomRaw = customNameRaw;
+            cachedPreviewCustomComp = CustomModelManager.getCompiledNameComponent(customNameRaw);
+            cachedPreviewCustomWidth = cachedPreviewCustomComp != null ? font.width(cachedPreviewCustomComp) : 0;
+        }
+        return cachedPreviewCustomComp;
+    }
+
     private void renderScreenContent(GuiGraphicsExtractor g, int mx, int my) {
         hoveredTooltipTitle = null;
         hoveredTooltipDesc = null;
@@ -241,30 +159,34 @@ public class WishModelScreen extends Screen {
         int colAccent = getAccentColor();
         int colAccentDim = (colAccent & 0x00FFFFFF) | 0x44000000;
 
-        int winW = Math.min(this.width - 24, 560);
-        int winH = Math.min(this.height - 24, 350);
+        int winW = getWinW();
+        int winH = getWinH();
         int winX = (this.width - winW) / 2;
         int winY = (this.height - winH) / 2;
 
-        
-        RenderUtils.fillRoundedRect(g, winX, winY, winW, winH, 6, 0x00000000);
+        RenderUtils.fillRoundedRect(g, winX, winY, winW, winH, 6, 0x220C0C14);
         RenderUtils.drawGradientOutline(g, winX, winY, winW, winH, 6, colAccent, colAccent);
 
-        
-        g.text(font, "§lITEM MODEL CUSTOMIZER", winX + 16, winY + 12, colAccent);
+        g.text(font, "§lITEM MODEL CUSTOMIZER", winX + 16, winY + 13, colAccent);
 
-        
         int closeBtnSize = 18;
         int closeX = winX + winW - closeBtnSize - 12;
         int closeY = winY + 10;
+
+        int tabBtnH = 16;
+        int tabBtnY = winY + 11;
+        int tabNameW = 86;
+        int tabModelsW = 54;
+        int tabNameX = closeX - tabNameW - 8;
+        int tabModelsX = tabNameX - tabModelsW - 6;
+        renderTopTabButton(g, tabModelsX, tabBtnY, tabModelsW, tabBtnH, "Models", activeSectionTab == 0, mx, my, colAccent, colAccentDim);
+        renderTopTabButton(g, tabNameX, tabBtnY, tabNameW, tabBtnH, "Name & Colors", activeSectionTab == 1, mx, my, colAccent, colAccentDim);
+
         boolean closeHover = mx >= closeX && mx <= closeX + closeBtnSize && my >= closeY && my <= closeY + closeBtnSize;
         RenderUtils.fillRoundedRect(g, closeX, closeY, closeBtnSize, closeBtnSize, 4, closeHover ? 0xAAFF3333 : 0x00000000);
         RenderUtils.drawGradientOutline(g, closeX, closeY, closeBtnSize, closeBtnSize, 4, closeHover ? 0xFFFF4444 : 0x44FFFFFF, 0x11000000);
         g.text(font, "✕", closeX + (closeBtnSize - font.width("✕")) / 2 + 1, closeY + 4, 0xFFFFFFFF);
 
-        
-        
-        
         int bannerY = winY + 32;
         int bannerH = 38;
         int bannerW = winW - 28;
@@ -273,19 +195,33 @@ public class WishModelScreen extends Screen {
         RenderUtils.fillRoundedRect(g, bannerX, bannerY, bannerW, bannerH, 4, 0x00000000);
         RenderUtils.drawGradientOutline(g, bannerX, bannerY, bannerW, bannerH, 4, 0x55FFFFFF, 0x55FFFFFF);
 
-        
         g.pose().pushMatrix();
         g.pose().translate(bannerX + 6, bannerY + 3);
         g.pose().scale(2.0f, 2.0f);
         g.fakeItem(heldStack, 0, 0);
         g.pose().popMatrix();
 
-        
         String assignedModelId = CustomModelManager.getOverride(targetKey);
         boolean hasOverride = (assignedModelId != null && !assignedModelId.isEmpty() && !"default".equalsIgnoreCase(assignedModelId));
+        Component customNameComp = resolveCachedCustomName(CustomModelManager.getNameOverride(targetKey));
+        boolean hasAnyOverride = CustomModelManager.hasAnyOverride(targetKey);
+
+        int resetBtnW = 54;
+        int resetBtnH = 22;
+        int resetBtnX = bannerX + bannerW - resetBtnW - 8;
+        int resetBtnY = bannerY + (bannerH - resetBtnH) / 2;
 
         int infoTextX = bannerX + 44;
-        g.text(font, "Target: §f" + targetDisplayName, infoTextX, bannerY + 7, 0xFFFFFFFF);
+        int targetLabelEnd = resetBtnX - 6;
+        g.enableScissor(infoTextX, bannerY + 3, targetLabelEnd, bannerY + 20);
+        if (customNameComp != null) {
+            int prefixW = font.width("Target: ");
+            g.text(font, "Target: ", infoTextX, bannerY + 7, 0xFFFFFFFF);
+            g.text(font, customNameComp, infoTextX + prefixW, bannerY + 7, 0xFFFFFFFF);
+        } else {
+            g.text(font, "Target: §f" + targetDisplayName, infoTextX, bannerY + 7, 0xFFFFFFFF);
+        }
+        g.disableScissor();
 
         String modelStatus;
         if (hasOverride) {
@@ -294,167 +230,244 @@ public class WishModelScreen extends Screen {
             if (mid != null) {
                 Item mItem = BuiltInRegistries.ITEM.getValue(mid);
                 if (mItem != null && mItem != Items.AIR) {
-                    mName = new ItemStack(mItem).getHoverName().getString();
+                    mName = CustomModelManager.getOriginalHoverName(new ItemStack(mItem)).getString();
                 }
             }
             modelStatus = "Model: §a" + mName;
         } else {
             modelStatus = "Model: §7Original / None";
         }
+        if (customNameComp != null) {
+            modelStatus += "  §7|  Name: §dCustom";
+        }
+        g.enableScissor(infoTextX, bannerY + 19, targetLabelEnd, bannerY + 35);
         g.text(font, modelStatus, infoTextX, bannerY + 21, 0xFFDDDDDD);
+        g.disableScissor();
 
-        
-        int resetBtnW = 54;
-        int resetBtnH = 22;
-        int resetBtnX = bannerX + bannerW - resetBtnW - 8;
-        int resetBtnY = bannerY + (bannerH - resetBtnH) / 2;
         boolean resetHov = mx >= resetBtnX && mx < resetBtnX + resetBtnW && my >= resetBtnY && my < resetBtnY + resetBtnH;
         RenderUtils.fillRoundedRect(g, resetBtnX, resetBtnY, resetBtnW, resetBtnH, 3, resetHov ? 0x44FF3333 : 0x00000000);
-        RenderUtils.drawGradientOutline(g, resetBtnX, resetBtnY, resetBtnW, resetBtnH, 3, hasOverride ? (resetHov ? 0xFFFF5555 : 0x88FF5555) : 0x33666666, 0x11000000);
-        g.text(font, "Reset", resetBtnX + (resetBtnW - font.width("Reset")) / 2, resetBtnY + 6, hasOverride ? 0xFFFF8888 : 0xFF777777);
+        RenderUtils.drawGradientOutline(g, resetBtnX, resetBtnY, resetBtnW, resetBtnH, 3, hasAnyOverride ? (resetHov ? 0xFFFF5555 : 0x88FF5555) : 0x33666666, 0x11000000);
+        g.text(font, "Reset", resetBtnX + (resetBtnW - font.width("Reset")) / 2, resetBtnY + 6, hasAnyOverride ? 0xFFFF8888 : 0xFF777777);
+        if (resetHov && hasAnyOverride) {
+            hoveredTooltipTitle = "Reset Item Overrides";
+            hoveredTooltipDesc = "Resets custom model, glow & custom name for this item.";
+        }
 
-        
-        
-        
         int ctrlY = bannerY + bannerH + 8;
-        int searchH = 20;
-        int glowBtnW = 54;
-        int glowBtnH = 20;
-        int searchX = bannerX;
-        int searchW = bannerW - glowBtnW - 6;
-        int glowBtnX = searchX + searchW + 6;
-        int glowBtnY = ctrlY;
-
-        
-        RenderUtils.fillRoundedRect(g, searchX, ctrlY, searchW, searchH, 3, searchFocused ? 0x22FFFFFF : 0x00000000);
-        RenderUtils.drawGradientOutline(g, searchX, ctrlY, searchW, searchH, 3, searchFocused ? colAccent : 0x44FFFFFF, 0x11000000);
-        String searchPrompt = searchQuery.isEmpty() && !searchFocused ? "§7Search items or pack models..." : searchQuery + (searchFocused && (System.currentTimeMillis() % 1000 < 500) ? "§f|" : "");
-        g.text(font, searchPrompt, searchX + 8, ctrlY + 6, 0xFFFFFFFF);
-
-        
-        Boolean customGlow = CustomModelManager.getGlowOverride(targetKey);
-        boolean isGlowActive;
-        if (customGlow != null) {
-            isGlowActive = customGlow;
-        } else {
-            isGlowActive = heldStack.isEnchanted() || (heldStack.has(DataComponents.ENCHANTMENT_GLINT_OVERRIDE) && Boolean.TRUE.equals(heldStack.get(DataComponents.ENCHANTMENT_GLINT_OVERRIDE)));
-        }
-
-        boolean glowHov = mx >= glowBtnX && mx < glowBtnX + glowBtnW && my >= glowBtnY && my < glowBtnY + glowBtnH;
-        int glowBg = isGlowActive ? (glowHov ? 0x66FF55FF : 0x33FF55FF) : (glowHov ? 0x22FFFFFF : 0x00000000);
-        int glowBorder = isGlowActive ? 0xFFFF77FF : (glowHov ? 0x88FFFFFF : 0x44FFFFFF);
-        RenderUtils.fillRoundedRect(g, glowBtnX, glowBtnY, glowBtnW, glowBtnH, 3, glowBg);
-        RenderUtils.drawGradientOutline(g, glowBtnX, glowBtnY, glowBtnW, glowBtnH, 3, glowBorder, glowBorder);
-        String glowLabel = isGlowActive ? "Glow: §dON" : "Glow: §7OFF";
-        g.text(font, glowLabel, glowBtnX + (glowBtnW - font.width(glowLabel)) / 2, glowBtnY + 6, 0xFFFFFFFF);
-
-        if (glowHov) {
-            hoveredTooltipTitle = "Enchantment Glow (Glint)";
-            hoveredTooltipDesc = isGlowActive ? "§aGlow is currently ENABLED\n§7Click to remove enchantment glint shimmer." : "§7Glow is currently DISABLED\n§7Click to add purple enchantment shimmer.";
-        }
-
-        
-        int contentY = ctrlY + searchH + 6;
-        int contentH = winY + winH - contentY - 8;
-
-        int previewW = 140;
-        int gridW = bannerW - previewW - 8;
+        int gridW = bannerW - PREVIEW_W - 8;
         int gridX = bannerX;
+        int prevX = gridX + gridW + 8;
+        boolean isGlowActive = isItemGlowActive();
 
-        
-        RenderUtils.fillRoundedRect(g, gridX, contentY, gridW, contentH, 4, 0x00000000);
-        RenderUtils.drawGradientOutline(g, gridX, contentY, gridW, contentH, 4, 0x44FFFFFF, 0x44FFFFFF);
+        int previewPanelY;
+        int previewPanelH;
 
-        
-        int totalPages = Math.max(1, (filteredOptions.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE);
-        if (currentPage >= totalPages) currentPage = totalPages - 1;
-        if (currentPage < 0) currentPage = 0;
+        if (activeSectionTab == 0) {
+            int searchH = 20;
+            int glowBtnW = 54;
+            int glowBtnH = 20;
+            int searchX = bannerX;
+            int searchW = bannerW - glowBtnW - 6;
+            int glowBtnX = searchX + searchW + 6;
+            int glowBtnY = ctrlY;
 
-        int tileSize = 30;
-        int tileGap = 4;
-        int gridInnerX = gridX + (gridW - (COLS * tileSize + (COLS - 1) * tileGap)) / 2;
-        int gridInnerY = contentY + 6 + (contentH - 36 - (ROWS * tileSize + (ROWS - 1) * tileGap)) / 2;
+            RenderUtils.fillRoundedRect(g, searchX, ctrlY, searchW, searchH, 3, searchFocused ? 0x22FFFFFF : 0x00000000);
+            RenderUtils.drawGradientOutline(g, searchX, ctrlY, searchW, searchH, 3, searchFocused ? colAccent : 0x44FFFFFF, 0x11000000);
+            String searchPrompt = searchQuery.isEmpty() && !searchFocused
+                    ? "§7Search items or pack models..."
+                    : searchQuery + (searchFocused && (System.currentTimeMillis() % 1000 < 500) ? "§f|" : "");
+            g.text(font, searchPrompt, searchX + 8, ctrlY + 6, 0xFFFFFFFF);
 
-        int startIndex = currentPage * ITEMS_PER_PAGE;
-        int endIndex = Math.min(filteredOptions.size(), startIndex + ITEMS_PER_PAGE);
+            boolean glowHov = mx >= glowBtnX && mx < glowBtnX + glowBtnW && my >= glowBtnY && my < glowBtnY + glowBtnH;
+            int glowBg = isGlowActive ? (glowHov ? 0x66FF55FF : 0x33FF55FF) : (glowHov ? 0x22FFFFFF : 0x00000000);
+            int glowBorder = isGlowActive ? 0xFFFF77FF : (glowHov ? 0x88FFFFFF : 0x44FFFFFF);
+            RenderUtils.fillRoundedRect(g, glowBtnX, glowBtnY, glowBtnW, glowBtnH, 3, glowBg);
+            RenderUtils.drawGradientOutline(g, glowBtnX, glowBtnY, glowBtnW, glowBtnH, 3, glowBorder, glowBorder);
+            String glowLabel = isGlowActive ? "Glow: §dON" : "Glow: §7OFF";
+            g.text(font, glowLabel, glowBtnX + (glowBtnW - font.width(glowLabel)) / 2, glowBtnY + 6, 0xFFFFFFFF);
 
-        for (int i = startIndex; i < endIndex; i++) {
-            int localIdx = i - startIndex;
-            int col = localIdx % COLS;
-            int row = localIdx / COLS;
-            int tx = gridInnerX + col * (tileSize + tileGap);
-            int ty = gridInnerY + row * (tileSize + tileGap);
-
-            ModelOption opt = filteredOptions.get(i);
-            boolean isCurrentModel = opt.id.equalsIgnoreCase(assignedModelId);
-            boolean tileHov = mx >= tx && mx < tx + tileSize && my >= ty && my < ty + tileSize;
-
-            if (isCurrentModel) {
-                g.fill(tx, ty, tx + tileSize, ty + tileSize, 0x40FFFFFF);
-                RenderUtils.drawGradientOutline(g, tx, ty, tileSize, tileSize, 2, colAccent, 0x22222222);
-            } else if (tileHov) {
-                g.fill(tx, ty, tx + tileSize, ty + tileSize, 0x25FFFFFF);
-                RenderUtils.drawGradientOutline(g, tx, ty, tileSize, tileSize, 2, colAccentDim, 0x22222222);
+            if (glowHov) {
+                hoveredTooltipTitle = "Enchantment Glow (Glint)";
+                hoveredTooltipDesc = isGlowActive
+                        ? "§aGlow is currently ENABLED\n§7Click to remove enchantment glint shimmer."
+                        : "§7Glow is currently DISABLED\n§7Click to add purple enchantment shimmer.";
             }
 
-            g.fakeItem(opt.stack, tx + 7, ty + 7);
+            int contentY = ctrlY + searchH + 6;
+            int contentH = winY + winH - contentY - 8;
+            previewPanelY = contentY;
+            previewPanelH = contentH;
 
-            if (tileHov) {
-                hoveredTooltipTitle = opt.name;
-                String desc = "§bID: §f" + opt.id;
-                if (opt.isTexturePack) {
-                    desc = "§d✦ Texture Pack Model\n" + desc;
+            RenderUtils.fillRoundedRect(g, gridX, contentY, gridW, contentH, 4, 0x00000000);
+            RenderUtils.drawGradientOutline(g, gridX, contentY, gridW, contentH, 4, 0x44FFFFFF, 0x44FFFFFF);
+
+            int totalPages = getTotalPages();
+            if (currentPage >= totalPages) currentPage = totalPages - 1;
+            if (currentPage < 0) currentPage = 0;
+
+            int tileSize = 30;
+            int tileGap = 4;
+            int gridInnerX = gridX + (gridW - (COLS * tileSize + (COLS - 1) * tileGap)) / 2;
+            int gridInnerY = contentY + 6 + (contentH - 36 - (ROWS * tileSize + (ROWS - 1) * tileGap)) / 2;
+
+            int startIndex = currentPage * ITEMS_PER_PAGE;
+            int endIndex = Math.min(filteredOptions.size(), startIndex + ITEMS_PER_PAGE);
+
+            for (int i = startIndex; i < endIndex; i++) {
+                int localIdx = i - startIndex;
+                int col = localIdx % COLS;
+                int row = localIdx / COLS;
+                int tx = gridInnerX + col * (tileSize + tileGap);
+                int ty = gridInnerY + row * (tileSize + tileGap);
+
+                WishModelCatalog.ModelOption opt = filteredOptions.get(i);
+                boolean isCurrentModel = opt.id.equalsIgnoreCase(assignedModelId);
+                boolean tileHov = mx >= tx && mx < tx + tileSize && my >= ty && my < ty + tileSize;
+
+                if (isCurrentModel) {
+                    g.fill(tx, ty, tx + tileSize, ty + tileSize, 0x40FFFFFF);
+                    RenderUtils.drawGradientOutline(g, tx, ty, tileSize, tileSize, 2, colAccent, 0x22222222);
+                } else if (tileHov) {
+                    g.fill(tx, ty, tx + tileSize, ty + tileSize, 0x25FFFFFF);
+                    RenderUtils.drawGradientOutline(g, tx, ty, tileSize, tileSize, 2, colAccentDim, 0x22222222);
                 }
-                hoveredTooltipDesc = desc + "\n§aClick to apply as model!";
+
+                g.fakeItem(opt.stack, tx + 7, ty + 7);
+
+                if (tileHov) {
+                    hoveredTooltipTitle = opt.name;
+                    String desc = "§bID: §f" + opt.id;
+                    if (opt.isTexturePack) {
+                        desc = "§d✦ Texture Pack Model\n" + desc;
+                    }
+                    hoveredTooltipDesc = desc + "\n§aClick to apply as model!";
+                }
+            }
+
+            int sep2Y = contentY + contentH - 24;
+            g.fill(gridX, sep2Y, gridX + gridW, sep2Y + 1, 0x22FFFFFF);
+
+            int pageBarY = sep2Y + 4;
+            int centerX = gridX + gridW / 2;
+            boolean canPrev = currentPage > 0;
+            boolean canNext = currentPage < totalPages - 1;
+
+            renderPageNavButton(g, getPageJumpPrevX(centerX), pageBarY, PAGE_JUMP_BTN_W, PAGE_BTN_H,
+                    "\u25C0\u25C0", canPrev, mx, my, colAccentDim, "-5 Pages", "Jump 5 pages backward (or Shift+Scroll)");
+            renderPageNavButton(g, getPagePrevX(centerX), pageBarY, PAGE_BTN_W, PAGE_BTN_H,
+                    "\u25C0", canPrev, mx, my, colAccentDim, null, null);
+
+            String pageText = (currentPage + 1) + " / " + totalPages;
+            g.text(font, pageText, gridX + (gridW - font.width(pageText)) / 2, pageBarY + 3, 0xFFAAAAAA);
+
+            renderPageNavButton(g, getPageNextX(centerX), pageBarY, PAGE_BTN_W, PAGE_BTN_H,
+                    "\u25B6", canNext, mx, my, colAccentDim, null, null);
+            renderPageNavButton(g, getPageJumpNextX(centerX), pageBarY, PAGE_JUMP_BTN_W, PAGE_BTN_H,
+                    "\u25B6\u25B6", canNext, mx, my, colAccentDim, "+5 Pages", "Jump 5 pages forward (or Shift+Scroll)");
+        } else {
+            previewPanelY = ctrlY;
+            previewPanelH = winY + winH - ctrlY - 8;
+            nameTab.render(g, font, gridX, ctrlY, gridW, previewPanelH, mx, my, colAccent, colAccentDim);
+        }
+
+        renderPreviewPanel(g, prevX, previewPanelY, PREVIEW_W, previewPanelH,
+                assignedModelId, hasOverride, isGlowActive, customNameComp, mx, my, colAccent);
+
+        if (activeSectionTab == 1) {
+            if (hoveredTooltipTitle == null && nameTab.getHoveredTitle() != null) {
+                hoveredTooltipTitle = nameTab.getHoveredTitle();
+                hoveredTooltipDesc = nameTab.getHoveredDesc();
             }
         }
 
-        
-        int sep2Y = contentY + contentH - 24;
-        g.fill(gridX, sep2Y, gridX + gridW, sep2Y + 1, 0x22FFFFFF);
+        if (hoveredTooltipTitle != null) {
+            List<Component> tooltipLines = new ArrayList<>();
+            tooltipLines.add(Component.literal("§6" + hoveredTooltipTitle));
+            if (hoveredTooltipDesc != null) {
+                for (String line : LINE_SPLIT_PATTERN.split(hoveredTooltipDesc)) {
+                    tooltipLines.add(Component.literal("§7" + line));
+                }
+            }
+            int tw = 0;
+            for (Component c : tooltipLines) tw = Math.max(tw, font.width(c.getString()));
+            tw += 12;
+            int th = tooltipLines.size() * 11 + 8;
+            int tpx = Math.min(this.width - tw - 4, mx + 10);
+            int tpy = Math.min(this.height - th - 4, my + 10);
 
-        
-        int pageBarY = sep2Y + 4;
-        int pageBtnW = 22;
-        int pageBtnH = 16;
-        int pagePrevX = gridX + gridW / 2 - 45;
-        int pageNextX = gridX + gridW / 2 + 25;
+            RenderUtils.fillRoundedRect(g, tpx, tpy, tw, th, 4, 0x9814141E);
+            RenderUtils.drawGradientOutline(g, tpx, tpy, tw, th, 4, colAccent, 0x33FFFFFF);
+            for (int i = 0; i < tooltipLines.size(); i++) {
+                g.text(font, tooltipLines.get(i).getString(), tpx + 6, tpy + 5 + i * 11, 0xFFFFFFFF);
+            }
+        }
+    }
 
-        boolean prevHov = mx >= pagePrevX && mx < pagePrevX + pageBtnW && my >= pageBarY && my < pageBarY + pageBtnH;
-        RenderUtils.fillRoundedRect(g, pagePrevX, pageBarY, pageBtnW, pageBtnH, 2, prevHov ? colAccentDim : 0x00000000);
-        g.text(font, "◀", pagePrevX + 7, pageBarY + 3, currentPage > 0 ? 0xFFFFFFFF : 0xFF555555);
+    private void renderTopTabButton(
+            GuiGraphicsExtractor g, int x, int y, int w, int h, String label,
+            boolean active, int mx, int my, int colAccent, int colAccentDim) {
+        boolean hov = mx >= x && mx < x + w && my >= y && my < y + h;
+        RenderUtils.fillRoundedRect(g, x, y, w, h, 3, active ? colAccentDim : (hov ? 0x22FFFFFF : 0x00000000));
+        RenderUtils.drawGradientOutline(g, x, y, w, h, 3, active ? colAccent : (hov ? 0x88FFFFFF : 0x44FFFFFF), 0x22000000);
+        g.text(font, label, x + (w - font.width(label)) / 2, y + 4, active ? 0xFFFFFFFF : 0xFFBBBBCC);
+    }
 
-        String pageText = (currentPage + 1) + " / " + totalPages;
-        g.text(font, pageText, gridX + (gridW - font.width(pageText)) / 2, pageBarY + 3, 0xFFAAAAAA);
+    private void renderPageNavButton(
+            GuiGraphicsExtractor g, int x, int y, int w, int h, String label,
+            boolean enabled, int mx, int my, int colAccentDim, String tipTitle, String tipDesc) {
+        boolean hov = isInRect(mx, my, x, y, w, h);
+        int bg = (enabled && hov) ? colAccentDim : (enabled ? 0x16FFFFFF : 0x08FFFFFF);
+        RenderUtils.fillRoundedRect(g, x, y, w, h, 2, bg);
+        g.text(font, label, x + (w - font.width(label)) / 2, y + 3, enabled ? 0xFFFFFFFF : 0xFF555555);
+        if (hov && tipTitle != null) {
+            hoveredTooltipTitle = tipTitle;
+            hoveredTooltipDesc = tipDesc;
+        }
+    }
 
-        boolean nextHov = mx >= pageNextX && mx < pageNextX + pageBtnW && my >= pageBarY && my < pageBarY + pageBtnH;
-        RenderUtils.fillRoundedRect(g, pageNextX, pageBarY, pageBtnW, pageBtnH, 2, nextHov ? colAccentDim : 0x00000000);
-        g.text(font, "▶", pageNextX + 7, pageBarY + 3, currentPage < totalPages - 1 ? 0xFFFFFFFF : 0xFF555555);
+    private int getTotalPages() { return Math.max(1, (filteredOptions.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE); }
+    private void stepPage(int delta) { currentPage = Math.max(0, Math.min(getTotalPages() - 1, currentPage + delta)); }
+    private static int getPagePrevX(int centerX) { return centerX - PAGE_CENTER_HALF_GAP - PAGE_BTN_W; }
+    private static int getPageJumpPrevX(int centerX) { return getPagePrevX(centerX) - PAGE_BTN_GAP - PAGE_JUMP_BTN_W; }
+    private static int getPageNextX(int centerX) { return centerX + PAGE_CENTER_HALF_GAP; }
+    private static int getPageJumpNextX(int centerX) { return getPageNextX(centerX) + PAGE_BTN_W + PAGE_BTN_GAP; }
+    private static boolean isInRect(double mx, double my, int x, int y, int w, int h) { return mx >= x && mx < x + w && my >= y && my < y + h; }
 
-        
-        
-        
-        int prevX = gridX + gridW + 8;
+    private void renderPreviewPanel(
+            GuiGraphicsExtractor g, int prevX, int contentY, int previewW, int contentH,
+            String assignedModelId, boolean hasOverride, boolean isGlowActive,
+            Component customNameComp, int mx, int my, int colAccent) {
         RenderUtils.fillRoundedRect(g, prevX, contentY, previewW, contentH, 4, 0x00000000);
         RenderUtils.drawGradientOutline(g, prevX, contentY, previewW, contentH, 4, colAccent, colAccent);
 
         g.text(font, "MODEL PREVIEW", prevX + (previewW - font.width("MODEL PREVIEW")) / 2, contentY + 8, colAccent);
 
-        ItemStack displayStack;
-        if (hasOverride) {
-            if (!assignedModelId.equals(cachedPreviewModelId) || cachedPreviewStack == null) {
+        boolean previewDirty = cachedPreviewDisplayStack == null
+                || cachedPreviewHasOverride != hasOverride
+                || cachedPreviewGlow == null
+                || cachedPreviewGlow.booleanValue() != isGlowActive
+                || (hasOverride && !assignedModelId.equals(cachedPreviewModelId));
+        if (previewDirty) {
+            cachedPreviewHasOverride = hasOverride;
+            cachedPreviewGlow = isGlowActive;
+            ItemStack baseStack;
+            if (hasOverride) {
                 cachedPreviewModelId = assignedModelId;
                 cachedPreviewStack = CustomModelManager.createItemStackForModel(assignedModelId, heldStack);
+                baseStack = (cachedPreviewStack != null) ? cachedPreviewStack.copy() : heldStack.copy();
+            } else {
+                cachedPreviewModelId = null;
+                cachedPreviewStack = null;
+                baseStack = heldStack.copy();
             }
-            displayStack = (cachedPreviewStack != null) ? cachedPreviewStack.copy() : heldStack.copy();
-        } else {
-            cachedPreviewModelId = null;
-            cachedPreviewStack = null;
-            displayStack = heldStack.copy();
+            baseStack.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, isGlowActive);
+            cachedPreviewDisplayStack = baseStack;
+            String rawName = CustomModelManager.getOriginalHoverName(baseStack).getString();
+            cachedPreviewName = font.width(rawName) > previewW - 14
+                    ? font.plainSubstrByWidth(rawName, previewW - 20) + ".."
+                    : rawName;
+            cachedPreviewNameWidth = font.width(cachedPreviewName);
         }
-
-        
-        displayStack.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, isGlowActive);
 
         int centerPrevX = prevX + previewW / 2;
         int centerPrevY = contentY + 68;
@@ -463,19 +476,28 @@ public class WishModelScreen extends Screen {
         g.pose().pushMatrix();
         g.pose().translate(centerPrevX, centerPrevY + bounce);
         g.pose().scale(3.2f, 3.2f);
-        g.fakeItem(displayStack, -8, -8);
+        g.fakeItem(cachedPreviewDisplayStack, -8, -8);
         g.pose().popMatrix();
 
-        String prevName = displayStack.getHoverName().getString();
-        if (font.width(prevName) > previewW - 14) {
-            prevName = font.plainSubstrByWidth(prevName, previewW - 20) + "..";
+        int nameY = contentY + 110;
+        if (customNameComp != null) {
+            g.enableScissor(prevX + 5, nameY - 2, prevX + previewW - 5, nameY + 12);
+            int nameDrawX = cachedPreviewCustomWidth <= previewW - 12
+                    ? prevX + (previewW - cachedPreviewCustomWidth) / 2
+                    : prevX + 6;
+            g.text(font, customNameComp, nameDrawX, nameY, 0xFFFFFFFF);
+            g.disableScissor();
+        } else {
+            g.text(font, cachedPreviewName, prevX + (previewW - cachedPreviewNameWidth) / 2, nameY, 0xFFFFFFFF);
         }
-        g.text(font, prevName, prevX + (previewW - font.width(prevName)) / 2, contentY + 110, 0xFFFFFFFF);
 
         String statusTxt = hasOverride ? "§a✓ Custom Model Active" : "§7Original Texture";
-        g.text(font, statusTxt, prevX + (previewW - font.width(statusTxt)) / 2, contentY + 124, 0xFFFFFFFF);
+        g.text(font, statusTxt, prevX + (previewW - font.width(statusTxt)) / 2, contentY + 125, 0xFFFFFFFF);
+        if (customNameComp != null) {
+            String nameBadge = "§d✦ Custom Name Active";
+            g.text(font, nameBadge, prevX + (previewW - font.width(nameBadge)) / 2, contentY + 137, 0xFFFFFFFF);
+        }
 
-        
         int togW = previewW - 16;
         int togH = 20;
         int togX = prevX + 8;
@@ -487,29 +509,6 @@ public class WishModelScreen extends Screen {
         RenderUtils.drawGradientOutline(g, togX, togY, togW, togH, 3, isModEnabled ? 0xFF55FF55 : 0xFFFF5555, 0x22000000);
         String togLabel = isModEnabled ? "Mod: §aENABLED" : "Mod: §cDISABLED";
         g.text(font, togLabel, togX + (togW - font.width(togLabel)) / 2, togY + 6, 0xFFFFFFFF);
-
-        
-        if (hoveredTooltipTitle != null) {
-            List<Component> tooltipLines = new ArrayList<>();
-            tooltipLines.add(Component.literal("§6" + hoveredTooltipTitle));
-            if (hoveredTooltipDesc != null) {
-                for (String line : hoveredTooltipDesc.split("\n")) {
-                    tooltipLines.add(Component.literal("§7" + line));
-                }
-            }
-            int tw = 0;
-            for (Component c : tooltipLines) tw = Math.max(tw, font.width(c.getString()));
-            tw += 12;
-            int th = tooltipLines.size() * 11 + 8;
-            int tpx = Math.min(this.width - tw - 4, mx + 10);
-            int tpy = Math.min(this.height - th - 4, my + 10);
-
-            RenderUtils.fillRoundedRect(g, tpx, tpy, tw, th, 4, 0xF0101015);
-            RenderUtils.drawGradientOutline(g, tpx, tpy, tw, th, 4, colAccent, 0x33FFFFFF);
-            for (int i = 0; i < tooltipLines.size(); i++) {
-                g.text(font, tooltipLines.get(i).getString(), tpx + 6, tpy + 5 + i * 11, 0xFFFFFFFF);
-            }
-        }
     }
 
     @Override
@@ -518,12 +517,11 @@ public class WishModelScreen extends Screen {
         double mx = event.x();
         double my = event.y();
 
-        int winW = Math.min(this.width - 24, 560);
-        int winH = Math.min(this.height - 24, 350);
+        int winW = getWinW();
+        int winH = getWinH();
         int winX = (this.width - winW) / 2;
         int winY = (this.height - winH) / 2;
 
-        
         int closeBtnSize = 18;
         int closeX = winX + winW - closeBtnSize - 12;
         int closeY = winY + 10;
@@ -532,11 +530,36 @@ public class WishModelScreen extends Screen {
             return true;
         }
 
-        
         int bannerY = winY + 32;
         int bannerH = 38;
         int bannerW = winW - 28;
         int bannerX = winX + 14;
+        int ctrlY = bannerY + bannerH + 8;
+        int gridW = bannerW - PREVIEW_W - 8;
+        int gridX = bannerX;
+
+        if (activeSectionTab == 1 && nameTab.mouseClicked(gridX, ctrlY, gridW, mx, my)) {
+            searchFocused = false;
+            return true;
+        }
+
+        int tabBtnH = 16;
+        int tabBtnY = winY + 11;
+        int tabNameW = 86;
+        int tabModelsW = 54;
+        int tabNameX = closeX - tabNameW - 8;
+        int tabModelsX = tabNameX - tabModelsW - 6;
+
+        if (mx >= tabModelsX && mx < tabModelsX + tabModelsW && my >= tabBtnY && my < tabBtnY + tabBtnH) {
+            activeSectionTab = 0;
+            return true;
+        }
+        if (mx >= tabNameX && mx < tabNameX + tabNameW && my >= tabBtnY && my < tabBtnY + tabBtnH) {
+            activeSectionTab = 1;
+            searchFocused = false;
+            nameTab.syncFromConfig();
+            return true;
+        }
 
         int resetBtnW = 54;
         int resetBtnH = 22;
@@ -544,12 +567,29 @@ public class WishModelScreen extends Screen {
         int resetBtnY = bannerY + (bannerH - resetBtnH) / 2;
         if (mx >= resetBtnX && mx < resetBtnX + resetBtnW && my >= resetBtnY && my < resetBtnY + resetBtnH) {
             CustomModelManager.removeOverride(targetKey);
+            nameTab.syncFromConfig();
             return true;
         }
 
-        
-        int ctrlY = bannerY + bannerH + 8;
         int searchH = 20;
+        int previewPanelY = activeSectionTab == 0 ? (ctrlY + searchH + 6) : ctrlY;
+        int previewPanelH = winY + winH - previewPanelY - 8;
+        int prevX = gridX + gridW + 8;
+        int togW = PREVIEW_W - 16;
+        int togH = 20;
+        int togX = prevX + 8;
+        int togY = previewPanelY + previewPanelH - 26;
+        if (mx >= togX && mx < togX + togW && my >= togY && my < togY + togH) {
+            ModConfig.INSTANCE.enableCustomItemModels = !ModConfig.INSTANCE.enableCustomItemModels;
+            ModConfig.INSTANCE.save();
+            return true;
+        }
+
+        if (activeSectionTab == 1) {
+            searchFocused = false;
+            return super.mouseClicked(event, focused);
+        }
+
         int glowBtnW = 54;
         int glowBtnH = 20;
         int searchX = bannerX;
@@ -562,46 +602,36 @@ public class WishModelScreen extends Screen {
             return true;
         }
 
-        
         if (mx >= glowBtnX && mx < glowBtnX + glowBtnW && my >= glowBtnY && my < glowBtnY + glowBtnH) {
-            Boolean customGlow = CustomModelManager.getGlowOverride(targetKey);
-            boolean currentGlow;
-            if (customGlow != null) {
-                currentGlow = customGlow;
-            } else {
-                currentGlow = heldStack.isEnchanted() || (heldStack.has(DataComponents.ENCHANTMENT_GLINT_OVERRIDE) && Boolean.TRUE.equals(heldStack.get(DataComponents.ENCHANTMENT_GLINT_OVERRIDE)));
-            }
-            CustomModelManager.setGlowOverride(targetKey, !currentGlow);
+            CustomModelManager.setGlowOverride(targetKey, !isItemGlowActive());
             return true;
         }
 
         int contentY = ctrlY + searchH + 6;
         int contentH = winY + winH - contentY - 8;
 
-        int previewW = 140;
-        int gridW = bannerW - previewW - 8;
-        int gridX = bannerX;
-
-        
         int sep2Y = contentY + contentH - 24;
         int pageBarY = sep2Y + 4;
-        int pageBtnW = 22;
-        int pageBtnH = 16;
-        int pagePrevX = gridX + gridW / 2 - 45;
-        int pageNextX = gridX + gridW / 2 + 25;
+        int centerX = gridX + gridW / 2;
+        int stepClick = event.hasShiftDown() ? PAGE_JUMP_STEP : 1;
 
-        int totalPages = Math.max(1, (filteredOptions.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE);
-
-        if (mx >= pagePrevX && mx < pagePrevX + pageBtnW && my >= pageBarY && my < pageBarY + pageBtnH) {
-            if (currentPage > 0) currentPage--;
+        if (isInRect(mx, my, getPageJumpPrevX(centerX), pageBarY, PAGE_JUMP_BTN_W, PAGE_BTN_H)) {
+            stepPage(-PAGE_JUMP_STEP);
             return true;
         }
-        if (mx >= pageNextX && mx < pageNextX + pageBtnW && my >= pageBarY && my < pageBarY + pageBtnH) {
-            if (currentPage < totalPages - 1) currentPage++;
+        if (isInRect(mx, my, getPagePrevX(centerX), pageBarY, PAGE_BTN_W, PAGE_BTN_H)) {
+            stepPage(-stepClick);
+            return true;
+        }
+        if (isInRect(mx, my, getPageNextX(centerX), pageBarY, PAGE_BTN_W, PAGE_BTN_H)) {
+            stepPage(stepClick);
+            return true;
+        }
+        if (isInRect(mx, my, getPageJumpNextX(centerX), pageBarY, PAGE_JUMP_BTN_W, PAGE_BTN_H)) {
+            stepPage(PAGE_JUMP_STEP);
             return true;
         }
 
-        
         int tileSize = 30;
         int tileGap = 4;
         int gridInnerX = gridX + (gridW - (COLS * tileSize + (COLS - 1) * tileGap)) / 2;
@@ -618,10 +648,10 @@ public class WishModelScreen extends Screen {
             int ty = gridInnerY + row * (tileSize + tileGap);
 
             if (mx >= tx && mx < tx + tileSize && my >= ty && my < ty + tileSize) {
-                ModelOption opt = filteredOptions.get(i);
+                WishModelCatalog.ModelOption opt = filteredOptions.get(i);
                 if (opt.id.equals("wish:custom_pack_input")) {
                     searchFocused = true;
-                    searchQuery = "pack:";
+                    searchQuery = "";
                     updateFilteredOptions();
                     return true;
                 }
@@ -630,37 +660,31 @@ public class WishModelScreen extends Screen {
             }
         }
 
-        
-        int prevX = gridX + gridW + 8;
-        int togW = previewW - 16;
-        int togH = 20;
-        int togX = prevX + 8;
-        int togY = contentY + contentH - 26;
-        if (mx >= togX && mx < togX + togW && my >= togY && my < togY + togH) {
-            ModConfig.INSTANCE.enableCustomItemModels = !ModConfig.INSTANCE.enableCustomItemModels;
-            ModConfig.INSTANCE.save();
-            return true;
-        }
-
         searchFocused = false;
         return super.mouseClicked(event, focused);
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        int totalPages = Math.max(1, (filteredOptions.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE);
-        if (scrollY < 0) {
-            if (currentPage < totalPages - 1) currentPage++;
-        } else if (scrollY > 0) {
-            if (currentPage > 0) currentPage--;
+        if (activeSectionTab == 0) {
+            int step = (this.minecraft != null && this.minecraft.hasShiftDown()) ? PAGE_JUMP_STEP : 1;
+            if (scrollY < 0) {
+                stepPage(step);
+            } else if (scrollY > 0) {
+                stepPage(-step);
+            }
+            return true;
         }
-        return true;
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
     @Override
     public boolean charTyped(net.minecraft.client.input.CharacterEvent event) {
+        if (activeSectionTab == 1 && nameTab.charTyped(event)) {
+            return true;
+        }
         char chr = (char) event.codepoint();
-        if (searchFocused && chr >= 32 && chr <= 126) {
+        if (activeSectionTab == 0 && searchFocused && chr >= 32 && chr <= 126) {
             searchQuery += chr;
             updateFilteredOptions();
             return true;
@@ -670,12 +694,15 @@ public class WishModelScreen extends Screen {
 
     @Override
     public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
+        if (activeSectionTab == 1 && nameTab.keyPressed(event)) {
+            return true;
+        }
         int key = event.key();
 
-        if (event.isPaste()) {
+        if (activeSectionTab == 0 && event.isPaste()) {
             String clip = this.minecraft.keyboardHandler.getClipboard();
             if (clip != null && !clip.isEmpty()) {
-                clip = clip.replaceAll("[\\n\\r]", "");
+                clip = NEWLINE_PATTERN.matcher(clip).replaceAll("");
                 if (searchFocused) {
                     searchQuery += clip;
                     updateFilteredOptions();
@@ -684,16 +711,16 @@ public class WishModelScreen extends Screen {
             }
         }
 
-        if (key == 259) { 
-            if (searchFocused && !searchQuery.isEmpty()) {
+        if (key == GLFW.GLFW_KEY_BACKSPACE) {
+            if (activeSectionTab == 0 && searchFocused && !searchQuery.isEmpty()) {
                 searchQuery = searchQuery.substring(0, searchQuery.length() - 1);
                 updateFilteredOptions();
                 return true;
             }
         }
 
-        if (key == 256) { 
-            if (searchFocused) {
+        if (key == GLFW.GLFW_KEY_ESCAPE) {
+            if (activeSectionTab == 0 && searchFocused) {
                 searchFocused = false;
                 return true;
             }
@@ -701,9 +728,21 @@ public class WishModelScreen extends Screen {
             return true;
         }
 
-        if (key == 257) { 
+        if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
             searchFocused = false;
             return true;
+        }
+
+        if (activeSectionTab == 0) {
+            int step = event.hasShiftDown() ? PAGE_JUMP_STEP : 1;
+            if (key == GLFW.GLFW_KEY_PAGE_UP || (!searchFocused && key == GLFW.GLFW_KEY_LEFT)) {
+                stepPage(key == GLFW.GLFW_KEY_PAGE_UP ? -PAGE_JUMP_STEP : -step);
+                return true;
+            }
+            if (key == GLFW.GLFW_KEY_PAGE_DOWN || (!searchFocused && key == GLFW.GLFW_KEY_RIGHT)) {
+                stepPage(key == GLFW.GLFW_KEY_PAGE_DOWN ? PAGE_JUMP_STEP : step);
+                return true;
+            }
         }
 
         return super.keyPressed(event);
@@ -711,7 +750,7 @@ public class WishModelScreen extends Screen {
 
     @Override
     public boolean shouldCloseOnEsc() {
-        return true;
+        return activeSectionTab != 1 || !nameTab.isCapturingKeyboard();
     }
 
     @Override

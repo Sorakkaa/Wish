@@ -36,9 +36,10 @@ public class PrecursorCityLocator {
     private static net.minecraft.client.multiplayer.ClientLevel lastLevel = null;
     private static long lastChunkScanTime = 0;
     private static int bestStructureCount = 0;
+    private static final org.joml.Quaternionf REUSABLE_INV_ROT = new org.joml.Quaternionf();
+    private static final org.joml.Vector3f REUSABLE_CAM_SPACE = new org.joml.Vector3f();
     private static final Set<Long> scannedChunks = ConcurrentHashMap.newKeySet();
 
-    
     private static final Pattern CHAT_COORD_PATTERN = Pattern.compile(
             "(?i)(?:\\bcity\\b|precursor|\\bpc\\b|lost\\s+city)[^0-9]{0,15}?([5-8][0-9]{2})[\\s,]+(?:([3-9][0-9]|1[0-5][0-9])[\\s,]+)?([5-8][0-9]{2})"
     );
@@ -63,12 +64,12 @@ public class PrecursorCityLocator {
     }
 
     public static boolean isInPrecursorBounds(int x, int z) {
-        
+
         return x >= 513 && x <= 825 && z >= 513 && z <= 825 && !isInNucleus(x, z);
     }
 
     public static boolean isInNucleus(int x, int z) {
-        
+
         return x >= 455 && x <= 566 && z >= 455 && z <= 566;
     }
 
@@ -82,13 +83,11 @@ public class PrecursorCityLocator {
             return;
         }
 
-        
         if (mc.level != lastLevel) {
             lastLevel = mc.level;
             reset();
         }
 
-        
         if (foundCityPos != null && !isInPrecursorBounds(foundCityPos.getX(), foundCityPos.getZ())) {
             reset();
         }
@@ -103,14 +102,12 @@ public class PrecursorCityLocator {
             return;
         }
 
-        
         if (SkyblockDetector.isInPrecursorCity) {
             if (foundCityPos == null || currentConfidence == null || currentConfidence.weight < DetectionConfidence.SCOREBOARD.weight) {
                 setCityPos(mc.player.blockPosition(), DetectionConfidence.SCOREBOARD, "Scoreboard: Precursor City");
             }
         }
 
-        
         Iterable<Entity> allEntities = null;
         if (mc.level instanceof com.wish.client.mixin.ClientLevelAccessor cla) {
             var getter = cla.wish$getEntities();
@@ -126,7 +123,7 @@ public class PrecursorCityLocator {
             if (entity == null || entity == mc.player) continue;
 
             BlockPos entityPos = entity.blockPosition();
-            
+
             if (!isInPrecursorBounds(entityPos.getX(), entityPos.getZ())) {
                 continue;
             }
@@ -143,13 +140,10 @@ public class PrecursorCityLocator {
             if (rawName == null || rawName.isEmpty()) continue;
             String clean = SkyblockDetector.stripColorCodes(rawName).toLowerCase().trim();
 
-            
             if (clean.contains("place it here") || clean.contains("find this crystal")) {
                 continue;
             }
 
-            
-            
             if (clean.contains("professor robot")
                     || clean.contains("automaton prime")
                     || clean.contains("place control switch") || clean.contains("place ftx")
@@ -160,7 +154,6 @@ public class PrecursorCityLocator {
             }
         }
 
-        
         long now = System.currentTimeMillis();
         if (now - lastChunkScanTime >= 400 && !hasExactAltar()) {
             lastChunkScanTime = now;
@@ -185,7 +178,7 @@ public class PrecursorCityLocator {
         for (int cx = minCX; cx <= maxCX; cx++) {
             for (int cz = minCZ; cz <= maxCZ; cz++) {
                 if (hasExactAltar()) return;
-                
+
                 if (cx <= 35 && cz <= 35) continue;
 
                 LevelChunk chunk = chunkSource.getChunk(cx, cz, false);
@@ -202,12 +195,10 @@ public class PrecursorCityLocator {
         int cx = pos.x();
         int cz = pos.z();
 
-        
         if (cx < 32 || cx > 51 || cz < 32 || cz > 51) {
             return false;
         }
 
-        
         if (cx <= 35 && cz <= 35) {
             return false;
         }
@@ -235,7 +226,7 @@ public class PrecursorCityLocator {
 
             int secY = chunk.getSectionYFromSectionIndex(secIdx);
             int startY = secY * 16;
-            
+
             if (startY < 20 || startY > 155) continue;
 
             for (int y = 0; y < 16; y++) {
@@ -295,22 +286,21 @@ public class PrecursorCityLocator {
         int heightSpan = (maxY >= minY) ? (maxY - minY) : 0;
         boolean isCity = false;
 
-        
         if (totalKeyBlocks >= 45 && heightSpan >= 8) {
             isCity = true;
         } else if (totalKeyBlocks >= 70) {
             isCity = true;
         } else if (chiseledDeepslateCount >= 2 && totalKeyBlocks >= 30) {
-            
+
             isCity = true;
         } else if (ironBlockCount >= 8 && totalKeyBlocks >= 30) {
-            
+
             isCity = true;
         }
 
         if (isCity) {
             BlockPos foundPos = new BlockPos((int) (sumX / totalKeyBlocks), (int) (sumY / totalKeyBlocks), (int) (sumZ / totalKeyBlocks));
-            
+
             if (totalKeyBlocks > bestStructureCount || currentConfidence == null || currentConfidence.weight < DetectionConfidence.STRUCTURE_SIGNATURE.weight) {
                 bestStructureCount = totalKeyBlocks;
                 setCityPos(foundPos, DetectionConfidence.STRUCTURE_SIGNATURE, "City Structure (" + totalKeyBlocks + " blocks)");
@@ -350,7 +340,6 @@ public class PrecursorCityLocator {
             return false;
         }
 
-        
         if (foundCityPos != null && currentConfidence != null && currentConfidence.weight > confidence.weight) {
             return false;
         }
@@ -390,8 +379,8 @@ public class PrecursorCityLocator {
         double cdy = (targetPos.getY() + 1.5) - camPos.y;
         double cdz = (targetPos.getZ() + 0.5) - camPos.z;
 
-        org.joml.Quaternionf invRot = new org.joml.Quaternionf(camera.rotation()).conjugate();
-        org.joml.Vector3f camSpace = invRot.transform(new org.joml.Vector3f((float) cdx, (float) cdy, (float) cdz));
+        org.joml.Quaternionf invRot = REUSABLE_INV_ROT.set(camera.rotation()).conjugate();
+        org.joml.Vector3f camSpace = invRot.transform(REUSABLE_CAM_SPACE.set((float) cdx, (float) cdy, (float) cdz));
 
         float depth = -camSpace.z;
         if (depth <= 0.5f) {
@@ -410,7 +399,6 @@ public class PrecursorCityLocator {
             return;
         }
 
-        
         String label = "§b✦ Precursor City §7(" + dist + "m)";
         int textW = mc.font.width(label);
         int drawX = (int) projX - textW / 2;

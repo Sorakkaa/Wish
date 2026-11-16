@@ -11,6 +11,7 @@ import com.wish.client.features.SlayerCarryManager;
 import com.wish.client.gui.EditLagHudScreen;
 import com.wish.client.gui.WishConfigScreen;
 import com.wish.client.gui.WishModelScreen;
+import com.wish.client.update.UpdateManager;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.client.Minecraft;
@@ -36,6 +37,29 @@ public final class WishCommands {
             )
             .then(ClientCommands.literal("model")
                 .executes(context -> openModelScreen())
+            )
+            .then(ClientCommands.literal("update")
+                .then(ClientCommands.literal("check")
+                    .executes(context -> {
+                        UpdateManager.checkNowInteractive();
+                        return 1;
+                    })
+                )
+                .then(ClientCommands.literal("ignore")
+                    .then(ClientCommands.argument("version", StringArgumentType.string())
+                        .executes(context -> {
+                            String version = StringArgumentType.getString(context, "version");
+                            UpdateManager.ignoreVersion(version);
+                            return 1;
+                        })
+                    )
+                )
+                .then(ClientCommands.literal("clearignore")
+                    .executes(context -> {
+                        UpdateManager.clearIgnoredVersion();
+                        return 1;
+                    })
+                )
             )
             .then(ClientCommands.literal("slayer")
                 .then(ClientCommands.literal("carry")

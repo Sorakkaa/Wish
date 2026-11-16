@@ -18,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class PlayerRendererMixin {
 
     @Inject(method = "extractRenderState(Lnet/minecraft/world/entity/Avatar;Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;F)V", at = @At("RETURN"))
-    private void onExtractRenderState(Avatar entity, AvatarRenderState renderState, float f, CallbackInfo ci) {
+    private void wish$onExtractRenderState(Avatar entity, AvatarRenderState renderState, float f, CallbackInfo ci) {
         if (!(renderState instanceof ISizeableState sizeable)) return;
 
         int cosMode = ModConfig.INSTANCE.cosmeticVisibility;
@@ -32,12 +32,15 @@ public class PlayerRendererMixin {
             renderState.showLeftSleeve = true;
             renderState.showRightSleeve = true;
         }
-        
+
         var mc = Minecraft.getInstance();
         boolean isLocalPlayer = mc.player != null && entity.getId() == mc.player.getId();
         sizeable.wish$setLocalPlayer(isLocalPlayer);
-        
-        CustomPlayerManager.CustomPlayerData customData = CustomPlayerManager.getPlayer(entity.getUUID(), entity.getScoreboardName());
+
+        CustomPlayerManager.CustomPlayerData customData = CustomPlayerManager.getPlayer(entity.getUUID());
+        if (customData != null) {
+            CustomPlayerManager.observePlayer(entity.getUUID(), entity.getScoreboardName());
+        }
         boolean isCustomPlayer = customData != null;
         sizeable.wish$setCustomPlayer(isCustomPlayer);
         sizeable.wish$setSpinSpeedY(isCustomPlayer ? customData.spinSpeedY() : 0.0f);
@@ -59,14 +62,15 @@ public class PlayerRendererMixin {
         }
         sizeable.wish$setScale(scaleX, scaleY, scaleZ);
 
-        // Skip Smol People if the player (self or other) already has a modified scale (Wish custom size or vanilla scale)
         boolean hasModifiedScale = Math.abs(scaleX - 1.0f) > 1e-4f
                 || Math.abs(scaleY - 1.0f) > 1e-4f
                 || Math.abs(scaleZ - 1.0f) > 1e-4f
                 || Math.abs(entity.getScale() - 1.0f) > 1e-4f;
 
+        boolean isRealPlayer = com.wish.client.features.visual.RealPlayerFilter.isRealPlayer(entity, isLocalPlayer);
         boolean applySmol = ModConfig.INSTANCE.enableOtherPlayersSize
                 && !hasModifiedScale
+                && isRealPlayer
                 && (!isLocalPlayer || ModConfig.INSTANCE.smolPeopleIncludeSelf);
         sizeable.wish$setSmolPeople(applySmol);
 
@@ -98,7 +102,7 @@ public class PlayerRendererMixin {
     }
 
     @Inject(method = "scale(Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;)V", at = @At("RETURN"))
-    private void onScale(AvatarRenderState state, PoseStack poseStack, CallbackInfo ci) {
+    private void wish$onScale(AvatarRenderState state, PoseStack poseStack, CallbackInfo ci) {
         if (state instanceof ISizeableState sizeable) {
             float sx = sizeable.wish$hasCustomScale() ? sizeable.wish$getScaleX() : 1.0f;
             float sy = sizeable.wish$hasCustomScale() ? sizeable.wish$getScaleY() : 1.0f;
@@ -109,7 +113,6 @@ public class PlayerRendererMixin {
                 sz *= 0.5f;
             }
             if (sx != 1.0f || sy != 1.0f || sz != 1.0f) {
-                // Scaling PoseStack at feet origin ensures third-party cosmetic RenderLayers (e.g. Essential) scale and anchor cleanly
                 poseStack.scale(sx, sy, sz);
             }
             int cosMode = ModConfig.INSTANCE.cosmeticVisibility;

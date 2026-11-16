@@ -1,6 +1,7 @@
 package com.wish.client.gui;
 
 import com.wish.client.config.ModConfig;
+import com.wish.client.features.HudStateContainer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
@@ -10,10 +11,11 @@ import net.minecraft.network.chat.Component;
 public class EditLagHudScreen extends Screen {
 
     private final Screen parent;
-    private int draggingId = -1; 
+    private int draggingId = -1;
     private int dragOffsetX = 0;
     private int dragOffsetY = 0;
     private static final String MOCK_TEXT = "1000ms";
+    private static final String MOCK_BOSS_OWNER = "Player";
     private static final String[] MOCK_AUTO_LINES = {
         "Automaton Tracker",
         "Kills: 45 (180/h)",
@@ -27,10 +29,18 @@ public class EditLagHudScreen extends Screen {
     }
 
     @Override
+    public boolean isInGameUi() {
+        return this.minecraft != null && this.minecraft.level != null;
+    }
+
+    @Override
+    public void extractTransparentBackground(GuiGraphicsExtractor g) {
+        g.fillGradient(0, 0, this.width, this.height, 0x340A0A12, 0x460A0A14);
+    }
+
+    @Override
     public void extractRenderState(GuiGraphicsExtractor g, int mx, int my, float pt) {
         super.extractRenderState(g, mx, my, pt);
-        
-        g.fill(0, 0, this.width, this.height, 0x44000000);
 
         int colLine = 0x22FFFFFF;
         int colCenterLine = 0x44FFFFFF;
@@ -44,7 +54,7 @@ public class EditLagHudScreen extends Screen {
         g.fill(midX + midX / 2, 0, midX + midX / 2 + 1, this.height, colLine);
         g.fill(0, midY / 2, this.width, midY / 2 + 1, colLine);
         g.fill(0, midY + midY / 2, this.width, midY + midY / 2 + 1, colLine);
-        
+
         var font = Minecraft.getInstance().font;
         String hint = "Drag to move. Scroll wheel to resize (scale). ESC to save.";
         int hintW = font.width(hint);
@@ -57,10 +67,8 @@ public class EditLagHudScreen extends Screen {
 
     private void renderBossHudBox(GuiGraphicsExtractor g, net.minecraft.client.gui.Font font, int mx, int my, int x, int y, float scale) {
         if (scale <= 0.1f) scale = 1.0f;
-        net.minecraft.network.chat.Component line1 = Component.literal("Boss Spawn").withStyle(s -> s.withColor(0xFFFF55FF).withBold(true));
-        net.minecraft.network.chat.Component line2 = Component.literal("Player").withStyle(s -> s.withColor(0xFF55FF55).withBold(false));
-        int w1 = font.width(line1);
-        int w2 = font.width(line2);
+        int w1 = font.width(HudStateContainer.BOSS_SPAWN_TITLE);
+        int w2 = font.width(MOCK_BOSS_OWNER);
         int padX = 8;
         int padY = 5;
         int cardW = Math.max(w1, w2) + padX * 2;
@@ -82,8 +90,8 @@ public class EditLagHudScreen extends Screen {
         g.pose().translate(x, y);
         g.pose().scale(scale, scale);
 
-        g.text(font, line1, (cardW - w1) / 2, padY, 0xFFFFFFFF);
-        g.text(font, "Player", (cardW - w2) / 2, padY + font.lineHeight + 2, 0xFF55FF55);
+        g.text(font, HudStateContainer.BOSS_SPAWN_TITLE, (cardW - w1) / 2, padY, 0xFFFFFFFF);
+        g.text(font, MOCK_BOSS_OWNER, (cardW - w2) / 2, padY + font.lineHeight + 2, 0xFF55FF55);
 
         g.pose().popMatrix();
 
@@ -92,16 +100,16 @@ public class EditLagHudScreen extends Screen {
             g.text(font, scaleHint, x, y + boxH + 4, 0xFFAAAAAA);
         }
     }
-    
+
     private void renderHudBox(GuiGraphicsExtractor g, net.minecraft.client.gui.Font font, int mx, int my, int x, int y, float scale, String text, int id) {
         if (scale <= 0.1f) scale = 1.0f;
-        
+
         int cardW = font.width(text);
         int cardH = font.lineHeight;
-        
+
         int textW = (int) (cardW * scale);
         int textH = (int) (cardH * scale);
-        
+
         boolean hovering = mx >= x - 2 && mx <= x + textW + 2 && my >= y - 2 && my <= y + textH + 2;
 
         if (hovering || draggingId == id) {
@@ -119,7 +127,7 @@ public class EditLagHudScreen extends Screen {
         g.pose().scale(scale, scale);
 
         g.text(font, text, 0, 0, 0xFFFF5555);
-        
+
         g.pose().popMatrix();
 
         if (hovering || draggingId == id) {
@@ -176,33 +184,33 @@ public class EditLagHudScreen extends Screen {
         if (scrollY != 0) {
             var font = Minecraft.getInstance().font;
             int hoveredId = getHoveredId(mouseX, mouseY, font);
-            
+
             if (hoveredId != -1) {
                 float scale = 1.0f;
                 if (hoveredId == 0) scale = ModConfig.INSTANCE.lagHudScale;
                 else if (hoveredId == 2) scale = ModConfig.INSTANCE.automatonHudScale;
                 else if (hoveredId == 3) scale = ModConfig.INSTANCE.bossHudScale;
-                
+
                 if (scale <= 0.1f) scale = 1.0f;
                 scale += (scrollY > 0) ? 0.1f : -0.1f;
                 if (scale < 0.2f) scale = 0.2f;
                 if (scale > 4.0f) scale = 4.0f;
                 scale = Math.round(scale * 10.0f) / 10.0f;
-                
+
                 if (hoveredId == 0) ModConfig.INSTANCE.lagHudScale = scale;
                 else if (hoveredId == 2) ModConfig.INSTANCE.automatonHudScale = scale;
                 else if (hoveredId == 3) ModConfig.INSTANCE.bossHudScale = scale;
-                
+
                 return true;
             }
         }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
-    
+
     private int getHoveredId(double mx, double my, net.minecraft.client.gui.Font font) {
         float s3 = ModConfig.INSTANCE.bossHudScale; if (s3 <= 0.1f) s3 = 1.0f;
         int x3 = ModConfig.INSTANCE.bossHudX; int y3 = ModConfig.INSTANCE.bossHudY;
-        int bossW = (int)((Math.max(font.width("Boss Spawn") + 10, font.width("Player")) + 16) * s3);
+        int bossW = (int)((Math.max(font.width(HudStateContainer.BOSS_SPAWN_TITLE), font.width(MOCK_BOSS_OWNER)) + 16) * s3);
         int bossH = (int)((font.lineHeight * 2 + 2 + 10) * s3);
         if (mx >= x3 - 2 && mx <= x3 + bossW + 2 && my >= y3 - 2 && my <= y3 + bossH + 2) return 3;
 
@@ -228,10 +236,10 @@ public class EditLagHudScreen extends Screen {
         if (event == null || event.button() != 0) return super.mouseClicked(event, focused);
         double mx = event.x();
         double my = event.y();
-        
+
         var font = Minecraft.getInstance().font;
         int hoveredId = getHoveredId(mx, my, font);
-        
+
         if (hoveredId != -1) {
             draggingId = hoveredId;
             setFocused(this);
@@ -252,7 +260,7 @@ public class EditLagHudScreen extends Screen {
         if (draggingId != -1 && event != null) {
             double mx = event.x();
             double my = event.y();
-            
+
             if (draggingId == 0) {
                 ModConfig.INSTANCE.lagHudX = (int) (mx - dragOffsetX);
                 ModConfig.INSTANCE.lagHudY = (int) (my - dragOffsetY);

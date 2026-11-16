@@ -3,8 +3,6 @@ package com.wish.client.features;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
-import net.minecraft.core.BlockPos;
-
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
@@ -15,13 +13,11 @@ public class GhostBlockManager {
     private static final Logger LOGGER = LoggerFactory.getLogger("Wish-GhostBlocks");
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
-    
     public static Map<Long, String> ghostBlocks = new java.util.concurrent.ConcurrentHashMap<>();
-    public static Map<Long, Map<Long, String>> ghostBlocksByChunk = new java.util.concurrent.ConcurrentHashMap<>();
     private static final java.util.Map<String, net.minecraft.world.level.block.Block> BLOCK_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
     public static final net.minecraft.world.level.block.state.BlockState CACHED_WARPED_FENCE_STATE = net.minecraft.world.level.block.Blocks.WARPED_FENCE.defaultBlockState();
-    public static boolean isGhostBlocksEnabled = true;
-    public static boolean isGlassGhostBlocksEnabled = true;
+    public static volatile boolean isGhostBlocksEnabled = true;
+    public static volatile boolean isGlassGhostBlocksEnabled = true;
 
     public static void init() {
         isGhostBlocksEnabled = com.wish.client.config.ModConfig.INSTANCE.enableCustomBlocksF7M7;
@@ -43,7 +39,6 @@ public class GhostBlockManager {
                 Map<Long, String> loaded = GSON.fromJson(json, type);
                 if (loaded != null) {
                     ghostBlocks = new java.util.concurrent.ConcurrentHashMap<>(loaded);
-                    rebuildChunkMap();
                 }
             }
         } catch (Exception e) {
@@ -52,14 +47,25 @@ public class GhostBlockManager {
         }
     }
 
-    private static void rebuildChunkMap() {
-        ghostBlocksByChunk.clear();
-        for (Map.Entry<Long, String> entry : ghostBlocks.entrySet()) {
-            if ("removed".equals(entry.getValue())) continue;
-            BlockPos pos = BlockPos.of(entry.getKey());
-            long chunkPos = (((long)(pos.getX() >> 4)) << 32) | ((long)(pos.getZ() >> 4) & 0xFFFFFFFFL);
-            ghostBlocksByChunk.computeIfAbsent(chunkPos, k -> new java.util.concurrent.ConcurrentHashMap<>()).put(entry.getKey(), entry.getValue());
+    public static net.minecraft.world.level.block.state.BlockState resolveVisualBlockState(
+            net.minecraft.world.level.block.state.BlockState originalState, long posKey) {
+        if (originalState == null || originalState.isAir()) {
+            return null;
         }
+        if (originalState.getBlock() == net.minecraft.world.level.block.Blocks.NETHER_BRICK_FENCE) {
+            return CACHED_WARPED_FENCE_STATE;
+        }
+        String ghost = getGhostBlockMaterial(posKey);
+        if (ghost == null) {
+            return null;
+        }
+        if (ghost.contains("glass") && !isGlassGhostBlocksEnabled) {
+            return null;
+        }
+        if ("minecraft:air".equals(ghost)) {
+            return net.minecraft.world.level.block.Blocks.AIR.defaultBlockState();
+        }
+        return getGhostBlockVisualState(originalState, ghost);
     }
 
     public static String getGhostBlockMaterial(long posKey) {
@@ -70,14 +76,14 @@ public class GhostBlockManager {
         if ("minecraft:air".equals(ghostMaterial)) {
             return net.minecraft.world.level.block.Blocks.AIR.defaultBlockState();
         }
-        
+
         net.minecraft.world.level.block.Block baseGhostBlock = BLOCK_CACHE.computeIfAbsent(ghostMaterial, mat -> {
             net.minecraft.resources.Identifier id = net.minecraft.resources.Identifier.tryParse(mat);
             if (id == null) return null;
             return net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(id).map(ref -> ref.value()).orElse(null);
         });
         if (baseGhostBlock == null) return original;
-        
+
         if (original.getBlock() instanceof net.minecraft.world.level.block.StairBlock && baseGhostBlock instanceof net.minecraft.world.level.block.StairBlock) {
             try {
                 return baseGhostBlock.defaultBlockState()
@@ -87,7 +93,7 @@ public class GhostBlockManager {
                     .setValue(net.minecraft.world.level.block.StairBlock.WATERLOGGED, original.getValue(net.minecraft.world.level.block.StairBlock.WATERLOGGED));
             } catch (Exception e) { return baseGhostBlock.defaultBlockState(); }
         }
-        
+
         if (original.getBlock() instanceof net.minecraft.world.level.block.SlabBlock && baseGhostBlock instanceof net.minecraft.world.level.block.SlabBlock) {
             try {
                 return baseGhostBlock.defaultBlockState()

@@ -36,6 +36,7 @@ public final class CustomSkyManager {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("Wish-CustomSky");
     private static final Identifier CUSTOM_SKY_TEX_ID = Identifier.fromNamespaceAndPath("wish", "custom_sky");
+    private static final Matrix4f REUSABLE_MV = new Matrix4f();
     private static final int MAX_MIP_LEVELS = 6;
     private static final int SKY_TEX_W = 1536;
     private static final int SKY_TEX_H = 768;
@@ -47,7 +48,10 @@ public final class CustomSkyManager {
         "Cloudy Pastel",
         "Sunset Clouds",
         "Ocean Mirage",
-        "Sakura Twilight"
+        "Sakura Twilight",
+        "Aurora Emerald",
+        "Crimson Eclipse",
+        "Solar Amber"
     };
 
     @FunctionalInterface
@@ -73,12 +77,15 @@ public final class CustomSkyManager {
             return 0xFF000000;
         }
         return switch (ModConfig.INSTANCE.customSkyMode) {
-            case 1 -> 0xFF42294E; // Lofi Dusk
-            case 2 -> 0xFF183250; // Midnight Breeze
-            case 3 -> 0xFFAECAE0; // Cloudy Pastel
-            case 4 -> 0xFF331B2B; // Sunset Clouds
-            case 5 -> 0xFF071D2E; // Ocean Mirage
-            case 6 -> 0xFF211229; // Sakura Twilight
+            case 1 -> 0xFF42294E;
+            case 2 -> 0xFF183250;
+            case 3 -> 0xFFAECAE0;
+            case 4 -> 0xFF331B2B;
+            case 5 -> 0xFF071D2E;
+            case 6 -> 0xFF211229;
+            case 7 -> 0xFF0A2E20;
+            case 8 -> 0xFF36080E;
+            case 9 -> 0xFF3E2A08;
             default -> 0xFF000000;
         };
     }
@@ -116,6 +123,9 @@ public final class CustomSkyManager {
                 case 4 -> CustomSkyManager::sampleSunsetClouds;
                 case 5 -> CustomSkyManager::sampleOceanMirage;
                 case 6 -> CustomSkyManager::sampleSakuraTwilight;
+                case 7 -> CustomSkyManager::sampleAuroraEmerald;
+                case 8 -> CustomSkyManager::sampleCrimsonEclipse;
+                case 9 -> CustomSkyManager::sampleSolarAmber;
                 default -> null;
             };
             if (sampler == null) {
@@ -167,7 +177,6 @@ public final class CustomSkyManager {
     }
 
     private static int sampleLofiDusk(int x, int y, double nx, double ny, double nz) {
-        // C-infinity smooth Gaussian horizon belt avoids any equator pinch at ny = 0
         float horizBand = (float) Math.exp(-ny * ny * 5.5);
         float upperSky = smoothstep(-0.15f, 0.75f, (float) ny);
         float duskAlign = clamp01((float) ((nx * 0.65 + nz * 0.76) * 0.5 + 0.5));
@@ -181,7 +190,6 @@ public final class CustomSkyManager {
         float g = lerp(baseG, 0.210f, horizBand) + 0.19f * warmGlow;
         float b = lerp(baseB, 0.355f, horizBand) + 0.13f * warmGlow;
 
-        // Soft dreamy layered lo-fi twilight clouds
         double cloudA = fbm3(nx * 1.85 + 2.3, ny * 2.9 - 0.8, nz * 1.85 + 1.4, 4);
         double cloudB = fbm3(nx * 3.9 - 1.5, ny * 4.8 + 2.1, nz * 3.9 - 3.2, 3);
         double density = smoothstep(0.41f, 0.68f, (float) (cloudA * 0.72 + cloudB * 0.28));
@@ -206,14 +214,12 @@ public final class CustomSkyManager {
         float g = lerp(0.060f, 0.205f, horizBand);
         float b = lerp(0.145f, 0.325f, horizBand);
 
-        // Soft moonlit atmospheric halo
         double moonDot = clamp01((float) ((-nx * 0.55 + ny * 0.42 + nz * 0.72) * 0.5 + 0.5));
         float halo = (float) (Math.pow(moonDot, 3.6) * 0.17 + Math.pow(moonDot, 14.0) * 0.24);
         r += halo * 0.62f;
         g += halo * 0.80f;
         b += halo * 0.98f;
 
-        // Calm wispy night cirrus drifting across the sky dome
         double n1 = fbm3(nx * 2.2 - 1.1, ny * 3.4 + 2.7, nz * 2.2 - 3.4, 4);
         double n2 = fbm3(nx * 4.5 + 3.2, ny * 5.5 - 1.4, nz * 4.5 + 0.9, 3);
         double mistRaw = smoothstep(0.43f, 0.72f, (float) (n1 * 0.70 + n2 * 0.30));
@@ -237,7 +243,6 @@ public final class CustomSkyManager {
         float sunDir = clamp01((float) ((nx * 0.70 - nz * 0.71) * 0.5 + 0.5));
         float sunWarm = (float) Math.pow(sunDir, 2.4) * (float) Math.exp(-ny * ny * 5.0);
 
-        // Airy pastel periwinkle sky fading seamlessly into warm cotton-candy horizon mist
         float zenR = lerp(0.62f, 0.42f, upperT);
         float zenG = lerp(0.71f, 0.61f, upperT);
         float zenB = lerp(0.86f, 0.84f, upperT);
@@ -246,7 +251,6 @@ public final class CustomSkyManager {
         float g = lerp(zenG, 0.80f, horizBand) + 0.08f * sunWarm;
         float b = lerp(zenB, 0.89f, horizBand) + 0.04f * sunWarm;
 
-        // Fluffy Ghibli-inspired cream & pastel-blush cumulus clouds
         double cBase = fbm3(nx * 1.75 + 4.2, ny * 3.0 - 1.5, nz * 1.75 - 2.3, 4);
         double cPuff = fbm3(nx * 4.2 - 2.1, ny * 5.2 + 3.1, nz * 4.2 + 1.8, 3);
         double density = smoothstep(0.44f, 0.69f, (float) (cBase * 0.68 + cPuff * 0.32));
@@ -265,7 +269,6 @@ public final class CustomSkyManager {
     }
 
     private static int sampleSunsetClouds(int x, int y, double nx, double ny, double nz) {
-        // Vertical twilight sky gradient from glowing sunset horizon to deep indigo zenith
         float horiz = clamp01(1.0f - Math.abs((float) ny));
         float up = clamp01((float) (ny * 0.5 + 0.5));
         float lowGlow = (float) Math.pow(horiz, 2.6);
@@ -276,7 +279,6 @@ public final class CustomSkyManager {
         float g = lerp(0.09f, 0.29f, lowGlow) + 0.27f * sunHalo;
         float b = lerp(0.26f, 0.42f, lowGlow) + 0.08f * sunHalo;
 
-        // Backlit stylized cumulus clouds scattered softly across the twilight dome
         double cloudW = fbm3(nx * 2.2 + 5.1, ny * 3.4 - 1.2, nz * 2.2 + 2.7, 4);
         double cloudDetail = fbm3(nx * 5.2 - 1.7, ny * 6.0 + 4.3, nz * 5.2 - 3.4, 3);
         double density = clamp01((float) ((cloudW * 0.72 + cloudDetail * 0.28 - 0.42) * 3.0));
@@ -284,7 +286,6 @@ public final class CustomSkyManager {
         float cMask = clamp01((float) (density * belt));
 
         if (cMask > 0.001f) {
-            // Cloud underside catches golden-coral sun; upper crests shift lavender-violet
             float litFactor = clamp01((float) (0.35 + 0.65 * sunDir * Math.pow(horiz, 0.6) - Math.max(0.0, ny) * 0.35));
             float cloudR = lerp(0.46f, 0.98f, litFactor);
             float cloudG = lerp(0.32f, 0.64f, litFactor);
@@ -294,7 +295,6 @@ public final class CustomSkyManager {
             b = lerp(b, cloudB, cMask * 0.78f);
         }
 
-        // Faint early stars near high zenith only where clouds thin out
         int starHash = hash3i(x, y, 2719);
         if ((starHash & 0xFFF) < 5 && up > 0.66f && cMask < 0.25f) {
             float sb = (0.35f + ((starHash >>> 12) & 0xF) / 40.0f) * smoothstep(0.66f, 0.90f, up);
@@ -313,7 +313,6 @@ public final class CustomSkyManager {
         float g = lerp(0.055f, 0.340f, horizonGlow);
         float b = lerp(0.165f, 0.490f, horizonGlow);
 
-        // Swirling atmospheric bioluminescent aqua & pearl-cyan mirage streams
         double flow = fbm3(nx * 2.4 - 3.3, ny * 1.5 + 1.8, nz * 2.4 + 2.2, 4);
         double stream = Math.sin((ny * 5.2 + nx * 2.4 - nz * 2.1) + flow * 4.5);
         double ribbon = Math.pow(Math.max(0.0, 1.0 - Math.abs(stream) * 1.3), 2.1);
@@ -342,7 +341,6 @@ public final class CustomSkyManager {
         float g = lerp(0.045f, 0.215f, duskGlow);
         float b = lerp(0.165f, 0.365f, duskGlow);
 
-        // Soft wispy cherry-blossom & champagne-gold twilight cirrus veils
         double wx = nx + 0.45 * fbm3(nx * 2.3 + 1.7, ny * 2.3 - 0.9, nz * 2.3 + 4.1, 3);
         double wy = ny + 0.45 * fbm3(nx * 2.3 - 2.6, ny * 2.3 + 3.2, nz * 2.3 - 1.5, 3);
         double wz = nz + 0.45 * fbm3(nx * 2.3 + 3.8, ny * 2.3 + 0.4, nz * 2.3 - 2.8, 3);
@@ -362,7 +360,6 @@ public final class CustomSkyManager {
             b = lerp(b, cB, cloudMask * 0.56f);
         }
 
-        // Delicate warm rose-gold & lavender star sparkles across the twilight sky
         int starHash = hash3i(x, y, 5237);
         if ((starHash & 0xFFF) < 8) {
             float sb = 0.45f + ((starHash >>> 12) & 0xF) / 30.0f;
@@ -370,6 +367,102 @@ public final class CustomSkyManager {
             r += sb * (roseTint ? 1.0f : 0.92f);
             g += sb * (roseTint ? 0.80f : 0.90f);
             b += sb * (roseTint ? 0.92f : 1.0f);
+        }
+        return packAbgr(r, g, b);
+    }
+
+    private static int sampleAuroraEmerald(int x, int y, double nx, double ny, double nz) {
+        float horizBand = (float) Math.exp(-ny * ny * 3.8);
+        float r = lerp(0.012f, 0.035f, horizBand);
+        float g = lerp(0.042f, 0.145f, horizBand);
+        float b = lerp(0.036f, 0.105f, horizBand);
+
+        double warp = fbm3(nx * 2.1 + 1.4, ny * 1.4 + 0.7, nz * 2.1 - 2.3, 4);
+        double ribbonPhase = Math.sin((nx * 3.8 - nz * 3.1) + warp * 5.2);
+        double curtain = Math.pow(Math.max(0.0, 1.0 - Math.abs(ribbonPhase) * 1.35), 2.2);
+        double detail = fbm3(nx * 4.8 - 2.7, ny * 2.6 + 1.5, nz * 4.8 + 3.1, 3);
+        float skyBand = smoothstep(-0.18f, 0.24f, (float) ny) * (1.0f - smoothstep(0.55f, 0.96f, (float) ny) * 0.45f);
+        float glow = clamp01((float) (curtain * (0.45 + 0.55 * detail) * skyBand * 1.25));
+
+        r += glow * 0.14f;
+        g += glow * 0.82f;
+        b += glow * 0.50f;
+
+        int starHash = hash3i(x, y, 6421);
+        if ((starHash & 0xFFF) < 7 && ny > -0.10) {
+            float sb = (0.42f + ((starHash >>> 12) & 0xF) / 34.0f) * clamp01(1.0f - glow * 0.55f);
+            r += sb * 0.80f;
+            g += sb;
+            b += sb * 0.90f;
+        }
+        return packAbgr(r, g, b);
+    }
+
+    private static int sampleCrimsonEclipse(int x, int y, double nx, double ny, double nz) {
+        float horizBand = (float) Math.exp(-ny * ny * 3.2);
+        float eclipseAlign = clamp01((float) ((nx * 0.58 + nz * 0.68 + ny * 0.44) * 0.5 + 0.5));
+        float corona = (float) Math.pow(eclipseAlign, 5.0);
+
+        float r = lerp(0.042f, 0.240f, horizBand) + 0.32f * corona;
+        float g = lerp(0.009f, 0.036f, horizBand) + 0.06f * corona;
+        float b = lerp(0.018f, 0.056f, horizBand) + 0.09f * corona;
+
+        double w1 = fbm3(nx * 2.3 - 1.9, ny * 2.7 + 1.1, nz * 2.3 + 2.8, 4);
+        double w2 = fbm3(nx * 5.1 + 3.2, ny * 4.9 - 2.4, nz * 5.1 - 1.4, 3);
+        double ridge = Math.pow(Math.max(0.0, 1.0 - Math.abs(w1 * 2.0 - 1.0) * 1.40), 1.85);
+        float veil = clamp01((float) ((ridge * 0.68 + w2 * 0.32 - 0.14) * 1.22));
+
+        if (veil > 0.001f) {
+            float rimHeat = clamp01((float) w2);
+            float cR = lerp(0.68f, 0.98f, rimHeat);
+            float cG = lerp(0.09f, 0.26f, rimHeat);
+            float cB = lerp(0.16f, 0.30f, rimHeat);
+            r = lerp(r, cR, veil * 0.62f);
+            g = lerp(g, cG, veil * 0.62f);
+            b = lerp(b, cB, veil * 0.62f);
+        }
+
+        int starHash = hash3i(x, y, 7351);
+        if ((starHash & 0xFFF) < 6) {
+            float sb = 0.40f + ((starHash >>> 12) & 0xF) / 36.0f;
+            r += sb;
+            g += sb * 0.82f;
+            b += sb * 0.86f;
+        }
+        return packAbgr(r, g, b);
+    }
+
+    private static int sampleSolarAmber(int x, int y, double nx, double ny, double nz) {
+        float horizBand = (float) Math.exp(-ny * ny * 3.6);
+        float sunDir = clamp01((float) ((nx * 0.72 + nz * 0.69) * 0.5 + 0.5));
+        float sunBloom = (float) Math.pow(sunDir, 2.8) * (float) Math.exp(-ny * ny * 4.8);
+
+        float r = lerp(0.085f, 0.390f, horizBand) + 0.36f * sunBloom;
+        float g = lerp(0.052f, 0.235f, horizBand) + 0.24f * sunBloom;
+        float b = lerp(0.024f, 0.058f, horizBand) + 0.06f * sunBloom;
+
+        double cA = fbm3(nx * 2.0 + 3.4, ny * 3.2 - 1.1, nz * 2.0 + 0.9, 4);
+        double cB = fbm3(nx * 4.6 - 1.8, ny * 5.0 + 2.6, nz * 4.6 - 2.9, 3);
+        double density = smoothstep(0.42f, 0.68f, (float) (cA * 0.70 + cB * 0.30));
+        float belt = 0.26f + 0.74f * (float) Math.exp(-ny * ny * 2.2);
+        float cMask = clamp01((float) density * belt);
+
+        if (cMask > 0.001f) {
+            float warmLit = clamp01((float) (0.32 + 0.68 * sunDir * 0.75 + (cB - 0.35) * 0.55));
+            float cloudR = lerp(0.62f, 1.00f, warmLit);
+            float cloudG = lerp(0.39f, 0.78f, warmLit);
+            float cloudB = lerp(0.14f, 0.34f, warmLit);
+            r = lerp(r, cloudR, cMask * 0.76f);
+            g = lerp(g, cloudG, cMask * 0.76f);
+            b = lerp(b, cloudB, cMask * 0.76f);
+        }
+
+        int starHash = hash3i(x, y, 9103);
+        if ((starHash & 0xFFF) < 6 && ny > 0.20) {
+            float sb = (0.38f + ((starHash >>> 12) & 0xF) / 36.0f) * smoothstep(0.20f, 0.65f, (float) ny);
+            r += sb;
+            g += sb * 0.92f;
+            b += sb * 0.74f;
         }
         return packAbgr(r, g, b);
     }
@@ -442,7 +535,7 @@ public final class CustomSkyManager {
             GpuTextureView colorView = renderTarget.getColorTextureView();
             GpuTextureView depthView = renderTarget.getDepthTextureView();
 
-            Matrix4f mv = new Matrix4f(RenderSystem.getModelViewMatrixCopy());
+            Matrix4f mv = REUSABLE_MV.set(RenderSystem.getModelViewMatrixCopy());
             if (ModConfig.INSTANCE.customSkyRotate) {
                 double angle = ((System.currentTimeMillis() % 600000L) / 600000.0) * (Math.PI * 2.0);
                 mv.rotateY((float) angle);

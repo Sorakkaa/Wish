@@ -6,8 +6,12 @@ import com.wish.client.util.ChatUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.PlayerInfo;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 public final class FunChatCommands {
@@ -15,7 +19,10 @@ public final class FunChatCommands {
     private static final Random RANDOM = new Random();
     private static final Pattern USERNAME_PATTERN = Pattern.compile("^[a-zA-Z0-9_]{2,16}$");
     private static final Pattern WHITESPACE_PATTERN = Pattern.compile("\\s+");
-    private static long lastCommandTime = 0;
+    private static volatile long lastCommandTime = 0;
+    private static volatile String cachedSpoofKey = "";
+    private static volatile Pattern cachedFullSpoofPattern = null;
+    private static volatile List<Pattern> cachedWordSpoofPatterns = Collections.emptyList();
 
     private FunChatCommands() {}
 
@@ -57,25 +64,15 @@ public final class FunChatCommands {
 
     private static void processFunCommand(String text, String command) {
         long now = System.currentTimeMillis();
-        if (now - lastCommandTime < 1500) return; 
+        if (now - lastCommandTime < 1500) return;
         lastCommandTime = now;
 
         Minecraft mc = Minecraft.getInstance();
         String myName = (mc != null && mc.player != null) ? mc.player.getScoreboardName() : "Me";
         String spoof = (ModConfig.INSTANCE.spoofedName != null) ? ModConfig.INSTANCE.spoofedName.trim() : "";
 
-        // If Name Spoofer is enabled, replace occurrences of spoofed name with the real player pseudo
-        // so that fun commands sent to server always use valid player names
         if (!spoof.isEmpty() && !spoof.equalsIgnoreCase(myName)) {
-            text = text.replaceAll("(?i)" + java.util.regex.Pattern.quote(spoof), myName);
-            String[] spoofWords = spoof.split("\\s+");
-            if (spoofWords.length > 1) {
-                for (String sw : spoofWords) {
-                    if (sw.length() >= 3) {
-                        text = text.replaceAll("(?i)\\b" + java.util.regex.Pattern.quote(sw) + "\\b", myName);
-                    }
-                }
-            }
+            text = replaceSpoofedName(text, spoof, myName);
         }
 
         String lower = text.replace('\u00A0', ' ').toLowerCase().trim();
@@ -166,10 +163,7 @@ public final class FunChatCommands {
 
         String prefix = ChatUtils.getChatPrefix(lower);
         final String finalMsg = msg;
-        CompletableFuture.runAsync(() -> {
-            try {
-                Thread.sleep(300);
-            } catch (Exception ignored) {}
+        CompletableFuture.delayedExecutor(300, TimeUnit.MILLISECONDS).execute(() -> {
             if (prefix.equals("/pc ") && ModConfig.INSTANCE.enablePc) {
                 WishClient.sendServerChatMessage("/pc ", finalMsg);
             } else if (prefix.equals("/gc ") && ModConfig.INSTANCE.enableGc) {
@@ -178,5 +172,30 @@ public final class FunChatCommands {
                 WishClient.sendServerChatMessage("/ac ", finalMsg);
             }
         });
+    }
+
+    private static String replaceSpoofedName(String text, String spoof, String myName) {
+        if (!spoof.equals(cachedSpoofKey)) {
+            cachedFullSpoofPattern = Pattern.compile("(?i)" + Pattern.quote(spoof));
+            String[] words = WHITESPACE_PATTERN.split(spoof);
+            if (words.length > 1) {
+                List<Pattern> wordPatterns = new ArrayList<>();
+                for (String w : words) {
+                    if (w.length() >= 3) {
+                        wordPatterns.add(Pattern.compile("(?i)\\b" + Pattern.quote(w) + "\\b"));
+                    }
+                }
+                cachedWordSpoofPatterns = List.copyOf(wordPatterns);
+            } else {
+                cachedWordSpoofPatterns = Collections.emptyList();
+            }
+            cachedSpoofKey = spoof;
+        }
+        String quotedReplacement = java.util.regex.Matcher.quoteReplacement(myName);
+        String result = cachedFullSpoofPattern != null ? cachedFullSpoofPattern.matcher(text).replaceAll(quotedReplacement) : text;
+        for (Pattern wp : cachedWordSpoofPatterns) {
+            result = wp.matcher(result).replaceAll(quotedReplacement);
+        }
+        return result;
     }
 }

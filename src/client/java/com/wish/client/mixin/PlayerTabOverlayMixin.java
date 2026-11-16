@@ -1,5 +1,7 @@
 package com.wish.client.mixin;
 
+import com.mojang.authlib.GameProfile;
+import com.wish.client.color.CustomPlayerManager;
 import com.wish.client.color.NameColorManager;
 import net.minecraft.client.gui.components.PlayerTabOverlay;
 import net.minecraft.client.multiplayer.PlayerInfo;
@@ -24,6 +26,15 @@ public class PlayerTabOverlayMixin {
 
     @Inject(method = "getNameForDisplay", at = @At("RETURN"), cancellable = true)
     private void wish$onGetNameForDisplay(PlayerInfo playerInfo, CallbackInfoReturnable<Component> cir) {
+        if (playerInfo != null) {
+            GameProfile profile = playerInfo.getProfile();
+            if (profile != null) {
+                CustomPlayerManager.observePlayer(profile.id(), profile.name());
+            }
+        }
+        if (!NameColorManager.isRenderingTab) {
+            return;
+        }
         Component original = cir.getReturnValue();
         if (original != null) {
             Component colored = NameColorManager.colorizeText(original, false, true);

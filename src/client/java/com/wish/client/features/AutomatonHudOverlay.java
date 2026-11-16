@@ -21,7 +21,6 @@ public final class AutomatonHudOverlay {
     private static float lastResetBtnH = 0;
     private static boolean isResetHovered = false;
 
-    
     private static float lastSellBtnX = 0;
     private static float lastSellBtnY = 0;
     private static float lastSellBtnW = 0;
@@ -53,7 +52,6 @@ public final class AutomatonHudOverlay {
         int y = GuiAnchor.TOP_LEFT.resolveY(ModConfig.INSTANCE.automatonHudY, cardH, screenH);
         float scale = Math.max(0.2f, ModConfig.INSTANCE.automatonHudScale);
 
-        
         int modeLineY = 0;
         String modePrefix = "Automaton Tracker ";
         int modePrefixW = mc.font.width(modePrefix);
@@ -83,7 +81,6 @@ public final class AutomatonHudOverlay {
         lastResetBtnW = resetBtnW;
         lastResetBtnH = resetBtnH;
 
-        
         int dropLineIndex = Math.max(0, auto.mainLines().size() - 1);
         int dropsLineY = dropLineIndex * (mc.font.lineHeight + 1);
         String sellPrefix = "Drops ";
@@ -105,7 +102,6 @@ public final class AutomatonHudOverlay {
         isResetHovered = inScreen && (mx >= resetBtnX - 4 && mx <= resetBtnX + resetBtnW + 4 && my >= resetBtnY - 3 && my <= resetBtnY + resetBtnH + 3);
         isSellHovered = inScreen && (mx >= sellBtnX - 4 && mx <= sellBtnX + sellBtnW + 4 && my >= sellBtnY - 3 && my <= sellBtnY + sellBtnH + 3);
 
-        
         g.pose().pushMatrix();
         g.pose().translate(x, y);
         g.pose().scale(scale, scale);
@@ -133,7 +129,6 @@ public final class AutomatonHudOverlay {
 
         g.pose().popMatrix();
 
-        
         if (inScreen) {
             if (isModeHovered) {
                 String tooltip = ModConfig.INSTANCE.automatonShowTotalStats
@@ -167,12 +162,11 @@ public final class AutomatonHudOverlay {
         if (!ModConfig.INSTANCE.enableMiningAutomaton || !ModConfig.INSTANCE.enableAutomatonTracker) {
             return false;
         }
-        if (button != 0) return false; 
+        if (button != 0) return false;
 
         var auto = HudStateContainer.getAutomatonSnapshot();
         if (!auto.isVisible()) return false;
 
-        
         if (mx >= lastModeBtnX - 4 && mx <= lastModeBtnX + lastModeBtnW + 4
                 && my >= lastModeBtnY - 3 && my <= lastModeBtnY + lastModeBtnH + 3) {
             ModConfig.INSTANCE.automatonShowTotalStats = !ModConfig.INSTANCE.automatonShowTotalStats;
@@ -202,7 +196,6 @@ public final class AutomatonHudOverlay {
             return true;
         }
 
-        
         if (mx >= lastSellBtnX - 4 && mx <= lastSellBtnX + lastSellBtnW + 4
                 && my >= lastSellBtnY - 3 && my <= lastSellBtnY + lastSellBtnH + 3) {
             ModConfig.INSTANCE.automatonUseInstaSell = !ModConfig.INSTANCE.automatonUseInstaSell;

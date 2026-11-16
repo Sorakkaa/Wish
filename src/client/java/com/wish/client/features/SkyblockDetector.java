@@ -22,7 +22,7 @@ public class SkyblockDetector {
 
     public static void onClientTick(Minecraft mc) {
         tickCounter++;
-        
+
         if (tickCounter >= 2) {
             tickCounter = 0;
             updateStatus(mc);
@@ -72,7 +72,7 @@ public class SkyblockDetector {
         boolean newPrecursorCity = false;
         boolean newPrecursorZone = false;
         boolean newIsland = false;
-        
+
         if (ModConfig.INSTANCE.alwaysInM7F7) {
             newSkyblock = true;
             newDungeon = true;
@@ -91,11 +91,11 @@ public class SkyblockDetector {
                         for (PlayerScoreEntry entry : scoreboard.listPlayerScores(objective)) {
                             String owner = entry.owner();
                             String displayText = entry.display() != null ? entry.display().getString() : "";
-                            
+
                             PlayerTeam team = scoreboard.getPlayersTeam(owner);
                             String prefix = team != null ? team.getPlayerPrefix().getString() : "";
                             String suffix = team != null ? team.getPlayerSuffix().getString() : "";
-                            
+
                             String fullLine = prefix + owner + suffix + displayText;
                             String cleanLine = stripColorCodes(fullLine);
 
@@ -136,7 +136,6 @@ public class SkyblockDetector {
                                 newCrystalHollows = true;
                             }
 
-                            
                             if (lower.contains("catacombs") ||
                                 lower.contains("the catacombs") ||
                                 lower.contains("dungeon cleared") ||
@@ -149,8 +148,6 @@ public class SkyblockDetector {
                                 newDungeon = true;
                             }
 
-                            
-                            
                             if (lower.contains("(f7)") || lower.contains("(m7)") ||
                                 lower.contains("floor vii") ||
                                 lower.contains("floor 7") ||
@@ -178,12 +175,10 @@ public class SkyblockDetector {
                             } catch (Exception ignored) {}
                         }
 
-                        
                         if (newF7M7) {
                             newDungeon = true;
                         }
 
-                        
                         if (!newDungeon) {
                             newF7M7 = false;
                         }
@@ -212,7 +207,7 @@ public class SkyblockDetector {
         if (!newDungeon) {
             com.wish.client.features.DungeonLagTracker.forceEndRun();
         }
-        
+
         if (newF7M7 != isInF7OrM7) {
             isInF7OrM7 = newF7M7;
             if (mc.levelExtractor != null) {

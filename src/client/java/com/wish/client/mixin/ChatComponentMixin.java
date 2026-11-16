@@ -17,7 +17,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(value = ChatComponent.class, priority = 2000)
 public class ChatComponentMixin {
 
-    
     @ModifyVariable(
             method = "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;Lnet/minecraft/client/multiplayer/chat/GuiMessageSource;Lnet/minecraft/client/multiplayer/chat/GuiMessageTag;)V",
             at = @At("HEAD"),
@@ -48,9 +47,8 @@ public class ChatComponentMixin {
             String text = message.getString();
             if (text != null) {
                 String clean = SkyblockDetector.stripColorCodes(text).trim();
-                
+
                 if (clean.startsWith("[Sacks]") || clean.contains("[Sacks]")) {
-                    com.wish.client.features.AutomatonManager.onChatMessage(message);
                     if (SkyblockDetector.isInPrecursorCity || SkyblockDetector.isInPrecursorZone || ModConfig.INSTANCE.automatonHideSackChat) {
                         ci.cancel();
                     }

@@ -73,6 +73,7 @@ config/*.ps1
 config/*.txt
 *.class
 .github/
+.agent/
 .agents/
 mc-sources/
 odin_src/

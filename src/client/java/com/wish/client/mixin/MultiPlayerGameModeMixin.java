@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class MultiPlayerGameModeMixin {
 
     @Inject(method = "attack", at = @At("HEAD"))
-    private void onAttack(Player player, Entity target, CallbackInfo ci) {
+    private void wish$onAttack(Player player, Entity target, CallbackInfo ci) {
         AutomatonManager.onPlayerAttack(target);
     }
 }

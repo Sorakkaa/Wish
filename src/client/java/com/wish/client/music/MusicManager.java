@@ -1,21 +1,21 @@
 package com.wish.client.music;
 
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.wish.client.WishClient;
 import com.wish.client.config.ModConfig;
+import com.wish.client.features.visual.LyricsManager;
+import com.wish.client.util.HttpClientUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -23,6 +23,7 @@ public final class MusicManager {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("Wish-Music");
     private static final String APP_ID = "wish";
+    private static final int MAX_COMPANION_RESPONSE_BYTES = 512 * 1024;
     private static volatile long lastRequestTime = 0;
     private static volatile boolean isPairingActive = false;
     private static volatile boolean isFetchingState = false;
@@ -44,11 +45,8 @@ public final class MusicManager {
         lastRequestTime = now;
         isFetchingState = true;
 
-        CompletableFuture.runAsync(() -> {
+        CompletableFuture.delayedExecutor(1500, TimeUnit.MILLISECONDS).execute(() -> {
             try {
-                Thread.sleep(1500); 
-
-                // 1. Direct check: If 3D Lyrics is active and currently playing, use the cached playing song
                 if (ModConfig.INSTANCE.enableLyrics && !ModConfig.INSTANCE.lyricsDemoMode && com.wish.client.features.visual.LyricsManager.isPlaying) {
                     String lTitle = com.wish.client.features.visual.LyricsManager.getCurrentTitle();
                     String lArtist = com.wish.client.features.visual.LyricsManager.getCurrentArtist();
@@ -59,18 +57,17 @@ public final class MusicManager {
                     }
                 }
 
-                // 2. Query system media (playerctl on Linux, PowerShell on Windows) - works for YTM, Spotify, Deezer
                 String sysSong = fetchSystemMediaSong();
                 if (sysSong != null && !sysSong.trim().isEmpty()) {
                     sendWinMediaSongToChat(sysSong, chatPrefix);
                     return;
                 }
 
-                // 3. Try Companion HTTP API if token is configured
                 boolean apiConnectionFailed = false;
                 if (ModConfig.INSTANCE.authToken != null) {
+                    HttpURLConnection conn = null;
                     try {
-                        HttpURLConnection conn = createAuthenticatedConnection("/state", "GET");
+                        conn = createAuthenticatedConnection("/state", "GET");
                         int responseCode = conn.getResponseCode();
                         if (responseCode == 200) {
                             String content = readResponse(conn);
@@ -81,6 +78,8 @@ public final class MusicManager {
                         }
                     } catch (Exception e) {
                         apiConnectionFailed = true;
+                    } finally {
+                        if (conn != null) conn.disconnect();
                     }
                 }
 
@@ -151,39 +150,7 @@ public final class MusicManager {
             } else if (os.contains("win")) {
                 String providerParam = ModConfig.INSTANCE.musicProvider != null && !ModConfig.INSTANCE.musicProvider.equalsIgnoreCase("None")
                     ? ModConfig.INSTANCE.musicProvider.trim() : "ALL";
-                Path scriptPath = Path.of("config", "wish", "get_song.ps1");
-                com.wish.client.features.visual.LyricsManager.ensureScriptExtracted(scriptPath);
-
-                if (Files.exists(scriptPath)) {
-                    ProcessBuilder pb = new ProcessBuilder(
-                        com.wish.client.features.visual.LyricsManager.getPowerShellExecutable(),
-                        "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                        "-File", scriptPath.toAbsolutePath().toString(),
-                        "-provider", providerParam
-                    );
-                    Process p = pb.start();
-                    try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
-                        boolean finished = p.waitFor(3000, java.util.concurrent.TimeUnit.MILLISECONDS);
-                        if (finished) {
-                            String line;
-                            while ((line = br.readLine()) != null) {
-                                String trimmed = line.trim();
-                                if (!trimmed.isEmpty() && !trimmed.startsWith("DEBUG:")) {
-                                    return trimmed;
-                                }
-                            }
-                        } else {
-                            p.destroyForcibly();
-                        }
-                    } finally {
-                        if (p.isAlive()) {
-                            p.destroyForcibly();
-                        }
-                    }
-                }
-
-                // Fallback to native Win32 JNA window title detection if PowerShell returned nothing
-                String[] jnaTrack = com.wish.client.features.visual.LyricsManager.detectWindowsTrackViaJna(providerParam);
+                String[] jnaTrack = LyricsManager.detectWindowsTrackViaJna(providerParam);
                 if (jnaTrack != null && jnaTrack.length >= 3 && !jnaTrack[2].isEmpty()) {
                     return !jnaTrack[1].isEmpty() ? jnaTrack[2] + " - " + jnaTrack[1] : jnaTrack[2];
                 }
@@ -246,9 +213,9 @@ public final class MusicManager {
                 int codeStatus = conn.getResponseCode();
                 if (codeStatus == 200) {
                     String respStr = readResponse(conn);
-                    JsonObject respJson = JsonParser.parseString(respStr).getAsJsonObject();
-                    if (respJson.has("code")) {
-                        String code = respJson.get("code").getAsString();
+                    JsonObject respJson = HttpClientUtils.parseJsonObject(respStr);
+                    String code = HttpClientUtils.getStringOrEmpty(respJson, "code");
+                    if (!code.isEmpty()) {
                         WishClient.sendLocalChatMessage("§d§l🎵 WISH §8» §fCode: §e§l" + code + " §8(§aApprove in " + provider + " popup!§8)");
                         handedOff = true;
                         exchangeCodeForToken(code);
@@ -270,44 +237,52 @@ public final class MusicManager {
     }
 
     private static void exchangeCodeForToken(String code) {
-        CompletableFuture.runAsync(() -> {
+        pollTokenAttempt(code, 0);
+    }
+
+    private static void pollTokenAttempt(String code, int attempt) {
+        if (attempt >= 18) {
+            isPairingActive = false;
+            WishClient.sendLocalChatMessage("§d§l🎵 WISH §8» §cAuthorization timeout. Type !song again.");
+            return;
+        }
+        CompletableFuture.delayedExecutor(2500, TimeUnit.MILLISECONDS).execute(() -> {
+            HttpURLConnection conn = null;
             try {
-                for (int i = 0; i < 18; i++) {
-                    try {
-                        Thread.sleep(2500);
-                        URL url = URI.create(getBaseUrl() + "/auth/request").toURL();
-                        HttpURLConnection conn = (HttpURLConnection) url.openConnection(java.net.Proxy.NO_PROXY);
-                        conn.setRequestMethod("POST");
-                        conn.setDoOutput(true);
-                        conn.setConnectTimeout(2000);
-                        conn.setReadTimeout(2000);
-                        conn.setRequestProperty("Content-Type", "application/json");
-                        conn.setRequestProperty("User-Agent", "Wish/1.0.0");
+                URL url = URI.create(getBaseUrl() + "/auth/request").toURL();
+                conn = (HttpURLConnection) url.openConnection(java.net.Proxy.NO_PROXY);
+                conn.setRequestMethod("POST");
+                conn.setDoOutput(true);
+                conn.setConnectTimeout(2000);
+                conn.setReadTimeout(2000);
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setRequestProperty("User-Agent", "Wish/1.0.0");
 
-                        JsonObject jsonBody = new JsonObject();
-                        jsonBody.addProperty("appId", APP_ID);
-                        jsonBody.addProperty("code", code);
+                JsonObject jsonBody = new JsonObject();
+                jsonBody.addProperty("appId", APP_ID);
+                jsonBody.addProperty("code", code);
 
-                        try (OutputStream os = conn.getOutputStream()) {
-                            os.write(jsonBody.toString().getBytes(StandardCharsets.UTF_8));
-                        }
-
-                        if (conn.getResponseCode() == 200) {
-                            String respStr = readResponse(conn);
-                            JsonObject respJson = JsonParser.parseString(respStr).getAsJsonObject();
-                            if (respJson.has("token")) {
-                                String token = respJson.get("token").getAsString();
-                                saveToken(token);
-                                WishClient.sendLocalChatMessage("§d§l🎵 WISH §8» §a§lSuccessfully paired with YouTube Music!");
-                                return;
-                            }
-                        }
-                    } catch (Exception ignored) {}
+                try (OutputStream os = conn.getOutputStream()) {
+                    os.write(jsonBody.toString().getBytes(StandardCharsets.UTF_8));
                 }
-                WishClient.sendLocalChatMessage("§d§l🎵 WISH §8» §cAuthorization timeout. Type !song again.");
+
+                if (conn.getResponseCode() == 200) {
+                    String respStr = readResponse(conn);
+                    JsonObject respJson = HttpClientUtils.parseJsonObject(respStr);
+                    String token = HttpClientUtils.getStringOrEmpty(respJson, "token");
+                    if (!token.isEmpty()) {
+                        saveToken(token);
+                        isPairingActive = false;
+                        WishClient.sendLocalChatMessage("§d§l🎵 WISH §8» §a§lSuccessfully paired with YouTube Music!");
+                        return;
+                    }
+                }
+            } catch (Exception e) {
+                LOGGER.debug("YTM pairing poll attempt {} failed: {}", attempt + 1, e.getMessage());
             } finally {
-                isPairingActive = false;
+                if (conn != null) conn.disconnect();
             }
+            pollTokenAttempt(code, attempt + 1);
         });
     }
 
@@ -325,56 +300,54 @@ public final class MusicManager {
     }
 
     private static String readResponse(HttpURLConnection conn) throws Exception {
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
-            StringBuilder content = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                content.append(line);
-            }
-            return content.toString();
+        try (InputStream in = conn.getInputStream()) {
+            return HttpClientUtils.readBoundedUtf8(in, MAX_COMPANION_RESPONSE_BYTES);
         }
     }
 
     private static void parseAndSendToChat(String jsonBody, String chatPrefix) {
         try {
-            JsonObject json = JsonParser.parseString(jsonBody).getAsJsonObject();
-            String title = "";
-            String artist = "";
+            JsonObject json = HttpClientUtils.parseJsonObject(jsonBody);
+            if (json != null) {
+                String title = "";
+                String artist = "";
 
-            if (json.has("video") && !json.get("video").isJsonNull()) {
-                JsonObject video = json.getAsJsonObject("video");
-                if (video.has("title") && !video.get("title").isJsonNull()) title = video.get("title").getAsString();
-                if (video.has("author") && !video.get("author").isJsonNull()) artist = video.get("author").getAsString();
-                if (artist.isEmpty() && video.has("artist") && !video.get("artist").isJsonNull()) artist = video.get("artist").getAsString();
-            }
+                JsonObject video = HttpClientUtils.getObjectOrNull(json, "video");
+                if (video != null) {
+                    title = HttpClientUtils.getStringOrEmpty(video, "title");
+                    artist = HttpClientUtils.getStringOrEmpty(video, "author");
+                    if (artist.isEmpty()) artist = HttpClientUtils.getStringOrEmpty(video, "artist");
+                }
 
-            if (title.isEmpty() && json.has("player") && !json.get("player").isJsonNull()) {
-                JsonObject player = json.getAsJsonObject("player");
-                if (player.has("track") && !player.get("track").isJsonNull()) {
-                    JsonObject track = player.getAsJsonObject("track");
-                    if (track.has("title") && !track.get("title").isJsonNull()) title = track.get("title").getAsString();
-                    if (track.has("author") && !track.get("author").isJsonNull()) artist = track.get("author").getAsString();
-                    if (artist.isEmpty() && track.has("artist") && !track.get("artist").isJsonNull()) artist = track.get("artist").getAsString();
+                if (title.isEmpty()) {
+                    JsonObject player = HttpClientUtils.getObjectOrNull(json, "player");
+                    JsonObject track = HttpClientUtils.getObjectOrNull(player, "track");
+                    if (track != null) {
+                        title = HttpClientUtils.getStringOrEmpty(track, "title");
+                        artist = HttpClientUtils.getStringOrEmpty(track, "author");
+                        if (artist.isEmpty()) artist = HttpClientUtils.getStringOrEmpty(track, "artist");
+                    }
+                }
+
+                if (title.isEmpty()) {
+                    title = HttpClientUtils.getStringOrEmpty(json, "title");
+                    artist = HttpClientUtils.getStringOrEmpty(json, "artist");
+                    if (artist.isEmpty()) artist = HttpClientUtils.getStringOrEmpty(json, "author");
+                }
+
+                if (!title.isEmpty()) {
+                    String format = ModConfig.INSTANCE.messageFormat;
+                    if (format == null || format.trim().isEmpty()) {
+                        format = "{title} - {artist}";
+                    }
+                    String body = format.replace("{title}", title).replace("{artist}", artist);
+                    WishClient.sendServerChatMessage(chatPrefix, body);
+                    return;
                 }
             }
-
-            if (title.isEmpty() && json.has("title") && !json.get("title").isJsonNull()) {
-                title = json.get("title").getAsString();
-                if (json.has("artist") && !json.get("artist").isJsonNull()) artist = json.get("artist").getAsString();
-                if (artist.isEmpty() && json.has("author") && !json.get("author").isJsonNull()) artist = json.get("author").getAsString();
-            }
-
-            if (!title.isEmpty()) {
-                String format = ModConfig.INSTANCE.messageFormat;
-                if (format == null || format.trim().isEmpty()) {
-                    format = "{title} - {artist}";
-                }
-                String body = format.replace("{title}", title).replace("{artist}", artist);
-                WishClient.sendServerChatMessage(chatPrefix, body);
-                return;
-            }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            LOGGER.debug("Could not parse companion JSON response", e);
+        }
 
         String winMediaSong = fetchSystemMediaSong();
         if (winMediaSong != null && !winMediaSong.trim().isEmpty()) {

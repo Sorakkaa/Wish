@@ -1,7 +1,7 @@
 {
 	"required": true,
 	"package": "com.wish.client.mixin",
-	"compatibilityLevel": "JAVA_21",
+	"compatibilityLevel": "JAVA_25",
 	"client": [
 		"EntityRendererMixin",
 		"EntityRenderDispatcherMixin",
@@ -13,6 +13,7 @@
 		"GuiMixin",
 		"ChatComponentMixin",
 		"EntityMixin",
+		"ItemStackMixin",
 		"ItemModelResolverMixin",
 		"ModelManagerAccessor",
 		"ClientLevelAccessor",
@@ -29,7 +30,9 @@
 		"AtmosphericFogEnvironmentMixin",
 		"WeatherEffectRendererMixin",
 		"WeatherRenderStateMixin",
-		"GuiGraphicsExtractorMixin"
+		"GuiGraphicsExtractorMixin",
+		"PlayerInfoMixin",
+		"FontMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

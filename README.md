@@ -1,6 +1,6 @@
 # Wish Mod 🌟
 
-[![Version](https://img.shields.io/badge/version-1.1.4-ff69b4?style=flat-square)](https://github.com/Sorakkaa/Wish/releases)
+[![Version](https://img.shields.io/badge/version-1.1.5-ff69b4?style=flat-square)](https://github.com/Sorakkaa/Wish/releases)
 [![Minecraft](https://img.shields.io/badge/minecraft-26.2-55ff55?style=flat-square)](https://fabricmc.net/)
 [![Loader](https://img.shields.io/badge/loader-Fabric%200.19.5-dbd0b4?style=flat-square)](https://fabricmc.net/)
 [![Java](https://img.shields.io/badge/java-25%2B-orange?style=flat-square)](https://adoptium.net/)
@@ -23,6 +23,8 @@ A client-side **Fabric** mod for **Minecraft 26.2** bringing Hypixel Skyblock qu
   - Toggleable **Dynamic Wind** with a **Wind Force** slider that shifts wind direction smoothly over time.
 - **Time Changer** — Set client world time anywhere along the `0–24000` tick cycle with an optional **Freeze Time** lock.
 - **Smol People** — Renders other players at miniature `0.5x` body scale with oversized `1.5x` heads, built with **Essential cosmetics compatibility** and an optional **Include Yourself** toggle.
+- **Cat Paw Trails** — Spawns glowing kawaii cat-paw footprints with ground ripples, floating mini hearts, and twinkling stars along your path (works on stained glass too), with customizable **Color**, **Size**, **Duration**, and **All Players**.
+- **Word Replacer** — Client-side chat/text replacement rules supporting `&` color and formatting codes with **Whole Word** and **Case Sensitive** toggles.
 - **3D In-World Floating Lyrics** — Displays live, beat-synced song lyrics floating across 16 elevated sky & flank sectors (never clipping below the horizon), with animated music notes (`♪ ♫ ✦ ★ ✧ ♩ ♬`) during breaks:
   - Supports **Spotify**, **YouTube Music** (companion API on port `9863` + MPRIS/window detection), and **Deezer** (port `9865` / desktop & browser detection).
   - Multi-source lyrics lookup: local `.lrc` files, YouTube Music timed lyrics, **LRCLIB**, and **NetEase Cloud Music**.
@@ -83,8 +85,8 @@ A client-side **Fabric** mod for **Minecraft 26.2** bringing Hypixel Skyblock qu
 - **Java** `25` or newer
 
 ### Steps
-1. Download `wish-1.1.4.jar` from the [Releases](https://github.com/Sorakkaa/Wish/releases) page.
-2. Place `wish-1.1.4.jar` and **Fabric API** inside your `.minecraft/mods` folder.
+1. Download `wish-1.1.5.jar` from the [Releases](https://github.com/Sorakkaa/Wish/releases) page.
+2. Place `wish-1.1.5.jar` and **Fabric API** inside your `.minecraft/mods` folder.
 3. Launch Minecraft `26.2` with Fabric and run `/wish` in-game to customize everything.
 
 ---
@@ -97,7 +99,7 @@ cd Wish
 ./gradlew build
 ```
 
-The compiled mod JAR will be output to `build/libs/wish-1.1.4.jar`.
+The compiled mod JAR will be output to `build/libs/wish-1.1.5.jar`.
 
 ---
 

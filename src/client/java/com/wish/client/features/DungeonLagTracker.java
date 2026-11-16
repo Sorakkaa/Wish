@@ -1,8 +1,10 @@
 package com.wish.client.features;
 
+import com.wish.client.WishClient;
 import com.wish.client.config.ModConfig;
 import net.minecraft.client.Minecraft;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -53,7 +55,7 @@ public class DungeonLagTracker {
                 lastScoreboardChangeRealTime = realStartTimeMs;
             } else if (isInRun() && timeMs > lastSeenScoreboardTime) {
                 long jump = timeMs - lastSeenScoreboardTime;
-                
+
                 if (jump > 1000) {
                     long pingSpike = jump - 1000;
                     pingLagMs += pingSpike;
@@ -61,11 +63,11 @@ public class DungeonLagTracker {
 
                 long totalServerElapsed = timeMs - startScoreboardTime;
                 long totalRealElapsed = System.currentTimeMillis() - realStartTimeMs;
-                
+
                 long expectedRealElapsed = totalServerElapsed + clientLagMs;
                 long newServerLag = totalRealElapsed - expectedRealElapsed;
                 if (newServerLag < 0) newServerLag = 0;
-                
+
                 serverLagMs = newServerLag;
                 lastSeenScoreboardTime = timeMs;
                 lastScoreboardChangeRealTime = System.currentTimeMillis();
@@ -102,7 +104,7 @@ public class DungeonLagTracker {
         boolean isCurrentlyLagging = false;
         if (lastScoreboardChangeRealTime > 0) {
             long timeSinceUpdate = now - lastScoreboardChangeRealTime;
-            if (timeSinceUpdate > 1500) { 
+            if (timeSinceUpdate > 1500) {
                 ms = timeSinceUpdate - 1000;
                 isCurrentlyLagging = true;
             }
@@ -115,8 +117,7 @@ public class DungeonLagTracker {
         if (!ModConfig.INSTANCE.enableLagTimeLost) return;
         if (text == null) return;
         String clean = SkyblockDetector.stripColorCodes(text).replace('\u00A0', ' ').trim();
-        
-        
+
         if (clean.contains("The Dungeon starts in") ||
             clean.contains("The dungeon starts in") ||
             clean.contains("Le donjon commence dans") ||
@@ -129,7 +130,6 @@ public class DungeonLagTracker {
             return;
         }
 
-        
         boolean isDefeated = DEFEATED_PATTERN.matcher(clean).matches();
         if (isDefeated) {
             long defTime = extractTime(clean);
@@ -138,7 +138,6 @@ public class DungeonLagTracker {
             }
         }
 
-        
         boolean isScore = SCORE_PATTERN.matcher(clean).matches();
         boolean isExtraStats = EXTRA_STATS_PATTERN.matcher(clean).matches();
         boolean isClearTime = CLEAR_TIME_PATTERN.matcher(clean).matches();
@@ -153,11 +152,10 @@ public class DungeonLagTracker {
         if ((isInRun() || officialServerTime > 0) && !endTriggered && (isScore || isExtraStats || isClearTime)) {
             endTriggered = true;
 
-            CompletableFuture.runAsync(() -> {
-                try {
-                    Thread.sleep(600);
-                } catch (Exception ignored) {}
-
+            CompletableFuture.delayedExecutor(600, TimeUnit.MILLISECONDS, Minecraft.getInstance()).execute(() -> {
+                if (!endTriggered) {
+                    return;
+                }
                 long totalLagMs = clientLagMs + serverLagMs + pingLagMs;
 
                 double seconds = totalLagMs / 1000.0;
@@ -169,7 +167,7 @@ public class DungeonLagTracker {
                 } else {
                     timeStr = String.format(java.util.Locale.US, "%.2fs", seconds);
                 }
-                
+
                 if (ModConfig.INSTANCE.sendLagTimeLost) {
                     sendPartyMessage("Time lost to lag: " + timeStr);
                 }
@@ -189,7 +187,7 @@ public class DungeonLagTracker {
 
     public static void onScoreboardParsed(boolean foundTimer) {
         if (isInRun() && !foundTimer) {
-            
+
             lastScoreboardChangeRealTime = System.currentTimeMillis();
         }
     }
@@ -197,9 +195,11 @@ public class DungeonLagTracker {
     public static void forceEndRun() {
         inRun = false;
         hasRunEndedThisInstance = false;
+        endTriggered = false;
         clientLagMs = 0;
         serverLagMs = 0;
         pingLagMs = 0;
+        officialServerTime = 0;
         lastScoreboardChangeRealTime = 0;
     }
 
@@ -227,14 +227,7 @@ public class DungeonLagTracker {
             try {
                 long min = m.group(1) != null ? Long.parseLong(m.group(1)) : 0;
                 long sec = Long.parseLong(m.group(2));
-                long ms = 0;
-                if (m.group(3) != null) {
-                    String msStr = m.group(3);
-                    if (msStr.length() == 1) ms = Long.parseLong(msStr) * 100;
-                    else if (msStr.length() == 2) ms = Long.parseLong(msStr) * 10;
-                    else if (msStr.length() == 3) ms = Long.parseLong(msStr);
-                    else ms = Long.parseLong(msStr.substring(0, 3));
-                }
+                long ms = parseMilliseconds(m.group(3));
                 return (min * 60 + sec) * 1000 + ms;
             } catch (Exception ignored) {}
         }
@@ -244,14 +237,7 @@ public class DungeonLagTracker {
             try {
                 long min = Long.parseLong(m2.group(1));
                 long sec = Long.parseLong(m2.group(2));
-                long ms = 0;
-                if (m2.group(3) != null) {
-                    String msStr = m2.group(3);
-                    if (msStr.length() == 1) ms = Long.parseLong(msStr) * 100;
-                    else if (msStr.length() == 2) ms = Long.parseLong(msStr) * 10;
-                    else if (msStr.length() == 3) ms = Long.parseLong(msStr);
-                    else ms = Long.parseLong(msStr.substring(0, 3));
-                }
+                long ms = parseMilliseconds(m2.group(3));
                 return (min * 60 + sec) * 1000 + ms;
             } catch (Exception ignored) {}
         }
@@ -259,13 +245,15 @@ public class DungeonLagTracker {
         return -1;
     }
 
+    private static long parseMilliseconds(String msStr) {
+        if (msStr == null || msStr.isEmpty()) return 0;
+        if (msStr.length() == 1) return Long.parseLong(msStr) * 100;
+        if (msStr.length() == 2) return Long.parseLong(msStr) * 10;
+        if (msStr.length() == 3) return Long.parseLong(msStr);
+        return Long.parseLong(msStr.substring(0, 3));
+    }
+
     private static void sendPartyMessage(String message) {
-        Minecraft mc = Minecraft.getInstance();
-        mc.execute(() -> {
-            var player = mc.player;
-            if (player != null && player.connection != null) {
-                player.connection.sendCommand("pc " + message);
-            }
-        });
+        WishClient.sendServerChatMessage("/pc ", message);
     }
 }

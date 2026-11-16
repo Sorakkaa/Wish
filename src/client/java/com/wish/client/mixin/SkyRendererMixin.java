@@ -26,13 +26,11 @@ public abstract class SkyRendererMixin {
     )
     private void wish$applyCustomSky(ClientLevel level, float partialTick, Camera camera, SkyRenderState state, CallbackInfo ci) {
         if (ModConfig.INSTANCE.enableCustomSky) {
-            int mode = ModConfig.INSTANCE.customSkyMode;
             if (state.skybox == DimensionType.Skybox.NONE || state.skybox == DimensionType.Skybox.END) {
                 state.skybox = DimensionType.Skybox.OVERWORLD;
             }
             state.skyColor = CustomSkyManager.getSkyColor();
             state.sunriseAndSunsetColor = 0;
-            // Keep the bottom dark disc disabled so stars render across the full 360-degree skybox
             state.shouldRenderDarkDisc = false;
 
             if (ModConfig.INSTANCE.customSkyShowStars) {

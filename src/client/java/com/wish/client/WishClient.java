@@ -6,9 +6,14 @@ import com.wish.client.features.AutomatonManager;
 import com.wish.client.features.DungeonLagTracker;
 import com.wish.client.features.FunChatCommands;
 import com.wish.client.features.GhostBlockManager;
+import com.wish.client.features.JerryModeManager;
+import com.wish.client.features.MineshaftPortalManager;
 import com.wish.client.features.PrecursorCityLocator;
 import com.wish.client.features.SkyblockDetector;
 import com.wish.client.features.SlayerCarryManager;
+import com.wish.client.features.SorakaModeManager;
+import com.wish.client.features.visual.CatPawTrailManager;
+import com.wish.client.features.visual.LyricsRenderer;
 import com.wish.client.music.MusicManager;
 import com.wish.client.update.UpdateManager;
 import com.wish.client.util.ChatUtils;
@@ -19,8 +24,14 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.DisconnectedScreen;
+import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
+import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
@@ -45,39 +56,58 @@ public class WishClient implements ClientModInitializer {
 		GhostBlockManager.init();
 		AutomatonManager.init();
 		com.wish.client.features.visual.LyricsManager.init();
+		LevelRenderEvents.COLLECT_SUBMITS.register(LyricsRenderer::renderWorld);
+		LevelRenderEvents.AFTER_TRANSLUCENT_TERRAIN.register(CatPawTrailManager::renderWorld);
 
-		
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> WishCommands.register(dispatcher));
 
-		
 		ClientTickEvents.END_CLIENT_TICK.register(mc -> {
 			SkyblockDetector.onClientTick(mc);
 			DungeonLagTracker.onClientTick();
 			PrecursorCityLocator.onClientTick(mc);
 			AutomatonManager.onClientTick(mc);
+			MineshaftPortalManager.onClientTick(mc);
+			CatPawTrailManager.onClientTick(mc);
 			com.wish.client.color.CustomPlayerManager.onClientTick();
 			SlayerCarryManager.onClientTick(mc);
 		});
 
-		
+		ScreenEvents.AFTER_INIT.register((client, screen, scaledWidth, scaledHeight) -> {
+			if (screen instanceof TitleScreen
+					|| screen instanceof JoinMultiplayerScreen
+					|| screen instanceof SelectWorldScreen
+					|| screen instanceof DisconnectedScreen) {
+				UpdateManager.onReturnToMenu();
+			}
+		});
+
 		ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
 			com.wish.client.color.CustomPlayerManager.onPlayerJoin();
-			UpdateManager.checkForUpdates();
+			UpdateManager.onPlayerJoin(client, handler != null ? handler.getConnection() : null);
 			AutomatonManager.fetchBazaarPricesAsync(false);
 		});
 
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+			com.wish.client.color.CustomPlayerManager.onDisconnect();
+			UpdateManager.onDisconnect(client, handler != null ? handler.getConnection() : null);
+			LyricsRenderer.onDisconnect();
+			CatPawTrailManager.reset();
 			SkyblockDetector.reset();
+			AutomatonManager.onDisconnect();
+			MineshaftPortalManager.reset();
+			PrecursorCityLocator.reset();
+			SlayerCarryManager.reset();
+			DungeonLagTracker.forceEndRun();
+			JerryModeManager.deactivate();
+			SorakaModeManager.deactivate();
 		});
 
-		
 		ClientChunkEvents.CHUNK_LOAD.register((level, chunk) -> {
 			if (ModConfig.INSTANCE.enableMiningAutomaton && ModConfig.INSTANCE.enablePrecursorCityScanner && !PrecursorCityLocator.hasExactAltar()) {
 				PrecursorCityLocator.checkChunkForCity(chunk);
 			}
 		});
 
-		
 		ClientSendMessageEvents.CHAT.register((message) -> {
 			if (message == null) return;
 
@@ -99,7 +129,6 @@ public class WishClient implements ClientModInitializer {
 			FunChatCommands.checkFunCommands(lower, message);
 		});
 
-		
 		ClientReceiveMessageEvents.ALLOW_GAME.register((message, overlay) -> {
 			if (overlay || message == null) return true;
 			String text = message.getString();
@@ -109,7 +138,6 @@ public class WishClient implements ClientModInitializer {
 			return !clean.contains("[Wish] [Automaton] Drop!") && !clean.contains("[Wish] [Precursor City]");
 		});
 
-		
 		ClientReceiveMessageEvents.ALLOW_CHAT.register((message, signedMessage, sender, params, receptionTimestamp) -> {
 			if (message == null) return true;
 			String text = message.getString();
@@ -119,7 +147,6 @@ public class WishClient implements ClientModInitializer {
 			return !clean.contains("[Wish] [Automaton] Drop!") && !clean.contains("[Wish] [Precursor City]");
 		});
 
-		
 		ClientReceiveMessageEvents.CHAT.register((message, signedMessage, sender, params, receptionTimestamp) -> {
 			if (message == null) return;
 			String text = message.getString();
@@ -134,7 +161,6 @@ public class WishClient implements ClientModInitializer {
 			}
 		});
 
-		
 		ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
 			if (message == null || overlay) return;
 			String text = message.getString();
@@ -174,7 +200,17 @@ public class WishClient implements ClientModInitializer {
 	public static void sendLocalChatMessage(String message) {
 		if (message == null || message.isEmpty()) return;
 		if (message.contains("§")) {
-			sendLocalChatMessage(Component.literal(message));
+			String stripped = SkyblockDetector.stripColorCodes(message);
+			if (stripped.contains("[Wish]") || stripped.contains("WISH")) {
+				sendLocalChatMessage(Component.literal(message));
+			} else {
+				MutableComponent prefixed = Component.literal("[Wish] ")
+					.withStyle(Style.EMPTY
+						.withColor(TextColor.fromRgb(0xffc6f9))
+						.withBold(true))
+					.append(Component.literal(message));
+				sendLocalChatMessage(prefixed);
+			}
 			return;
 		}
 		String cleanMsg = message

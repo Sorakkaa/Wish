@@ -7,10 +7,10 @@ public interface ISizeableState {
     boolean wish$hasCustomScale();
 
     void wish$setScale(float x, float y, float z);
-    
+
     boolean wish$isLocalPlayer();
     void wish$setLocalPlayer(boolean isLocal);
-    
+
     boolean wish$isCustomPlayer();
     void wish$setCustomPlayer(boolean isCustomPlayer);
 

@@ -11,11 +11,16 @@ public final class HudStateContainer {
 
     public record LagSnapshot(boolean isLagging, Component formattedText, long ms, int textWidth) {}
     public record AutomatonSnapshot(boolean isVisible, List<Component> mainLines, List<Component> dropLines, int maxWidth, int totalHeight) {}
-    public record BossSnapshot(boolean isVisible, String owner, int textWidth) {}
+    public record BossSnapshot(boolean isVisible, Component title, int titleWidth, String owner, int ownerWidth) {}
+
+    public static final Component BOSS_SPAWN_TITLE = Component.literal("Boss Spawn")
+            .withStyle(s -> s.withColor(0xFFFF55FF).withBold(true));
+    private static final BossSnapshot EMPTY_BOSS = new BossSnapshot(false, BOSS_SPAWN_TITLE, 0, "", 0);
 
     private static volatile LagSnapshot currentLag = new LagSnapshot(false, Component.empty(), 0, 0);
     private static volatile AutomatonSnapshot currentAutomaton = new AutomatonSnapshot(false, Collections.emptyList(), Collections.emptyList(), 0, 0);
-    private static volatile BossSnapshot currentBoss = new BossSnapshot(false, "", 0);
+    private static volatile BossSnapshot currentBoss = EMPTY_BOSS;
+    private static volatile int cachedBossTitleWidth = -1;
 
     private static final Component AUTOMATON_TITLE = Component.literal("Automaton Tracker")
             .withStyle(style -> style.withColor(0xFFFFAA00));
@@ -33,12 +38,26 @@ public final class HudStateContainer {
     }
 
     public static void updateBossState(boolean visible, String owner, net.minecraft.client.gui.Font font) {
-        if (!visible) {
-            currentBoss = new BossSnapshot(false, "", 0);
+        if (!visible || owner == null || owner.isEmpty()) {
+            if (currentBoss.isVisible()) {
+                currentBoss = EMPTY_BOSS;
+            }
             return;
         }
-        Component comp = Component.literal("Spawned by: " + owner).withStyle(s -> s.withColor(0xFF55FF55));
-        currentBoss = new BossSnapshot(true, owner, font != null ? font.width(comp) : 100);
+        if (currentBoss.isVisible() && owner.equals(currentBoss.owner()) && (font == null || currentBoss.titleWidth() > 0)) {
+            return;
+        }
+        int titleW = cachedBossTitleWidth;
+        if (font != null) {
+            if (titleW <= 0) {
+                titleW = font.width(BOSS_SPAWN_TITLE);
+                cachedBossTitleWidth = titleW;
+            }
+        } else if (titleW <= 0) {
+            titleW = 60;
+        }
+        int ownerW = font != null ? font.width(owner) : Math.max(40, owner.length() * 6);
+        currentBoss = new BossSnapshot(true, BOSS_SPAWN_TITLE, titleW, owner, ownerW);
     }
 
     public static void updateLagState(boolean lagging, long lagMs, net.minecraft.client.gui.Font font) {
@@ -49,7 +68,6 @@ public final class HudStateContainer {
             return;
         }
 
-        
         Component comp = Component.literal(lagMs + "ms")
                 .withStyle(style -> style.withColor(0xFFFF5555));
         int width = font != null ? font.width(comp) : 40;

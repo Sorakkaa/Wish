@@ -1,9 +1,9 @@
 package com.wish.client.features;
 
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.wish.client.WishClient;
 import com.wish.client.config.ModConfig;
+import com.wish.client.util.HttpClientUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
@@ -16,7 +16,6 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemLore;
 
-import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -39,7 +38,6 @@ public class AutomatonManager {
             PART_FTX, PART_HEART, PART_REFLECTOR, PART_TRANSMITTER, PART_SWITCH, PART_MOTOR, PART_BOBOMB
     );
 
-    
     public static final String GEM_ROUGH_SAPPHIRE = "Rough Sapphire Gemstone";
     public static final String GEM_FLAWED_SAPPHIRE = "Flawed Sapphire Gemstone";
     public static final String GEM_FINE_SAPPHIRE = "Fine Sapphire Gemstone";
@@ -69,10 +67,12 @@ public class AutomatonManager {
             GEM_ROUGH_OPAL, GEM_FLAWED_OPAL
     );
 
-    public static final List<String> ALL_TRACKED_ITEMS = new ArrayList<>();
+    public static final List<String> ALL_TRACKED_ITEMS;
     static {
-        ALL_TRACKED_ITEMS.addAll(PRECURSOR_PARTS);
-        ALL_TRACKED_ITEMS.addAll(GEMSTONES);
+        List<String> combined = new ArrayList<>();
+        combined.addAll(PRECURSOR_PARTS);
+        combined.addAll(GEMSTONES);
+        ALL_TRACKED_ITEMS = List.copyOf(combined);
     }
 
     public static final String[] ALL_PARTS = ALL_TRACKED_ITEMS.toArray(new String[0]);
@@ -101,7 +101,6 @@ public class AutomatonManager {
         }
     }
 
-    
     private static final Map<String, Double> DEFAULT_SELL_OFFER_PRICES = Map.ofEntries(
             Map.entry(PART_FTX, 216700.0),
             Map.entry(PART_HEART, 223700.0),
@@ -129,7 +128,6 @@ public class AutomatonManager {
             Map.entry(GEM_FLAWED_OPAL, 997.0)
     );
 
-    
     private static final Map<String, Double> DEFAULT_INSTASELL_PRICES = Map.ofEntries(
             Map.entry(PART_FTX, 157500.0),
             Map.entry(PART_HEART, 184500.0),
@@ -157,7 +155,6 @@ public class AutomatonManager {
             Map.entry(GEM_FLAWED_OPAL, 267.0)
     );
 
-    
     private static final Map<String, Double> NPC_MIN_PRICES = Map.ofEntries(
             Map.entry(GEM_ROUGH_SAPPHIRE, 3.0),
             Map.entry(GEM_FLAWED_SAPPHIRE, 240.0),
@@ -189,12 +186,17 @@ public class AutomatonManager {
     private static final Pattern AFTER_COUNT_PATTERN = Pattern.compile("^(?:\\s*[x:–\\-\\+]\\s*|\\s*\\(x?\\s*)([0-9,]+)", Pattern.CASE_INSENSITIVE);
     private static final Pattern AFTER_NUM_PATTERN = Pattern.compile("^\\s*([0-9,]+)");
     private static final Pattern MAGIC_FIND_PATTERN = Pattern.compile("(?i)\\(\\+[0-9,]+%?\\s*[^)]*magic find[^)]*\\)");
+    private static final Pattern LINE_SPLIT_PATTERN = Pattern.compile("\\r?\\n");
+    private static final int MAX_BAZAAR_RESPONSE_BYTES = 16 * 1024 * 1024;
 
     private static final Set<Integer> trackedAutomatonIds = ConcurrentHashMap.newKeySet();
     private static final Set<Integer> visibleAutomatonIds = ConcurrentHashMap.newKeySet();
     private static final Map<Integer, Long> recentlyKilledEntityIds = new ConcurrentHashMap<>();
-    private static String cachedGlowHex = null;
-    private static int cachedGlowRgb = 0xFFFFFF;
+    private static final List<ArmorStand> tickAutomatonStands = new ArrayList<>();
+    private static final List<IronGolem> tickAliveGolems = new ArrayList<>();
+    private static int inventoryScanTickCounter = 0;
+    private static volatile String cachedGlowHex = null;
+    private static volatile int cachedGlowRgb = 0xFFFFFF;
 
     private static final Map<String, Double> bazaarSellOfferPrices = new ConcurrentHashMap<>();
     private static final Map<String, Double> bazaarInstaSellPrices = new ConcurrentHashMap<>();
@@ -220,7 +222,6 @@ public class AutomatonManager {
     private static final Map<Integer, AutomatonInfo> trackedAutomatons = new ConcurrentHashMap<>();
     private static final Pattern HP_PATTERN = Pattern.compile("([0-9,]+)/([0-9,]+)");
 
-    
     private static int totalKills = 0;
     private static long sessionStartTime = 0;
     private static long lastKillTime = 0;
@@ -245,7 +246,7 @@ public class AutomatonManager {
     }
 
     public static void fetchBazaarPricesAsync(boolean force) {
-        CompletableFuture.runAsync(() -> {
+        BAZAAR_EXECUTOR.execute(() -> {
             HttpURLConnection conn = null;
             try {
                 long now = System.currentTimeMillis();
@@ -262,67 +263,64 @@ public class AutomatonManager {
 
                 if (conn.getResponseCode() == 200) {
                     lastBazaarFetch = now;
-                    java.io.InputStream is = conn.getInputStream();
-                    if ("gzip".equalsIgnoreCase(conn.getContentEncoding())) {
-                        is = new java.util.zip.GZIPInputStream(is);
+                    java.io.InputStream rawStream = conn.getInputStream();
+                    java.io.InputStream stream = "gzip".equalsIgnoreCase(conn.getContentEncoding())
+                            ? new java.util.zip.GZIPInputStream(rawStream)
+                            : rawStream;
+                    String body;
+                    try (stream) {
+                        body = HttpClientUtils.readBoundedUtf8(stream, MAX_BAZAAR_RESPONSE_BYTES);
                     }
-                    try (var reader = new InputStreamReader(is, StandardCharsets.UTF_8)) {
-                        JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
-                        if (root.has("success") && root.get("success").getAsBoolean() && root.has("products")) {
-                            JsonObject products = root.getAsJsonObject("products");
+                    JsonObject root = HttpClientUtils.parseJsonObject(body);
+                    if (root != null && root.has("success") && root.get("success").isJsonPrimitive()
+                            && root.get("success").getAsBoolean()) {
+                        JsonObject products = HttpClientUtils.getObjectOrNull(root, "products");
+                        if (products != null) {
                             for (Map.Entry<String, String> entry : PART_TO_BAZAAR_ID.entrySet()) {
                                 String partName = entry.getKey();
                                 String bzId = entry.getValue();
-                                if (products.has(bzId)) {
-                                    JsonObject item = products.getAsJsonObject(bzId);
+                                JsonObject item = HttpClientUtils.getObjectOrNull(products, bzId);
+                                if (item == null) continue;
 
-                                    double sellOffer = 0.0;
-                                    double instaSell = 0.0;
+                                double sellOffer = 0.0;
+                                double instaSell = 0.0;
 
-                                    if (item.has("buy_summary")) {
-                                        try {
-                                            var buys = item.getAsJsonArray("buy_summary");
-                                            if (buys != null && !buys.isEmpty() && buys.get(0).isJsonObject()) {
-                                                var top = buys.get(0).getAsJsonObject();
-                                                if (top.has("pricePerUnit")) {
-                                                    sellOffer = top.get("pricePerUnit").getAsDouble();
-                                                }
-                                            }
-                                        } catch (Exception ignored) {}
+                                var buys = HttpClientUtils.getArrayOrNull(item, "buy_summary");
+                                if (buys != null && !buys.isEmpty() && buys.get(0).isJsonObject()) {
+                                    var top = buys.get(0).getAsJsonObject();
+                                    if (top.has("pricePerUnit") && top.get("pricePerUnit").isJsonPrimitive()) {
+                                        sellOffer = top.get("pricePerUnit").getAsDouble();
                                     }
-
-                                    if (item.has("sell_summary")) {
-                                        try {
-                                            var sells = item.getAsJsonArray("sell_summary");
-                                            if (sells != null && !sells.isEmpty() && sells.get(0).isJsonObject()) {
-                                                var top = sells.get(0).getAsJsonObject();
-                                                if (top.has("pricePerUnit")) {
-                                                    instaSell = top.get("pricePerUnit").getAsDouble();
-                                                }
-                                            }
-                                        } catch (Exception ignored) {}
-                                    }
-
-                                    if (item.has("quick_status")) {
-                                        JsonObject qs = item.getAsJsonObject("quick_status");
-                                        if (sellOffer <= 0 && qs.has("buyPrice")) {
-                                            sellOffer = qs.get("buyPrice").getAsDouble();
-                                        }
-                                        if (instaSell <= 0 && qs.has("sellPrice")) {
-                                            instaSell = qs.get("sellPrice").getAsDouble();
-                                        }
-                                    }
-
-                                    if (sellOffer > 0) bazaarSellOfferPrices.put(partName, sellOffer);
-                                    if (instaSell > 0) bazaarInstaSellPrices.put(partName, instaSell);
                                 }
+
+                                var sells = HttpClientUtils.getArrayOrNull(item, "sell_summary");
+                                if (sells != null && !sells.isEmpty() && sells.get(0).isJsonObject()) {
+                                    var top = sells.get(0).getAsJsonObject();
+                                    if (top.has("pricePerUnit") && top.get("pricePerUnit").isJsonPrimitive()) {
+                                        instaSell = top.get("pricePerUnit").getAsDouble();
+                                    }
+                                }
+
+                                JsonObject qs = HttpClientUtils.getObjectOrNull(item, "quick_status");
+                                if (qs != null) {
+                                    if (sellOffer <= 0 && qs.has("buyPrice") && qs.get("buyPrice").isJsonPrimitive()) {
+                                        sellOffer = qs.get("buyPrice").getAsDouble();
+                                    }
+                                    if (instaSell <= 0 && qs.has("sellPrice") && qs.get("sellPrice").isJsonPrimitive()) {
+                                        instaSell = qs.get("sellPrice").getAsDouble();
+                                    }
+                                }
+
+                                if (sellOffer > 0) bazaarSellOfferPrices.put(partName, sellOffer);
+                                if (instaSell > 0) bazaarInstaSellPrices.put(partName, instaSell);
                             }
-                            
-                            refreshHudState();
+
+                            Minecraft.getInstance().execute(AutomatonManager::refreshHudState);
                         }
                     }
                 }
-            } catch (Exception ignored) {
+            } catch (Exception e) {
+                WishClient.LOGGER.debug("Failed to fetch Hypixel Bazaar prices: {}", e.getMessage());
             } finally {
                 if (conn != null) conn.disconnect();
             }
@@ -332,27 +330,27 @@ public class AutomatonManager {
     public static int getItemColor(String item) {
         if (item == null) return 0xFFFFFFFF;
         if (item.contains("FTX 3070") || item.contains("Jade")) {
-            return 0xFF55FF55; 
+            return 0xFF55FF55;
         } else if (item.contains("Synthetic Heart") || item.contains("Ruby")) {
-            return 0xFFFF5555; 
+            return 0xFFFF5555;
         } else if (item.contains("Robotron Reflector") || item.contains("Jasper")) {
-            return 0xFFFF55FF; 
+            return 0xFFFF55FF;
         } else if (item.contains("Electron Transmitter") || item.contains("Topaz")) {
-            return 0xFFFFFF55; 
+            return 0xFFFFFF55;
         } else if (item.contains("Control Switch") || item.contains("Sapphire")) {
-            return 0xFF55FFFF; 
+            return 0xFF55FFFF;
         } else if (item.contains("Superlite Motor")) {
-            return 0xFF33AAFF; 
+            return 0xFF33AAFF;
         } else if (item.contains("Amber")) {
-            return 0xFFFFAA00; 
+            return 0xFFFFAA00;
         } else if (item.contains("Amethyst")) {
-            return 0xFFAA00AA; 
+            return 0xFFAA00AA;
         } else if (item.contains("Opal")) {
-            return 0xFFFFFFFF; 
+            return 0xFFFFFFFF;
         } else if (item.contains("Bob-omb")) {
-            return 0xFFAAAAAA; 
+            return 0xFFAAAAAA;
         }
-        return 0xFFFFAA00; 
+        return 0xFFFFAA00;
     }
 
     public static String getChatColorCode(String item) {
@@ -381,11 +379,10 @@ public class AutomatonManager {
         return "§6";
     }
 
-    
     public static String findTrackedItem(String rawName) {
         if (rawName == null) return null;
         String clean = SkyblockDetector.stripColorCodes(rawName).trim().toLowerCase(Locale.ROOT);
-        
+
         clean = clean.replace("⬡", "").replace("•", "").trim();
 
         for (int i = 0; i < ALL_PARTS.length; i++) {
@@ -440,7 +437,7 @@ public class AutomatonManager {
             if (mc.level != null) {
                 for (Entity nearby : mc.level.entitiesForRendering()) {
                     if (nearby instanceof ArmorStand && nearby.hasCustomName() && nearby.getCustomName() != null) {
-                        if (nearby.distanceToSqr(entity) <= 12.25) { 
+                        if (nearby.distanceToSqr(entity) <= 12.25) {
                             String name = SkyblockDetector.stripColorCodes(nearby.getCustomName().getString()).toLowerCase(Locale.ROOT);
                             if (name.contains("automaton")) {
                                 trackedAutomatonIds.add(id);
@@ -501,7 +498,7 @@ public class AutomatonManager {
             for (int i = 0; i < invSize; i++) {
                 ItemStack stack = mc.player.getInventory().getItem(i);
                 if (stack == null || stack.isEmpty()) continue;
-                String hoverName = stack.getHoverName().getString();
+                String hoverName = CustomModelManager.getOriginalHoverName(stack).getString();
                 String matched = findTrackedItem(hoverName);
                 if (matched != null) {
                     currentInvCounts.merge(matched, stack.getCount(), Integer::sum);
@@ -511,10 +508,6 @@ public class AutomatonManager {
             long now = System.currentTimeMillis();
             cleanExpiredClaims(now);
 
-            
-            
-            
-            
             boolean canRecordDrops = !ModConfig.INSTANCE.automatonSackMode
                     && SkyblockDetector.isInPrecursorCity
                     && !isContainerOpen
@@ -561,7 +554,6 @@ public class AutomatonManager {
         var menu = mc.player.containerMenu;
         if (menu == null) return;
 
-        
         if (mc.gui != null && mc.gui.screen() != null) {
             String title = mc.gui.screen().getTitle().getString().toLowerCase();
             if (title.contains("bazaar") || title.contains("auction")) {
@@ -594,15 +586,13 @@ public class AutomatonManager {
     public static void parseItemStackForSack(ItemStack stack) {
         if (stack == null || stack.isEmpty()) return;
 
-        String hoverName = stack.getHoverName().getString();
+        String hoverName = CustomModelManager.getOriginalHoverName(stack).getString();
         String hoverLower = SkyblockDetector.stripColorCodes(hoverName).toLowerCase().trim();
 
-        
         if (hoverLower.contains("bazaar") || hoverLower.contains("sell sacks now") || hoverLower.contains("instant sell")) {
             return;
         }
 
-        
         ItemLore lore = stack.get(DataComponents.LORE);
         if (lore != null) {
             for (net.minecraft.network.chat.Component line : lore.lines()) {
@@ -610,7 +600,6 @@ public class AutomatonManager {
             }
         }
 
-        
         String tracked = findTrackedItem(hoverName);
         if (tracked != null && lore != null) {
             int stored = -1;
@@ -660,7 +649,6 @@ public class AutomatonManager {
             if (partIdx != -1) {
                 int count = -1;
 
-                
                 String before = clean.substring(0, partIdx).trim();
                 Matcher mPrefix = PREFIX_COUNT_PATTERN.matcher(before);
                 if (mPrefix.find()) {
@@ -676,7 +664,6 @@ public class AutomatonManager {
                     }
                 }
 
-                
                 if (count == -1) {
                     String after = clean.substring(partIdx + matchLen).trim();
                     Matcher mAfterCount = AFTER_COUNT_PATTERN.matcher(after);
@@ -707,7 +694,7 @@ public class AutomatonManager {
 
         Integer prevKnown = lastKnownSackCounts.get(part);
         if (prevKnown == null) {
-            
+
             lastKnownSackCounts.put(part, totalStored);
         } else {
             if (totalStored > prevKnown) {
@@ -782,9 +769,6 @@ public class AutomatonManager {
         });
     }
 
-    
-    private static final Map<String, Long> processedLineCache = new ConcurrentHashMap<>();
-
     public static void onChatMessage(Component message) {
         if (!ModConfig.INSTANCE.enableMiningAutomaton || message == null) return;
 
@@ -792,12 +776,11 @@ public class AutomatonManager {
         if (mainText == null || mainText.isEmpty()) return;
 
         String clean = SkyblockDetector.stripColorCodes(mainText).trim();
-        
+
         if (!isSackNotification(clean)) {
             return;
         }
 
-        
         Set<String> collectedTooltips = new LinkedHashSet<>();
         Set<HoverEvent> seenEvents = Collections.newSetFromMap(new IdentityHashMap<>());
         collectAllHoverTexts(message, collectedTooltips, seenEvents);
@@ -809,7 +792,6 @@ public class AutomatonManager {
             }
         }
 
-        
         if (!hadHoverDrops) {
             onChatMessage(clean);
         }
@@ -842,17 +824,11 @@ public class AutomatonManager {
     public static boolean processSackTooltip(String tooltip) {
         if (tooltip == null || tooltip.isEmpty()) return false;
 
-        long now = System.currentTimeMillis();
-        processedLineCache.entrySet().removeIf(e -> now - e.getValue() > 3000);
-
         boolean anyMatched = false;
-        String[] lines = tooltip.split("\\r?\\n");
+        String[] lines = LINE_SPLIT_PATTERN.split(tooltip);
         for (String line : lines) {
             String trimmed = line.trim();
             if (trimmed.isEmpty()) continue;
-            if (processedLineCache.putIfAbsent(trimmed, now) != null) {
-                continue;
-            }
             if (parseDropLine(trimmed)) {
                 anyMatched = true;
             }
@@ -865,19 +841,11 @@ public class AutomatonManager {
         String clean = SkyblockDetector.stripColorCodes(rawMessage).replace('\u00A0', ' ').trim();
         if (clean.isEmpty() || !isSackNotification(clean)) return false;
 
-        long now = System.currentTimeMillis();
-        processedLineCache.entrySet().removeIf(e -> now - e.getValue() > 3000);
-
         boolean anyMatched = false;
-        String[] lines = clean.split("\\r?\\n");
+        String[] lines = LINE_SPLIT_PATTERN.split(clean);
         for (String line : lines) {
             String trimmed = line.trim();
             if (trimmed.isEmpty()) continue;
-
-            
-            if (processedLineCache.putIfAbsent(trimmed, now) != null) {
-                continue;
-            }
             if (parseDropLine(trimmed)) {
                 anyMatched = true;
             }
@@ -889,14 +857,11 @@ public class AutomatonManager {
         if (rawText == null || rawText.isEmpty()) return false;
         String lower = rawText.toLowerCase();
 
-        
         if (lower.startsWith("party >") || lower.startsWith("guild >") || lower.startsWith("co-op >")
                 || lower.startsWith("from ") || lower.startsWith("to ") || lower.contains("[wish]")) {
             return false;
         }
 
-        
-        
         if (lower.contains("sack") || lower.contains("sacks")) {
             return true;
         }
@@ -908,7 +873,6 @@ public class AutomatonManager {
         String clean = SkyblockDetector.stripColorCodes(rawLine).replace('\u00A0', ' ').trim();
         if (clean.isEmpty()) return false;
 
-        
         clean = MAGIC_FIND_PATTERN.matcher(clean).replaceAll("").trim();
 
         String lower = clean.toLowerCase(Locale.ROOT);
@@ -929,7 +893,6 @@ public class AutomatonManager {
             if (idx != -1) {
                 int count = 1;
 
-                
                 String before = clean.substring(0, idx).trim();
                 Matcher mBefore = PREFIX_COUNT_PATTERN.matcher(before);
                 if (mBefore.find()) {
@@ -937,14 +900,14 @@ public class AutomatonManager {
                         count = Integer.parseInt(mBefore.group(1).replace(",", ""));
                     } catch (Exception ignored) {}
                 } else {
-                    
+
                     Matcher mAnyNum = ANY_NUM_BEFORE_PATTERN.matcher(before);
                     if (mAnyNum.find()) {
                         try {
                             count = Integer.parseInt(mAnyNum.group(1).replace(",", ""));
                         } catch (Exception ignored) {}
                     } else {
-                        
+
                         String after = clean.substring(idx + matchedTarget.length()).trim();
                         Matcher mAfter = AFTER_COUNT_PATTERN.matcher(after);
                         if (mAfter.find()) {
@@ -967,12 +930,11 @@ public class AutomatonManager {
                 long now = System.currentTimeMillis();
                 cleanExpiredClaims(now);
 
-                
                 if (isRareDrop) {
                     int sackClaim = recentSackClaims.getOrDefault(item, 0);
                     if (sackClaim >= dropAmount) {
                         recentSackClaims.put(item, sackClaim - dropAmount);
-                        return true; 
+                        return true;
                     } else if (sackClaim > 0) {
                         dropAmount -= sackClaim;
                         recentSackClaims.remove(item);
@@ -983,7 +945,7 @@ public class AutomatonManager {
                     int rareClaim = recentRareDropClaims.getOrDefault(item, 0);
                     if (rareClaim >= dropAmount) {
                         recentRareDropClaims.put(item, rareClaim - dropAmount);
-                        return true; 
+                        return true;
                     } else if (rareClaim > 0) {
                         dropAmount -= rareClaim;
                         recentRareDropClaims.remove(item);
@@ -992,11 +954,10 @@ public class AutomatonManager {
                     recentSackClaimTimes.put(item, now);
                 }
 
-                
                 int invClaim = recentInventoryClaims.getOrDefault(item, 0);
                 if (invClaim >= dropAmount) {
                     recentInventoryClaims.put(item, invClaim - dropAmount);
-                    
+
                     return true;
                 } else if (invClaim > 0) {
                     dropAmount -= invClaim;
@@ -1005,7 +966,6 @@ public class AutomatonManager {
 
                 recordDrop(item, dropAmount);
 
-                
                 recentChatClaims.merge(item, dropAmount, Integer::sum);
                 recentChatClaimTimes.put(item, now);
 
@@ -1029,7 +989,7 @@ public class AutomatonManager {
         }
         dropCounts.merge(partName, count, Integer::sum);
         if (ModConfig.INSTANCE.automatonTotalDrops == null) {
-            ModConfig.INSTANCE.automatonTotalDrops = new java.util.HashMap<>();
+            ModConfig.INSTANCE.automatonTotalDrops = new ConcurrentHashMap<>();
         }
         ModConfig.INSTANCE.automatonTotalDrops.merge(partName, count, Integer::sum);
         ModConfig.INSTANCE.save();
@@ -1072,8 +1032,19 @@ public class AutomatonManager {
         recentRareDropClaimTimes.clear();
         recentSackClaims.clear();
         recentSackClaimTimes.clear();
-        processedLineCache.clear();
         refreshHudState();
+    }
+
+    public static void onDisconnect() {
+        trackedAutomatonIds.clear();
+        visibleAutomatonIds.clear();
+        trackedAutomatons.clear();
+        if (sessionStartTime > 0 && !isPaused) {
+            isPaused = true;
+            ModConfig.INSTANCE.save();
+        }
+        resetSessionStats();
+        HudStateContainer.updateAutomatonState(false, 0, 0, 0, 0, 0, null);
     }
 
     public static void resetTotalStats() {
@@ -1104,20 +1075,17 @@ public class AutomatonManager {
             return;
         }
 
-        
-        if (SkyblockDetector.isInSkyblock) {
+        if (SkyblockDetector.isInSkyblock && (++inventoryScanTickCounter & 3) == 0) {
             checkInventoryDrops(mc);
             checkContainerSack(mc);
         }
 
         long now = System.currentTimeMillis();
 
-        
         if (bazaarSellOfferPrices.isEmpty() && now - lastBazaarFetch > 5000) {
             fetchBazaarPricesAsync(false);
         }
 
-        
         if (sessionStartTime > 0 && lastKillTime > 0) {
             long pauseTimeoutMs = Math.max(1, ModConfig.INSTANCE.automatonPauseTimeout) * 1000L;
             if (now - lastKillTime > pauseTimeoutMs) {
@@ -1148,7 +1116,6 @@ public class AutomatonManager {
             }
         }
 
-        
         double px = mc.player.getX();
         double pz = mc.player.getZ();
         boolean inPrecursor = SkyblockDetector.isInPrecursorCity
@@ -1165,60 +1132,68 @@ public class AutomatonManager {
 
         recentlyKilledEntityIds.entrySet().removeIf(e -> now - e.getValue() > 30_000);
 
-        
+        tickAutomatonStands.clear();
+        tickAliveGolems.clear();
         for (Entity entity : mc.level.entitiesForRendering()) {
-            if (entity instanceof ArmorStand && entity.hasCustomName()) {
-                String rawName = entity.getCustomName().getString();
-                String cleanName = SkyblockDetector.stripColorCodes(rawName);
-                if (cleanName.toLowerCase().contains("automaton")) {
-                    int curHp = 15000;
-                    int maxHp = 15000;
-                    Matcher m = HP_PATTERN.matcher(cleanName);
-                    if (m.find()) {
-                        try {
-                            curHp = Integer.parseInt(m.group(1).replace(",", ""));
-                            maxHp = Integer.parseInt(m.group(2).replace(",", ""));
-                        } catch (Exception ignored) {}
-                    }
-
-                    
-                    IronGolem closestGolem = null;
-                    double minDistSq = 12.25; 
-                    for (Entity other : mc.level.entitiesForRendering()) {
-                        if (other instanceof IronGolem golem && golem.isAlive() && !golem.isDeadOrDying()) {
-                            int gid = golem.getId();
-                            if (recentlyKilledEntityIds.containsKey(gid)) {
-                                continue;
-                            }
-                            double dSq = other.distanceToSqr(entity);
-                            if (dSq < minDistSq) {
-                                minDistSq = dSq;
-                                closestGolem = golem;
-                            }
-                        }
-                    }
-
-                    if (closestGolem != null) {
-                        final IronGolem targetGolem = closestGolem;
-                        int mobId = targetGolem.getId();
-                        trackedAutomatonIds.add(mobId);
-                        AutomatonInfo info = trackedAutomatons.computeIfAbsent(mobId, k -> new AutomatonInfo(mobId, targetGolem.getX(), targetGolem.getY(), targetGolem.getZ()));
-                        info.lastX = targetGolem.getX();
-                        info.lastY = targetGolem.getY();
-                        info.lastZ = targetGolem.getZ();
-                        info.currentHp = curHp;
-                        info.maxHp = maxHp;
-
-                        if (curHp < maxHp && mc.player.distanceToSqr(info.lastX, info.lastY, info.lastZ) < 144.0) { 
-                            info.damagedByPlayer = true;
-                            info.lastDamagedTime = System.currentTimeMillis();
-                        }
-                    }
+            if (entity instanceof IronGolem golem) {
+                if (golem.isAlive() && !golem.isDeadOrDying() && !recentlyKilledEntityIds.containsKey(golem.getId())) {
+                    tickAliveGolems.add(golem);
                 }
+            } else if (entity instanceof ArmorStand stand && stand.hasCustomName()) {
+                tickAutomatonStands.add(stand);
             }
         }
 
-        
+        try {
+            for (ArmorStand stand : tickAutomatonStands) {
+                var customName = stand.getCustomName();
+                if (customName == null) continue;
+                String cleanName = SkyblockDetector.stripColorCodes(customName.getString());
+                if (!cleanName.toLowerCase(Locale.ROOT).contains("automaton")) continue;
+
+                int curHp = 15000;
+                int maxHp = 15000;
+                Matcher m = HP_PATTERN.matcher(cleanName);
+                if (m.find()) {
+                    try {
+                        curHp = Integer.parseInt(m.group(1).replace(",", ""));
+                        maxHp = Integer.parseInt(m.group(2).replace(",", ""));
+                    } catch (Exception ignored) {}
+                }
+
+                IronGolem closestGolem = null;
+                double minDistSq = 12.25;
+                for (int i = 0, n = tickAliveGolems.size(); i < n; i++) {
+                    IronGolem golem = tickAliveGolems.get(i);
+                    double dSq = golem.distanceToSqr(stand);
+                    if (dSq < minDistSq) {
+                        minDistSq = dSq;
+                        closestGolem = golem;
+                    }
+                }
+
+                if (closestGolem != null) {
+                    final IronGolem matchedGolem = closestGolem;
+                    int mobId = matchedGolem.getId();
+                    trackedAutomatonIds.add(mobId);
+                    AutomatonInfo info = trackedAutomatons.computeIfAbsent(mobId, k -> new AutomatonInfo(mobId, matchedGolem.getX(), matchedGolem.getY(), matchedGolem.getZ()));
+                    info.lastX = matchedGolem.getX();
+                    info.lastY = matchedGolem.getY();
+                    info.lastZ = matchedGolem.getZ();
+                    info.currentHp = curHp;
+                    info.maxHp = maxHp;
+
+                    if (curHp < maxHp && mc.player.distanceToSqr(info.lastX, info.lastY, info.lastZ) < 144.0) {
+                        info.damagedByPlayer = true;
+                        info.lastDamagedTime = System.currentTimeMillis();
+                    }
+                }
+            }
+        } finally {
+            tickAutomatonStands.clear();
+            tickAliveGolems.clear();
+        }
+
         trackedAutomatons.entrySet().removeIf(entry -> {
             int id = entry.getKey();
             AutomatonInfo info = entry.getValue();
@@ -1232,8 +1207,8 @@ public class AutomatonManager {
                     recentlyKilledEntityIds.put(id, now);
                     boolean wasAttacked = info.damagedByPlayer && (now - info.lastDamagedTime < 10_000);
                     double distSq = mc.player.distanceToSqr(info.lastX, info.lastY, info.lastZ);
-                    boolean wasNear = distSq < 144.0; 
-                    boolean wasVeryNear = distSq < 64.0; 
+                    boolean wasNear = distSq < 144.0;
+                    boolean wasVeryNear = distSq < 64.0;
 
                     if (wasAttacked || (wasNear && info.currentHp <= 0) || wasVeryNear) {
                         recordKill();
@@ -1254,7 +1229,6 @@ public class AutomatonManager {
             }
         }
 
-        
         refreshHudState();
     }
 

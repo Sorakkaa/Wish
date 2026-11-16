@@ -15,12 +15,9 @@ public abstract class HumanoidModelMixin<T extends HumanoidRenderState> {
     private void wish$applySmolPeopleTransform(T state, CallbackInfo ci) {
         if (state instanceof ISizeableState sizeable && sizeable.wish$isSmolPeople()) {
             HumanoidModel<?> self = (HumanoidModel<?>) (Object) this;
-            // PlayerRendererMixin already scales the PoseStack by 0.5x at the feet origin;
-            // scaling head (and its hat child) by 1.5x gives 0.75x world head proportions without +12.0f limb offsets.
             self.head.xScale *= 1.5f;
             self.head.yScale *= 1.5f;
             self.head.zScale *= 1.5f;
         }
     }
 }
-

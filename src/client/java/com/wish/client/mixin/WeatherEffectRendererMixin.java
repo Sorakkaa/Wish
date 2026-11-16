@@ -25,6 +25,7 @@ import net.minecraft.client.renderer.state.level.WeatherRenderState;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.resources.Identifier;
@@ -40,6 +41,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import org.joml.Vector3fc;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -67,7 +69,7 @@ public abstract class WeatherEffectRendererMixin {
     @Unique private static final float SIM_HEIGHT_BELOW = 22.0f;
     @Unique private static final float SIM_HEIGHT_ABOVE = 30.0f;
     @Unique private static final int GRID_HALF = 62;
-    @Unique private static final int GRID_SIZE = 128; // Power of 2 > (GRID_HALF * 2 + 1 = 125) for collision-free toroidal indexing
+    @Unique private static final int GRID_SIZE = 128;
     @Unique private static final int GRID_MASK = GRID_SIZE - 1;
 
     @Shadow @Final private float[] columnSizeX;
@@ -76,7 +78,6 @@ public abstract class WeatherEffectRendererMixin {
     @Shadow
     protected abstract GpuBuffer uploadVertexBuffer(ByteBuffer buffer);
 
-    // Persistent primitive particle pool (zero GC per frame)
     @Unique private final Random wish$rng = new Random();
     @Unique private boolean wish$poolAllocated = false;
     @Unique private int wish$initializedCount = 0;
@@ -102,6 +103,13 @@ public abstract class WeatherEffectRendererMixin {
     @Unique private final int[] wish$cellWz = new int[GRID_SIZE * GRID_SIZE];
     @Unique private int wish$refreshRowCursor = 0;
     @Unique private int wish$lastCacheMode = -1;
+    @Unique private boolean wish$lastThroughWalls = false;
+    @Unique private double wish$hitX = 0.0;
+    @Unique private double wish$hitY = Double.NaN;
+    @Unique private double wish$hitZ = 0.0;
+    @Unique private int wish$hitBx = 0;
+    @Unique private int wish$hitBy = 0;
+    @Unique private int wish$hitBz = 0;
 
     @Inject(method = "<init>", at = @At("TAIL"))
     private void wish$fixCenterColumnNaN(CallbackInfo ci) {
@@ -160,11 +168,13 @@ public abstract class WeatherEffectRendererMixin {
         int camFloorY = Mth.floor(camY);
         int camFloorZ = Mth.floor(camZ);
 
+        boolean throughWalls = WeatherManager.isThroughWalls();
         boolean teleported = Double.isNaN(wish$lastCamX)
             || Mth.square(camX - wish$lastCamX) + Mth.square(camY - wish$lastCamY) + Mth.square(camZ - wish$lastCamZ) > 900.0;
-        if (wish$lastSimMode != mode || teleported) {
+        if (wish$lastSimMode != mode || wish$lastThroughWalls != throughWalls || teleported) {
             wish$initializedCount = 0;
             wish$lastSimMode = mode;
+            wish$lastThroughWalls = throughWalls;
         }
         if (teleported || wish$lastCacheMode != mode) {
             Arrays.fill(wish$cellWx, Integer.MIN_VALUE);
@@ -178,7 +188,6 @@ public abstract class WeatherEffectRendererMixin {
         BlockPos.MutableBlockPos mutablePos = new BlockPos.MutableBlockPos();
         boolean isSnow = (mode == 2);
 
-        // Keep immediate surroundings (9x9) fresh every frame and sweep 4 distant rows/frame across the 125x125 grid
         for (int dz = -4; dz <= 4; dz++) {
             int wz = camFloorZ + dz;
             int rowOff = (wz & GRID_MASK) << 7;
@@ -250,12 +259,14 @@ public abstract class WeatherEffectRendererMixin {
                 spinRad = (float) (wish$simClock * (0.65 + (sx - 0.5f) * 1.35) + ph);
             }
 
-            float px = wish$px[i] + vx * dt;
-            float py = wish$py[i] + vy * dt;
-            float pz = wish$pz[i] + vz * dt;
+            float prevX = wish$px[i];
+            float prevY = wish$py[i];
+            float prevZ = wish$pz[i];
+            float px = prevX + vx * dt;
+            float py = prevY + vy * dt;
+            float pz = prevZ + vz * dt;
             float age = wish$age[i] + dt;
 
-            // Toroidal horizontal wrap per zone box for seamless 60-block wind flow
             double relX = px - camX;
             double relZ = pz - camZ;
             boolean wrapped = false;
@@ -273,27 +284,38 @@ public abstract class WeatherEffectRendererMixin {
                 pz -= zoneSpan * (float) Math.ceil((relZ - zoneRadius) / zoneSpan);
                 wrapped = true;
             }
-            if (wrapped && age < 0.25f) {
-                age = 0.25f;
+            if (wrapped) {
+                prevX = px;
+                prevY = py;
+                prevZ = pz;
+                if (age < 0.25f) {
+                    age = 0.25f;
+                }
             }
 
             int gridIdx = wish$lookupOrUpdateCell(level, mutablePos, Mth.floor(px), Mth.floor(pz), isSnow, camFloorX, camFloorY, camFloorZ);
-            int groundY = wish$groundYGrid[gridIdx];
+            int surfaceY = wish$groundYGrid[gridIdx];
 
-            if (py <= groundY + 0.04f || py < minY) {
-                if (!isSnow && splashesSpawned < maxSplashes && py <= groundY + 0.08f && groundY > level.getMinY()) {
-                    double hDistSq = (px - camX) * (px - camX) + (pz - camZ) * (pz - camZ);
-                    if (hDistSq < 484.0 && groundY >= camFloorY - 12 && groundY <= camFloorY + 14) {
-                        wish$spawnImpactSplash(level, mutablePos, px, groundY, pz);
-                        splashesSpawned++;
-                    }
-                }
+            if ((!throughWalls && wrapped && py <= surfaceY + 0.04f) || py < minY) {
                 wish$spawnParticle(i, level, mutablePos, camX, camY, camZ, camFloorX, camFloorY, camFloorZ, isSnow, false);
                 continue;
             }
+            if (!throughWalls && (py <= surfaceY + 0.04f || prevY <= surfaceY + 0.04f)) {
+                if (wish$detectSegmentImpact(level, mutablePos, prevX, prevY, prevZ, px, py, pz, wrapped)) {
+                    if (!Double.isNaN(wish$hitY) && !isSnow && splashesSpawned < maxSplashes && prevY >= wish$hitY - 0.20) {
+                        double hDistSq = (wish$hitX - camX) * (wish$hitX - camX) + (wish$hitZ - camZ) * (wish$hitZ - camZ);
+                        if (hDistSq < 484.0 && wish$hitY >= camFloorY - 12 && wish$hitY <= camFloorY + 14) {
+                            wish$spawnImpactSplashAt(level, mutablePos, wish$hitX, wish$hitY, wish$hitZ, wish$hitBx, wish$hitBy, wish$hitBz);
+                            splashesSpawned++;
+                        }
+                    }
+                    wish$spawnParticle(i, level, mutablePos, camX, camY, camZ, camFloorX, camFloorY, camFloorZ, isSnow, false);
+                    continue;
+                }
+            }
             if (py > maxY) {
                 float wrappedY = minY + (py - maxY);
-                if (wrappedY > groundY + 0.4f) {
+                if (throughWalls || wrappedY > surfaceY + 0.4f) {
                     py = wrappedY;
                 }
             }
@@ -318,12 +340,25 @@ public abstract class WeatherEffectRendererMixin {
             float spawnFade = Math.min(1.0f, age * 4.5f);
             float eyeDistSq = rx * rx + ry * ry + rz * rz;
             float eyeFade = wish$smoothstep(0.35f, 1.35f, (float) Math.sqrt(eyeDistSq));
-            float groundFade = isSnow ? wish$smoothstep(0.0f, 0.45f, py - groundY) : 1.0f;
+
+            boolean underRoof = (py < surfaceY);
+            float groundFade;
+            if (!isSnow || throughWalls) {
+                groundFade = 1.0f;
+            } else if (!underRoof) {
+                groundFade = wish$smoothstep(0.0f, 0.45f, py - surfaceY);
+            } else {
+                groundFade = wish$computeGroundFadeUnderRoof(level, mutablePos, px, py, pz);
+            }
 
             float particleAlpha = spawnFade * edgeFade * topFade * bottomFade * eyeFade * groundFade;
             if (particleAlpha <= 0.02f) {
                 continue;
             }
+
+            int light = underRoof
+                ? wish$sampleLightAt(level, mutablePos, Mth.floor(px), Mth.floor(py), Mth.floor(pz), isSnow)
+                : wish$lightGrid[gridIdx];
 
             float speedMag = (float) Math.sqrt(vx * vx + vy * vy + vz * vz);
             float dirX = vx / speedMag;
@@ -337,7 +372,7 @@ public abstract class WeatherEffectRendererMixin {
                 wish$seedScale[i] * stretch,
                 spinRad,
                 particleAlpha,
-                wish$lightGrid[gridIdx],
+                light,
                 wish$variant[i]
             );
         }
@@ -411,7 +446,6 @@ public abstract class WeatherEffectRendererMixin {
                     float px = rx[i], py = ry[i], pz = rz[i];
                     float vx = dx[i], vy = dy[i], vz = dz[i];
 
-                    // Cross product dir x eyePos makes each rain streak face the camera in full 3D
                     float sx = vy * pz - vz * py;
                     float sy = vz * px - vx * pz;
                     float sz = vx * py - vy * px;
@@ -549,14 +583,16 @@ public abstract class WeatherEffectRendererMixin {
         float pz = (float) (camZ + oz);
         int gY = wish$groundYGrid[wish$lookupOrUpdateCell(level, pos, Mth.floor(px), Mth.floor(pz), isSnow, camFloorX, camFloorY, camFloorZ)];
 
-        float minSpawnY = Math.max(gY + 0.4f, (float) camY - SIM_HEIGHT_BELOW);
+        float minSpawnY = wish$lastThroughWalls
+            ? ((float) camY - SIM_HEIGHT_BELOW)
+            : Math.max(gY + 0.4f, (float) camY - SIM_HEIGHT_BELOW);
         float maxSpawnY = (float) camY + SIM_HEIGHT_ABOVE;
         float py;
         if (initialScatter && minSpawnY < maxSpawnY) {
             py = minSpawnY + wish$rng.nextFloat() * (maxSpawnY - minSpawnY);
         } else {
             py = maxSpawnY - wish$rng.nextFloat() * 4.5f;
-            if (py <= gY + 0.4f) {
+            if (!wish$lastThroughWalls && py <= gY + 0.4f) {
                 py = gY + 0.5f + wish$rng.nextFloat() * 5.0f;
             }
         }
@@ -575,16 +611,124 @@ public abstract class WeatherEffectRendererMixin {
     private void wish$updateGridCell(ClientLevel level, BlockPos.MutableBlockPos pos, int slot, int wx, int wz, boolean isSnow, int camFloorY) {
         int surfaceY = level.getHeight(Heightmap.Types.MOTION_BLOCKING, wx, wz);
         int lightPosY = Math.max(surfaceY, camFloorY);
-        int light = LightCoordsUtil.getLightCoords(level, pos.set(wx, lightPosY, wz));
+        wish$groundYGrid[slot] = surfaceY;
+        wish$lightGrid[slot] = wish$sampleLightAt(level, pos, wx, lightPosY, wz, isSnow);
+        wish$cellWx[slot] = wx;
+        wish$cellWz[slot] = wz;
+    }
+
+    @Unique
+    private static int wish$sampleLightAt(ClientLevel level, BlockPos.MutableBlockPos pos, int wx, int wy, int wz, boolean isSnow) {
+        int light = LightCoordsUtil.getLightCoords(level, pos.set(wx, wy, wz));
         if (isSnow) {
             int bLight = (LightCoordsUtil.block(light) * 3 + 15) / 4;
             int sLight = (LightCoordsUtil.sky(light) * 3 + 15) / 4;
             light = LightCoordsUtil.pack(bLight, sLight);
         }
-        wish$groundYGrid[slot] = surfaceY;
-        wish$lightGrid[slot] = light;
-        wish$cellWx[slot] = wx;
-        wish$cellWz[slot] = wz;
+        return light;
+    }
+
+    @Unique
+    private boolean wish$detectSegmentImpact(ClientLevel level, BlockPos.MutableBlockPos pos,
+                                             float prevX, float prevY, float prevZ,
+                                             float curX, float curY, float curZ, boolean singleSample) {
+        wish$hitY = Double.NaN;
+        int steps = 1;
+        if (!singleSample) {
+            double dx = curX - prevX;
+            double dy = curY - prevY;
+            double dz = curZ - prevZ;
+            double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            steps = Math.max(1, Math.min(6, (int) Math.ceil(dist / 0.40)));
+        }
+        int minWorldY = level.getMinY();
+        for (int s = 1; s <= steps; s++) {
+            float t = (float) s / steps;
+            double sx = prevX + (curX - prevX) * t;
+            double sy = prevY + (curY - prevY) * t;
+            double sz = prevZ + (curZ - prevZ) * t;
+            int bx = Mth.floor(sx);
+            int by = Mth.floor(sy);
+            int bz = Mth.floor(sz);
+            if (by < minWorldY) {
+                return true;
+            }
+            double hitTop = wish$checkVoxelHitTop(level, pos, sx, sy, sz, bx, by, bz);
+            if (!Double.isNaN(hitTop)) {
+                wish$hitX = sx;
+                wish$hitY = hitTop;
+                wish$hitZ = sz;
+                wish$hitBx = bx;
+                wish$hitBy = by;
+                wish$hitBz = bz;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Unique
+    private static double wish$checkVoxelHitTop(ClientLevel level, BlockPos.MutableBlockPos pos,
+                                                double sx, double sy, double sz, int bx, int by, int bz) {
+        pos.set(bx, by, bz);
+        BlockState bs = level.getBlockState(pos);
+        FluidState fs = bs.getFluidState();
+        if (!bs.blocksMotion() && fs.isEmpty()) {
+            return Double.NaN;
+        }
+        double localX = sx - bx;
+        double localY = sy - by;
+        double localZ = sz - bz;
+        double fluidH = fs.isEmpty() ? -1.0 : fs.getHeight(level, pos);
+        VoxelShape shape = bs.getCollisionShape(level, pos);
+        if (!shape.isEmpty()) {
+            double maxH = shape.max(Direction.Axis.Y, localX, localZ);
+            double minH = shape.min(Direction.Axis.Y, localX, localZ);
+            if (maxH >= 0.0 && minH <= 1.0 && localY >= minH - 0.04 && localY <= maxH + 0.04) {
+                return by + Math.max(maxH, fluidH);
+            }
+        }
+        if (fluidH > 0.0 && localY <= fluidH + 0.04) {
+            return by + fluidH;
+        }
+        return Double.NaN;
+    }
+
+    @Unique
+    private static float wish$computeGroundFadeUnderRoof(ClientLevel level, BlockPos.MutableBlockPos pos, double x, double y, double z) {
+        int bx = Mth.floor(x);
+        int by = Mth.floor(y);
+        int bz = Mth.floor(z);
+        double localX = x - bx;
+        double localZ = z - bz;
+
+        double surfaceTop = wish$sampleFloorTopInVoxel(level, pos, bx, by, bz, localX, localZ, y);
+        if (Double.isNaN(surfaceTop) && (y - by) < 0.45) {
+            surfaceTop = wish$sampleFloorTopInVoxel(level, pos, bx, by - 1, bz, localX, localZ, y);
+        }
+        return Double.isNaN(surfaceTop) ? 1.0f : wish$smoothstep(0.0f, 0.45f, (float) (y - surfaceTop));
+    }
+
+    @Unique
+    private static double wish$sampleFloorTopInVoxel(ClientLevel level, BlockPos.MutableBlockPos pos,
+                                                     int bx, int by, int bz, double localX, double localZ, double y) {
+        pos.set(bx, by, bz);
+        BlockState bs = level.getBlockState(pos);
+        FluidState fs = bs.getFluidState();
+        if (!bs.blocksMotion() && fs.isEmpty()) {
+            return Double.NaN;
+        }
+        double fluidTop = fs.isEmpty() ? Double.NaN : by + fs.getHeight(level, pos);
+        double shapeTop = Double.NaN;
+        VoxelShape shape = bs.getCollisionShape(level, pos);
+        if (!shape.isEmpty()) {
+            double maxH = shape.max(Direction.Axis.Y, localX, localZ);
+            if (maxH >= 0.0 && Double.isFinite(maxH)) {
+                shapeTop = by + maxH;
+            }
+        }
+        double top = Double.isNaN(shapeTop) ? fluidTop : (Double.isNaN(fluidTop) ? shapeTop : Math.max(shapeTop, fluidTop));
+        return (!Double.isNaN(top) && top <= y + 0.05) ? top : Double.NaN;
     }
 
     @Unique
@@ -600,21 +744,15 @@ public abstract class WeatherEffectRendererMixin {
     }
 
     @Unique
-    private static void wish$spawnImpactSplash(ClientLevel level, BlockPos.MutableBlockPos pos, double x, int groundY, double z) {
-        pos.set(Mth.floor(x), groundY - 1, Mth.floor(z));
+    private static void wish$spawnImpactSplashAt(ClientLevel level, BlockPos.MutableBlockPos pos,
+                                                 double x, double hitY, double z, int bx, int by, int bz) {
+        pos.set(bx, by, bz);
         BlockState bs = level.getBlockState(pos);
-        FluidState fs = level.getFluidState(pos);
-        double surfaceH = Math.max(
-            bs.getCollisionShape(level, pos).max(net.minecraft.core.Direction.Axis.Y, x - pos.getX(), z - pos.getZ()),
-            fs.getHeight(level, pos)
-        );
-        if (surfaceH <= 0.0) {
-            return;
-        }
+        FluidState fs = bs.getFluidState();
         ParticleOptions particle = (fs.is(FluidTags.LAVA) || bs.is(Blocks.MAGMA_BLOCK) || CampfireBlock.isLitCampfire(bs))
             ? ParticleTypes.SMOKE
             : ParticleTypes.RAIN;
-        level.addParticle(particle, x, pos.getY() + surfaceH + 0.02, z, 0.0, 0.0, 0.0);
+        level.addParticle(particle, x, hitY + 0.02, z, 0.0, 0.0, 0.0);
     }
 
     @Unique

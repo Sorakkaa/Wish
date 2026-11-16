@@ -11,9 +11,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(value = EntityRenderer.class, priority = 2000)
 public class EntityRendererMixin {
-    
+
     @Inject(method = "getNameTag(Lnet/minecraft/world/entity/Entity;)Lnet/minecraft/network/chat/Component;", at = @At("RETURN"), cancellable = true)
-    private void onGetNameTag(Entity entity, CallbackInfoReturnable<Component> cir) {
+    private void wish$onGetNameTag(Entity entity, CallbackInfoReturnable<Component> cir) {
         Component original = cir.getReturnValue();
         if (original != null) {
             Component colored = NameColorManager.colorizeText(original);

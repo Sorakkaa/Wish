@@ -51,22 +51,22 @@ public class AvatarRenderStateMixin implements ISizeableState {
         this.wish$scaleZ = z;
         this.wish$hasCustomScale = (x != 1.0f || y != 1.0f || z != 1.0f);
     }
-    
+
     @Override
     public boolean wish$isLocalPlayer() {
         return wish$isLocalPlayer;
     }
-    
+
     @Override
     public void wish$setLocalPlayer(boolean isLocal) {
         this.wish$isLocalPlayer = isLocal;
     }
-    
+
     @Override
     public boolean wish$isCustomPlayer() {
         return wish$isCustomPlayer;
     }
-    
+
     @Override
     public void wish$setCustomPlayer(boolean isCustomPlayer) {
         this.wish$isCustomPlayer = isCustomPlayer;

@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class AbstractContainerScreenMixin {
 
     @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
-    private void onMouseClicked(MouseButtonEvent event, boolean focused, CallbackInfoReturnable<Boolean> cir) {
+    private void wish$onMouseClicked(MouseButtonEvent event, boolean focused, CallbackInfoReturnable<Boolean> cir) {
         if (event != null) {
             if (AutomatonHudOverlay.mouseClicked(event.x(), event.y(), event.button())) {
                 cir.setReturnValue(true);
@@ -21,4 +21,3 @@ public abstract class AbstractContainerScreenMixin {
         }
     }
 }
-

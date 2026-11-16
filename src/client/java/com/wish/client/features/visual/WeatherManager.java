@@ -13,7 +13,6 @@ public final class WeatherManager {
     private static final Random WIND_RNG = new Random();
     private static final String[] COMPASS_LABELS = { "S", "SW", "W", "NW", "N", "NE", "E", "SE" };
 
-    // Continuous organic wind simulation state
     private static double windClockSec = 0.0;
     private static double nextDirectionShiftSec = 10.0;
     private static float currentWindAngle = 0.6f;
@@ -53,16 +52,16 @@ public final class WeatherManager {
         return ModConfig.INSTANCE.customWeatherWind;
     }
 
+    public static boolean isThroughWalls() {
+        return ModConfig.INSTANCE.customWeatherThroughWalls;
+    }
+
     public static float getWindStrength() {
         float w = ModConfig.INSTANCE.customWeatherWindStrength;
         if (Float.isNaN(w)) return 1.0f;
         return Math.max(0.25f, Math.min(2.0f, w));
     }
 
-    /**
-     * Advances the dynamic wind simulation. Every 11-22 seconds the wind smoothly
-     * picks a new azimuth direction and gust baseline, turning gradually over time.
-     */
     public static void stepWind(float dtSeconds) {
         if (dtSeconds <= 0.0f) {
             return;
@@ -106,7 +105,6 @@ public final class WeatherManager {
         if (!isWindEnabled()) {
             return "Off";
         }
-        // World +Z = South, +X = East, -Z = North, -X = West
         double deg = Math.toDegrees(Math.atan2(-cachedWindX, cachedWindZ));
         int idx = (int) Math.round(deg / 45.0) & 7;
         return COMPASS_LABELS[idx];
@@ -156,6 +154,11 @@ public final class WeatherManager {
 
     public static void setWindEnabled(boolean windEnabled) {
         ModConfig.INSTANCE.customWeatherWind = windEnabled;
+        ModConfig.INSTANCE.save();
+    }
+
+    public static void setThroughWalls(boolean throughWalls) {
+        ModConfig.INSTANCE.customWeatherThroughWalls = throughWalls;
         ModConfig.INSTANCE.save();
     }
 

@@ -1,7 +1,6 @@
 package com.wish.client.features;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.npc.villager.Villager;
 
 public class JerryModeManager {
@@ -15,12 +14,16 @@ public class JerryModeManager {
 
     public static void deactivate() {
         endTimestamp = 0;
-        dummyMap.clear();
+        if (!dummyMap.isEmpty()) {
+            dummyMap.clear();
+        }
     }
 
     public static boolean isActive() {
         if (System.currentTimeMillis() >= endTimestamp) {
-            dummyMap.clear();
+            if (!dummyMap.isEmpty()) {
+                dummyMap.clear();
+            }
             return false;
         }
         return true;
@@ -29,7 +32,7 @@ public class JerryModeManager {
     public static Villager getDummyVillager(net.minecraft.world.entity.Entity original) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null) return null;
-        
+
         Villager dummy = dummyMap.get(original);
         if (dummy == null || dummy.level() != mc.level) {
             dummy = new Villager(net.minecraft.world.entity.EntityTypes.VILLAGER, mc.level);

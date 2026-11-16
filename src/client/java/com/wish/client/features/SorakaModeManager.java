@@ -30,12 +30,16 @@ public class SorakaModeManager {
 
     public static void deactivate() {
         endTimestamp = 0;
-        dummyMap.clear();
+        if (!dummyMap.isEmpty()) {
+            dummyMap.clear();
+        }
     }
 
     public static boolean isActive() {
         if (System.currentTimeMillis() >= endTimestamp) {
-            dummyMap.clear();
+            if (!dummyMap.isEmpty()) {
+                dummyMap.clear();
+            }
             return false;
         }
         return true;
@@ -53,4 +57,3 @@ public class SorakaModeManager {
         return dummy;
     }
 }
-

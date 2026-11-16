@@ -10,10 +10,6 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 
-/**
- * Higher priority than other client time-changer mods (e.g. NoammAddons) so Wish Time Changer
- * overrides timeline sampling consistently when enabled.
- */
 @Mixin(value = AttributeTrackSampler.class, priority = 2000)
 public class AttributeTrackSamplerMixin {
 
@@ -36,4 +32,3 @@ public class AttributeTrackSamplerMixin {
         return ticks;
     }
 }
-

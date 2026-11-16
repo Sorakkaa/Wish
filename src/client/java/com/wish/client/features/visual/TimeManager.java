@@ -34,7 +34,7 @@ public final class TimeManager {
             long now = System.currentTimeMillis();
             long elapsed = now - lastRealTime;
             if (elapsed > 0) {
-                long ticksToAdd = elapsed / 50L; // 20 ticks per second = 50ms per tick
+                long ticksToAdd = elapsed / 50L;
                 if (ticksToAdd > 0) {
                     unfrozenBaseTicks = (unfrozenBaseTicks + ticksToAdd) % 24000L;
                     lastRealTime = now - (elapsed % 50L);
@@ -85,7 +85,6 @@ public final class TimeManager {
 
     public static String formatTime(long ticks) {
         ticks = ((ticks % 24000L) + 24000L) % 24000L;
-        // In Minecraft: 0 ticks = 06:00, 6000 ticks = 12:00, 18000 ticks = 00:00
         int totalMinutes = (int) (((ticks + 6000L) % 24000L) * 1440L / 24000L);
         int hours = totalMinutes / 60;
         int minutes = totalMinutes % 60;
