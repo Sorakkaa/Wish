@@ -144,7 +144,37 @@ public class SlayerCarryManager {
         return false;
     }
 
+    private static final double OWN_BOSS_CARRIER_RANGE_SQ = 72.0 * 72.0;
+    private static final double BLAZE_SPLIT_CANDIDATE_RADIUS_SQ = 5.0 * 5.0;
+    private static final double BLAZE_SPLIT_ACTIVE_RADIUS_SQ = 24.0 * 24.0;
+    private static final int SPLIT_COORD_CAP = 16;
+    private static final double[] splitCoordX = new double[SPLIT_COORD_CAP];
+    private static final double[] splitCoordY = new double[SPLIT_COORD_CAP];
+    private static final double[] splitCoordZ = new double[SPLIT_COORD_CAP];
+    private static double lastOwnBossX = 0.0;
+    private static double lastOwnBossY = 0.0;
+    private static double lastOwnBossZ = 0.0;
+
+    public static void onChatMessage(String rawMessage) {
+        Minecraft mc = Minecraft.getInstance();
+        String selfName = mc != null && mc.player != null ? mc.player.getScoreboardName() : null;
+        SlayerOwnBossTracker.INSTANCE.onChatMessage(rawMessage, selfName);
+    }
+
     public static void onClientTick(Minecraft mc) {
+        if (!ModConfig.INSTANCE.enableSlayerCarry) {
+            showSpawnHudTicks = 0;
+            lastSpawnedBossOwner = null;
+            pendingChatDelay = 0;
+            pendingChatMessage = null;
+            pendingCompletionDelay = 0;
+            pendingCompletionMessage = null;
+            knownOwnBossIds.clear();
+            SlayerOwnBossTracker.INSTANCE.resetOwnBossState();
+            HudStateContainer.updateBossState(false, "", mc != null ? mc.font : null);
+            return;
+        }
+
         if (showSpawnHudTicks > 0) {
             showSpawnHudTicks--;
         }
@@ -170,38 +200,129 @@ public class SlayerCarryManager {
 
         boolean checkTracked = mc.level != null && !trackedPlayers.isEmpty();
         String myNameLower = null;
-        if (mc.level != null && mc.player != null && ModConfig.INSTANCE.enableSlayerAutoCoords) {
+        boolean nearbyPartyCarrier = false;
+        if (mc.level != null && mc.player != null && ModConfig.INSTANCE.enableSlayerAutoCoords && trackedPlayers.isEmpty()) {
             String myName = mc.player.getScoreboardName();
             if (myName != null && !myName.isEmpty()) {
                 String candidate = myName.toLowerCase(java.util.Locale.ROOT);
                 if (!trackedPlayers.containsKey(candidate)) {
                     myNameLower = candidate;
+                    nearbyPartyCarrier = hasNearbyPartyCarrier(mc);
                 }
             }
         }
-        boolean checkOwnBoss = myNameLower != null;
 
-        if (checkTracked || checkOwnBoss) {
+        boolean canSendOwnCoords = SlayerOwnBossTracker.INSTANCE.canAutoSendCoords(
+                ModConfig.INSTANCE.enableSlayerCarry,
+                ModConfig.INSTANCE.enableSlayerAutoCoords,
+                !trackedPlayers.isEmpty(),
+                nearbyPartyCarrier
+        );
+        boolean hasBossTrackingState = !knownOwnBossIds.isEmpty() || SlayerOwnBossTracker.INSTANCE.isBossActive();
+        boolean scanOwnBoss = mc.level != null && myNameLower != null && (canSendOwnCoords || hasBossTrackingState);
+
+        if (mc.level == null || myNameLower == null) {
+            knownOwnBossIds.clear();
+            SlayerOwnBossTracker.INSTANCE.resetOwnBossState();
+        }
+
+        if (checkTracked || scanOwnBoss) {
+            int splitCount = 0;
+            boolean foundOwnBossCandidate = false;
+            double candBossX = 0.0;
+            double candBossY = 0.0;
+            double candBossZ = 0.0;
+
             for (Entity entity : mc.level.entitiesForRendering()) {
                 if (entity == null) continue;
                 if (checkTracked) {
                     processTrackedCarryEntity(mc, entity);
                 }
-                if (checkOwnBoss) {
-                    processOwnBossEntity(mc, entity, myNameLower);
+                if (scanOwnBoss && entity.hasCustomName() && entity.getCustomName() != null) {
+                    String nameLower = SkyblockDetector.stripColorCodes(entity.getCustomName().getString()).toLowerCase(java.util.Locale.ROOT);
+                    if (SlayerOwnBossTracker.isBlazeSplitDemonName(nameLower)) {
+                        if (splitCount < SPLIT_COORD_CAP && entity.distanceToSqr(mc.player) <= BLAZE_SPLIT_ACTIVE_RADIUS_SQ * 2.0) {
+                            splitCoordX[splitCount] = entity.getX();
+                            splitCoordY[splitCount] = entity.getY();
+                            splitCoordZ[splitCount] = entity.getZ();
+                            splitCount++;
+                        }
+                    } else if (SlayerOwnBossTracker.isOwnSlayerBossHologram(nameLower, myNameLower)) {
+                        knownOwnBossIds.add(entity.getId());
+                        lastOwnBossX = entity.getX();
+                        lastOwnBossY = entity.getY();
+                        lastOwnBossZ = entity.getZ();
+                        if (!foundOwnBossCandidate && canSendOwnCoords && !SlayerOwnBossTracker.INSTANCE.isBossActive()) {
+                            foundOwnBossCandidate = true;
+                            candBossX = entity.getX();
+                            candBossY = entity.getY();
+                            candBossZ = entity.getZ();
+                        }
+                    }
                 }
             }
 
             if (checkTracked) {
                 pruneDeadTrackedBosses(mc);
             }
-            if (checkOwnBoss) {
-                knownOwnBossIds.removeIf(id -> {
-                    Entity boss = mc.level.getEntity(id);
-                    return boss == null || !boss.isAlive();
-                });
+            if (scanOwnBoss) {
+                pruneDeadOwnBossIds(mc);
+                boolean candidateNearSplit = foundOwnBossCandidate && isAnySplitNear(splitCount, candBossX, candBossY, candBossZ, BLAZE_SPLIT_CANDIDATE_RADIUS_SQ);
+                boolean splitNearLastBoss = SlayerOwnBossTracker.INSTANCE.isBossActive()
+                        && isAnySplitNear(splitCount, lastOwnBossX, lastOwnBossY, lastOwnBossZ, BLAZE_SPLIT_ACTIVE_RADIUS_SQ);
+
+                if (foundOwnBossCandidate && canSendOwnCoords && mc.player.connection != null) {
+                    long now = System.currentTimeMillis();
+                    if (SlayerOwnBossTracker.INSTANCE.tryAnnounceOwnBoss(now, candidateNearSplit)) {
+                        lastOwnCoordsNotifyTime = now;
+                        int bx = (int) Math.floor(candBossX);
+                        int by = (int) Math.floor(candBossY);
+                        int bz = (int) Math.floor(candBossZ);
+                        WishClient.sendServerChatMessage("/pc ", "x: " + bx + ", y: " + by + ", z: " + bz);
+                    }
+                }
+
+                SlayerOwnBossTracker.INSTANCE.onOwnBossTickEnd(!knownOwnBossIds.isEmpty(), splitNearLastBoss);
             }
         }
+    }
+
+    private static boolean hasNearbyPartyCarrier(Minecraft mc) {
+        if (mc.level == null || mc.player == null || !SlayerOwnBossTracker.INSTANCE.hasOtherPartyMembers()) {
+            return false;
+        }
+        for (net.minecraft.world.entity.player.Player other : mc.level.players()) {
+            if (other == null || other == mc.player || other.isRemoved()) {
+                continue;
+            }
+            if (other.distanceToSqr(mc.player) <= OWN_BOSS_CARRIER_RANGE_SQ
+                    && SlayerOwnBossTracker.INSTANCE.isPartyMember(other.getScoreboardName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void pruneDeadOwnBossIds(Minecraft mc) {
+        java.util.Iterator<Integer> it = knownOwnBossIds.iterator();
+        while (it.hasNext()) {
+            Entity boss = mc.level.getEntity(it.next());
+            if (boss == null || !boss.isAlive()) {
+                it.remove();
+            }
+        }
+    }
+
+    private static boolean isAnySplitNear(int splitCount, double x, double y, double z, double maxDistSq) {
+        for (int i = 0; i < splitCount; i++) {
+            double dx = splitCoordX[i] - x;
+            double dy = splitCoordY[i] - y;
+            double dz = splitCoordZ[i] - z;
+            if (dx * dx + dy * dy + dz * dz <= maxDistSq) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void processTrackedCarryEntity(Minecraft mc, Entity entity) {
@@ -245,23 +366,6 @@ public class SlayerCarryManager {
         });
     }
 
-    private static void processOwnBossEntity(Minecraft mc, Entity entity, String myNameLower) {
-        if (!entity.hasCustomName() || entity.getCustomName() == null) return;
-        String nameLower = SkyblockDetector.stripColorCodes(entity.getCustomName().getString()).toLowerCase(java.util.Locale.ROOT);
-        if (nameLower.contains(myNameLower + "'s") || (nameLower.contains("spawned by:") && nameLower.contains(myNameLower))) {
-            int id = entity.getId();
-            if (knownOwnBossIds.add(id)) {
-                long now = System.currentTimeMillis();
-                if (now - lastOwnCoordsNotifyTime >= 3000L && mc.player != null && mc.player.connection != null) {
-                    lastOwnCoordsNotifyTime = now;
-                    int bx = (int) Math.floor(entity.getX());
-                    int by = (int) Math.floor(entity.getY());
-                    int bz = (int) Math.floor(entity.getZ());
-                    WishClient.sendServerChatMessage("/pc ", "x: " + bx + ", y: " + by + ", z: " + bz);
-                }
-            }
-        }
-    }
 
     public static String getTrackedBossOwner(Entity entity) {
         if (trackedPlayers.isEmpty() || entity == null || !entity.hasCustomName()) return null;

@@ -121,7 +121,7 @@ public final class LyricsVisualMath {
                 yield blendRgb(energized, 0xFFFFFF, 0.44f);
             }
             case SUNG -> blendRgb(cleanBase, cleanAccent, 0.16f);
-            case UPCOMING -> blendRgb(scaleRgb(cleanBase, 0.62f), 0xB8C4D8, 0.18f);
+            case UPCOMING -> blendRgb(scaleRgb(cleanBase, 0.78f), 0xDCE4F2, 0.18f);
         };
     }
 
@@ -208,6 +208,28 @@ public final class LyricsVisualMath {
         float safeAnim = Float.isNaN(animScale) ? 1.0f : Math.max(0.25f, Math.min(2.0f, animScale));
         float unit = isBgSymbol ? BACKGROUND_SCALE_UNIT : FOREGROUND_SCALE_UNIT;
         return unit * safeConfig * safeLayer * safeAnim;
+    }
+
+    public static float computePhraseTargetPitchDeg(float camPitchDeg) {
+        float safePitch = Float.isNaN(camPitchDeg) ? 0.0f : camPitchDeg;
+        return Math.max(-55.0f, Math.min(12.0f, safePitch - 8.0f));
+    }
+
+    public static double computeRelativeOffsetX(float yawDeg, float pitchDeg, float dist) {
+        double yawRad = -yawDeg * (Math.PI / 180.0);
+        double pitchRad = -pitchDeg * (Math.PI / 180.0);
+        return Math.sin(yawRad) * Math.cos(pitchRad) * dist;
+    }
+
+    public static double computeRelativeOffsetY(float pitchDeg, float dist) {
+        double pitchRad = -pitchDeg * (Math.PI / 180.0);
+        return Math.sin(pitchRad) * dist;
+    }
+
+    public static double computeRelativeOffsetZ(float yawDeg, float pitchDeg, float dist) {
+        double yawRad = -yawDeg * (Math.PI / 180.0);
+        double pitchRad = -pitchDeg * (Math.PI / 180.0);
+        return Math.cos(yawRad) * Math.cos(pitchRad) * dist;
     }
 
     private static int clampByte(int value) {

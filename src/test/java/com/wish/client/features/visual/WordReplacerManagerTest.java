@@ -8,6 +8,7 @@ import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.TextColor;
+import net.minecraft.util.FormattedCharSequence;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
@@ -353,5 +354,91 @@ class WordReplacerManagerTest {
             ModConfig.INSTANCE.wordReplacements = new java.util.concurrent.CopyOnWriteArrayList<>(backup);
             WordReplacerManager.invalidateCache();
         }
+    }
+
+    @Test
+    void scoreboardSplitSiblingsAndNestedTeamComponentsAreReplaced() {
+        WordReplacerManager.Snapshot snapshot = WordReplacerManager.compileSnapshot(
+                true,
+                true,
+                false,
+                List.of(
+                        new ModConfig.WordReplacementRule("Purse: 100", "&eWallet: &a100", true),
+                        new ModConfig.WordReplacementRule("SKYBLOCK", "&d&lWISHBLOCK", true)
+                )
+        );
+
+        MutableComponent scoreboardRow = Component.empty()
+                .append(Component.empty()
+                        .append(Component.literal("Pur").withStyle(ChatFormatting.WHITE))
+                        .append(Component.literal("se:").withStyle(ChatFormatting.WHITE)))
+                .append(Component.literal("\u00A77"))
+                .append(Component.literal(" 100").withStyle(ChatFormatting.GOLD));
+
+        Component replacedRow = WordReplacerManager.replaceComponent(scoreboardRow, snapshot);
+        assertEquals("Wallet: 100", replacedRow.getString());
+        assertEquals(replacedRow, WordReplacerManager.replaceComponent(replacedRow, snapshot));
+
+        MutableComponent splitTitle = Component.empty()
+                .append(Component.literal("S").withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD))
+                .append(Component.literal("K").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD))
+                .append(Component.literal("YBLOCK").withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD));
+        Component replacedTitle = WordReplacerManager.replaceComponent(splitTitle, snapshot);
+        assertEquals("WISHBLOCK", replacedTitle.getString());
+        assertEquals(TextColor.fromLegacyFormat(ChatFormatting.LIGHT_PURPLE), replacedTitle.getSiblings().get(0).getStyle().getColor());
+    }
+
+    @Test
+    void bossBarInlineSectionCodesAndNonBreakingSpacesMatchWordReplacerRules() {
+        WordReplacerManager.Snapshot snapshot = WordReplacerManager.compileSnapshot(
+                true,
+                true,
+                false,
+                List.of(
+                        new ModConfig.WordReplacementRule("SKYBLOCK", "Wish", true),
+                        new ModConfig.WordReplacementRule("Boss Health", "Mob HP", true)
+                )
+        );
+
+        String rainbowTitle = "\u00A7e\u00A7lS\u00A76\u00A7lK\u00A7e\u00A7lYBLOCK\u00A77\u00A0Mode";
+        assertEquals("\u00A7e\u00A7lWish\u00A77\u00A0Mode", WordReplacerManager.replacePlainString(rainbowTitle, snapshot));
+
+        Component bossBarComponent = Component.literal("\u00A7e\u00A7lS\u00A76\u00A7lK\u00A7e\u00A7lYBLOCK")
+                .append(Component.literal(" Boss\u00A0Health"));
+        Component replacedBoss = WordReplacerManager.replaceComponent(bossBarComponent, snapshot);
+        assertEquals("\u00A7e\u00A7lWish Mob HP", replacedBoss.getString());
+    }
+
+    @Test
+    void replaceCharSequenceFormatsHexLegacyAndRespectsVersionAndBypassMarkers() {
+        WordReplacerManager.Snapshot snapshot = WordReplacerManager.compileSnapshot(
+                true,
+                true,
+                false,
+                List.of(new ModConfig.WordReplacementRule("cat", "&#112233&lbig cat", true))
+        );
+
+        FormattedCharSequence input = FormattedCharSequence.forward("my cat here", Style.EMPTY.withColor(ChatFormatting.GRAY));
+        FormattedCharSequence replaced = WordReplacerManager.replaceCharSequence(input, snapshot);
+        StringBuilder textOut = new StringBuilder();
+        TextColor[] matchedColor = new TextColor[1];
+        replaced.accept((pos, style, cp) -> {
+            textOut.appendCodePoint(cp);
+            if (textOut.toString().endsWith("big cat")) {
+                matchedColor[0] = style.getColor();
+            }
+            return true;
+        });
+        assertEquals("my big cat here", textOut.toString());
+        assertEquals(0x112233, matchedColor[0].getValue());
+
+        FormattedCharSequence secondPass = WordReplacerManager.replaceCharSequence(replaced, snapshot);
+        assertSame(replaced, secondPass);
+
+        FormattedCharSequence bypassed = WordReplacerManager.markBypassed(
+                FormattedCharSequence.forward("my cat", Style.EMPTY)
+        );
+        FormattedCharSequence afterBypass = WordReplacerManager.replaceCharSequence(bypassed, snapshot);
+        assertSame(bypassed, afterBypass);
     }
 }

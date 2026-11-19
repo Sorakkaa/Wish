@@ -31,7 +31,6 @@ public final class LyricsRenderer {
     private static final float WORD_OUT_SEC = 0.45f;
     private static final float WORD_FORCE_OUT_SEC = 0.24f;
     private static final float LINE_SPAWN_DIST = 10.5f;
-    private static final float LINE_REUSE_RADIUS_SQ = 18.0f * 18.0f;
     private static final float MAX_RENDER_DIST_SQ = 60.0f * 60.0f;
     private static final float MIN_RENDER_DIST_SQ = 2.0f * 2.0f;
     private static final float NEAR_FADE_START_DIST = 4.2f;
@@ -129,8 +128,12 @@ public final class LyricsRenderer {
 
         float cachedWidth1 = -1.0f;
         float cachedWidth2 = -1.0f;
+        float cachedDrawWidth1 = -1.0f;
+        float cachedDrawWidth2 = -1.0f;
         FormattedCharSequence cachedSeq1;
         FormattedCharSequence cachedSeq2;
+        FormattedCharSequence cachedOutlineSeq1;
+        FormattedCharSequence cachedOutlineSeq2;
         int cachedHighlightIdx = Integer.MIN_VALUE;
         int cachedKeyRgb = -1;
         int cachedSkyMode = Integer.MIN_VALUE;
@@ -325,7 +328,6 @@ public final class LyricsRenderer {
         String cleanFull = sanitizeRenderText(line.text);
         if (cleanFull.isEmpty()) return;
 
-        FloatingItem activeAnchorSource = null;
         for (int i = ACTIVE_ITEMS.size() - 1; i >= 0; i--) {
             FloatingItem item = ACTIVE_ITEMS.get(i);
             if (!item.backgroundSymbol && item.phraseItem) {
@@ -334,27 +336,15 @@ public final class LyricsRenderer {
                 } else {
                     item.exiting = true;
                     item.exitStartMs = nowMs;
-                    if (activeAnchorSource == null) {
-                        activeAnchorSource = item;
-                    }
                 }
             }
         }
 
-        double spawnX;
-        double spawnY;
-        double spawnZ;
-        if (activeAnchorSource != null && distSq(activeAnchorSource.worldX - camState.pos.x,
-                activeAnchorSource.worldY - camState.pos.y, activeAnchorSource.worldZ - camState.pos.z) <= LINE_REUSE_RADIUS_SQ) {
-            spawnX = activeAnchorSource.worldX;
-            spawnY = activeAnchorSource.worldY;
-            spawnZ = activeAnchorSource.worldZ;
-        } else {
-            double yawRad = -camState.yRot * DEG_TO_RAD;
-            spawnX = camState.pos.x + Math.sin(yawRad) * LINE_SPAWN_DIST;
-            spawnY = Math.max(playerFeetY + 1.50, camState.pos.y + 1.25);
-            spawnZ = camState.pos.z + Math.cos(yawRad) * LINE_SPAWN_DIST;
-        }
+        float spawnPitchDeg = LyricsVisualMath.computePhraseTargetPitchDeg(camState.xRot);
+        double spawnX = camState.pos.x + LyricsVisualMath.computeRelativeOffsetX(camState.yRot, spawnPitchDeg, LINE_SPAWN_DIST);
+        double spawnY = Math.max(playerFeetY + 1.25,
+                camState.pos.y + LyricsVisualMath.computeRelativeOffsetY(spawnPitchDeg, LINE_SPAWN_DIST));
+        double spawnZ = camState.pos.z + LyricsVisualMath.computeRelativeOffsetZ(camState.yRot, spawnPitchDeg, LINE_SPAWN_DIST);
 
         String[] tokens = WHITESPACE_SPLIT_PATTERN.split(cleanFull);
         String line1Text = cleanFull;
@@ -528,7 +518,7 @@ public final class LyricsRenderer {
         int itemFgRgb = resolveWordColor(item, dynamicRgb, accentRgb, wordActiveKaraoke);
         int outlineColor = LyricsVisualMath.computeContrastOutlineColor(itemFgRgb, alphaByte);
 
-        updateKaraokeCacheIfNeeded(item, state, userBaseRgb, skyEnabled, skyMode);
+        updateKaraokeCacheIfNeeded(item, state, font, userBaseRgb, skyEnabled, skyMode);
         int fgArgb = item.phraseItem ? ARGB.color(alphaByte, 0xFFFFFF) : ARGB.color(alphaByte, itemFgRgb);
 
         poseStack.pushPose();
@@ -644,26 +634,36 @@ public final class LyricsRenderer {
                 ? item.cachedSeq1
                 : (wordActiveKaraoke ? item.line1BoldSeq : item.line1UniformSeq);
         FormattedCharSequence seq2 = (item.phraseItem && item.cachedSeq2 != null) ? item.cachedSeq2 : item.line2UniformSeq;
+        FormattedCharSequence outlineSeq1 = (item.phraseItem && item.cachedOutlineSeq1 != null)
+                ? item.cachedOutlineSeq1
+                : (wordActiveKaraoke ? item.line1BoldSeq : item.line1UniformSeq);
+        FormattedCharSequence outlineSeq2 = (item.phraseItem && item.cachedOutlineSeq2 != null)
+                ? item.cachedOutlineSeq2
+                : item.line2UniformSeq;
         boolean twoLines = item.line2Text != null;
-        float x1 = -item.cachedWidth1 * 0.5f;
+        float width1 = (item.phraseItem && item.cachedDrawWidth1 >= 0.0f)
+                ? item.cachedDrawWidth1
+                : (wordActiveKaraoke && font != null ? font.width(outlineSeq1) : item.cachedWidth1);
+        float width2 = (item.phraseItem && item.cachedDrawWidth2 >= 0.0f) ? item.cachedDrawWidth2 : item.cachedWidth2;
+        float x1 = -width1 * 0.5f;
         float y1 = getLineY(font, twoLines, true);
 
-        var outlineOrder = collector.order(0);
+        int baseOrder = item.backgroundSymbol ? 10 : (item.exiting ? 12 : 14);
+        var outlineOrder = collector.order(baseOrder);
         if (item.backgroundSymbol) {
             int symOutline = ARGB.color(Math.max(12, ((outlineColor >>> 24) * 3) / 4), outlineColor & 0xFFFFFF);
-            submitOutlineOffsets(poseStack, outlineOrder, seq1, x1, y1, 0.78f, symOutline);
+            submitOutlineOffsets(poseStack, outlineOrder, outlineSeq1, x1, y1, 0.78f, symOutline);
         } else {
-            FormattedCharSequence outlineSeq1 = wordActiveKaraoke ? item.line1BoldSeq : item.line1UniformSeq;
             submitOutlineOffsets(poseStack, outlineOrder, outlineSeq1, x1, y1, 0.85f, outlineColor);
-            if (item.line2UniformSeq != null) {
-                submitOutlineOffsets(poseStack, outlineOrder, item.line2UniformSeq, -item.cachedWidth2 * 0.5f, getLineY(font, true, false), 0.85f, outlineColor);
+            if (outlineSeq2 != null) {
+                submitOutlineOffsets(poseStack, outlineOrder, outlineSeq2, -width2 * 0.5f, getLineY(font, true, false), 0.85f, outlineColor);
             }
         }
 
-        var fgOrder = collector.order(1);
+        var fgOrder = collector.order(baseOrder + 1);
         fgOrder.submitText(poseStack, x1, y1, seq1, false, Font.DisplayMode.SEE_THROUGH, LightCoordsUtil.FULL_BRIGHT, fgArgb, 0, 0);
         if (seq2 != null) {
-            fgOrder.submitText(poseStack, -item.cachedWidth2 * 0.5f, getLineY(font, true, false), seq2, false, Font.DisplayMode.SEE_THROUGH, LightCoordsUtil.FULL_BRIGHT, fgArgb, 0, 0);
+            fgOrder.submitText(poseStack, -width2 * 0.5f, getLineY(font, true, false), seq2, false, Font.DisplayMode.SEE_THROUGH, LightCoordsUtil.FULL_BRIGHT, fgArgb, 0, 0);
         }
     }
 
@@ -677,6 +677,7 @@ public final class LyricsRenderer {
     private static void updateKaraokeCacheIfNeeded(
             FloatingItem item,
             LyricsManager.LyricState state,
+            Font font,
             int userBaseRgb,
             boolean skyEnabled,
             int skyMode
@@ -692,6 +693,7 @@ public final class LyricsRenderer {
         }
 
         if (item.cachedSeq1 != null
+                && item.cachedOutlineSeq1 != null
                 && item.cachedHighlightIdx == localActive
                 && item.cachedKeyRgb == userBaseRgb
                 && item.cachedSkyEnabled == skyEnabled
@@ -700,40 +702,51 @@ public final class LyricsRenderer {
         }
 
         int accentRgb = skyEnabled ? LyricsVisualMath.computeSkyHarmonyRgb(skyMode) : 0xD6C4FF;
-        item.cachedSeq1 = buildLineSequence(item.line1Words, 0, localActive, userBaseRgb, accentRgb);
+        item.cachedSeq1 = buildKaraokeSequence(item.line1Words, 0, localActive, userBaseRgb, accentRgb, true);
         item.cachedSeq2 = item.line2Words != null
-                ? buildLineSequence(item.line2Words, item.line2WordOffset, localActive, userBaseRgb, accentRgb)
+                ? buildKaraokeSequence(item.line2Words, item.line2WordOffset, localActive, userBaseRgb, accentRgb, true)
                 : null;
+        item.cachedOutlineSeq1 = buildKaraokeSequence(item.line1Words, 0, localActive, userBaseRgb, accentRgb, false);
+        item.cachedOutlineSeq2 = item.line2Words != null
+                ? buildKaraokeSequence(item.line2Words, item.line2WordOffset, localActive, userBaseRgb, accentRgb, false)
+                : null;
+        item.cachedDrawWidth1 = font != null ? font.width(item.cachedSeq1) : item.cachedWidth1;
+        item.cachedDrawWidth2 = (item.cachedSeq2 != null && font != null) ? font.width(item.cachedSeq2) : item.cachedWidth2;
         item.cachedHighlightIdx = localActive;
         item.cachedKeyRgb = userBaseRgb;
         item.cachedSkyEnabled = skyEnabled;
         item.cachedSkyMode = skyMode;
     }
 
-    private static FormattedCharSequence buildLineSequence(
+    private static FormattedCharSequence buildKaraokeSequence(
             String[] words,
             int wordOffset,
             int globalActiveIdx,
             int userBaseRgb,
-            int accentRgb
+            int accentRgb,
+            boolean colored
     ) {
         MutableComponent comp = Component.empty();
         for (int i = 0; i < words.length; i++) {
             if (i > 0) comp.append(" ");
             int wordIdx = wordOffset + i;
-            boolean bold = false;
-            LyricsVisualMath.KaraokeRole role;
-            if (wordIdx < globalActiveIdx) {
-                role = LyricsVisualMath.KaraokeRole.SUNG;
-            } else if (wordIdx == globalActiveIdx) {
-                role = LyricsVisualMath.KaraokeRole.ACTIVE;
-                bold = true;
-            } else {
-                role = LyricsVisualMath.KaraokeRole.UPCOMING;
+            boolean bold = wordIdx == globalActiveIdx;
+            Style style = Style.EMPTY;
+            if (colored) {
+                LyricsVisualMath.KaraokeRole role;
+                if (wordIdx < globalActiveIdx) {
+                    role = LyricsVisualMath.KaraokeRole.SUNG;
+                } else if (bold) {
+                    role = LyricsVisualMath.KaraokeRole.ACTIVE;
+                } else {
+                    role = LyricsVisualMath.KaraokeRole.UPCOMING;
+                }
+                int spanRgb = LyricsVisualMath.computeKaraokeWordRgb(userBaseRgb, accentRgb, role);
+                style = style.withColor(spanRgb);
             }
-            int spanRgb = LyricsVisualMath.computeKaraokeWordRgb(userBaseRgb, accentRgb, role);
-            Style style = Style.EMPTY.withColor(spanRgb);
-            if (bold) style = style.withBold(true);
+            if (bold) {
+                style = style.withBold(true);
+            }
             comp.append(Component.literal(words[i]).withStyle(style));
         }
         return comp.getVisualOrderText();

@@ -1,6 +1,6 @@
 # Wish Mod 🌟
 
-[![Version](https://img.shields.io/badge/version-1.1.5-ff69b4?style=flat-square)](https://github.com/Sorakkaa/Wish/releases)
+[![Version](https://img.shields.io/badge/version-1.1.6-ff69b4?style=flat-square)](https://github.com/Sorakkaa/Wish/releases)
 [![Minecraft](https://img.shields.io/badge/minecraft-26.2-55ff55?style=flat-square)](https://fabricmc.net/)
 [![Loader](https://img.shields.io/badge/loader-Fabric%200.19.5-dbd0b4?style=flat-square)](https://fabricmc.net/)
 [![Java](https://img.shields.io/badge/java-25%2B-orange?style=flat-square)](https://adoptium.net/)
@@ -37,6 +37,7 @@ A client-side **Fabric** mod for **Minecraft 26.2** bringing Hypixel Skyblock qu
 - **Name Spoofer & Formatting** — Replace your name client-side across chat, tab list, scoreboard, and nametags with `Bold`, `Italic`, `Underline`, and `Strikethrough` styles plus custom badges.
 - **Color & Animation Studio** — Pick dual hex colors (`Color 1` & `Color 2`) using HSB sliders or hex input with **6 animation modes** (`None`, `Chroma`, `Gradient`, `Wave`, `Breathe`, `Blink`) and adjustable animation speed (`0.1x–3.0x`).
 - **Player Transform (`Skin` & `Misc Setting`)** — Independent **Size X / Y / Z** sliders (`-1.0` to `3.0`) and **Spin Speed** (`-3.0` to `3.0`), plus **Cosmetics Visibility** (`Show All`, `Mine Only`, `Hide All`) and one-click **Copy Cosmetics Config** to clipboard in `Misc Setting`.
+- **3D Cosmetics & Automatic Sync (`Cosmetics`)** — 30 custom procedural 3D cosmetics (**10 Wings**, **10 Halos**, **10 Particles**) with automatic Mojang-verified Cloudflare D1 and Local/LAN P2P synchronization for cosmetics, custom name styling, and player size.
 - **Custom Item Models (`/wish model`)** — Override the visual model and texture of any held Skyblock item (matched by Skyblock ID) with any vanilla item or loaded resource-pack model.
 
 ---
@@ -85,8 +86,8 @@ A client-side **Fabric** mod for **Minecraft 26.2** bringing Hypixel Skyblock qu
 - **Java** `25` or newer
 
 ### Steps
-1. Download `wish-1.1.5.jar` from the [Releases](https://github.com/Sorakkaa/Wish/releases) page.
-2. Place `wish-1.1.5.jar` and **Fabric API** inside your `.minecraft/mods` folder.
+1. Download `wish-1.1.6.jar` from the [Releases](https://github.com/Sorakkaa/Wish/releases) page.
+2. Place `wish-1.1.6.jar` and **Fabric API** inside your `.minecraft/mods` folder.
 3. Launch Minecraft `26.2` with Fabric and run `/wish` in-game to customize everything.
 
 ---
@@ -99,7 +100,7 @@ cd Wish
 ./gradlew build
 ```
 
-The compiled mod JAR will be output to `build/libs/wish-1.1.5.jar`.
+The compiled mod JAR will be output to `build/libs/wish-1.1.6.jar`.
 
 ---
 

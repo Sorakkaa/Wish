@@ -11,17 +11,113 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.contents.PlainTextContents;
 import net.minecraft.network.chat.contents.TranslatableContents;
+import net.minecraft.util.FormattedCharSequence;
+import net.minecraft.util.FormattedCharSink;
+import net.minecraft.util.StringDecomposer;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 final class WordReplacerTextEngine {
+    static final long BYPASSED_VERSION = -1L;
     private static final Pattern TRANSLATION_FORMAT_PATTERN = Pattern.compile("%(?:(\\d+)\\$)?([A-Za-z%]|$)");
+    private static final ThreadLocal<CharSeqScratch> CHAR_SEQ_SCRATCH = ThreadLocal.withInitial(CharSeqScratch::new);
 
     private WordReplacerTextEngine() {
+    }
+
+    private interface MarkedCharSequence extends FormattedCharSequence {
+        long version();
+    }
+
+    private record VersionedCharSequence(FormattedCharSequence delegate, long version) implements MarkedCharSequence {
+        @Override
+        public boolean accept(FormattedCharSink sink) {
+            return delegate.accept(sink);
+        }
+    }
+
+    private static final class ReplacedCharSequence implements MarkedCharSequence {
+        private final String[] texts;
+        private final Style[] styles;
+        private final long version;
+
+        ReplacedCharSequence(String[] texts, Style[] styles, long version) {
+            this.texts = texts;
+            this.styles = styles;
+            this.version = version;
+        }
+
+        @Override
+        public long version() {
+            return version;
+        }
+
+        @Override
+        public boolean accept(FormattedCharSink sink) {
+            for (int i = 0; i < texts.length; i++) {
+                if (!StringDecomposer.iterate(texts[i], styles[i], sink)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    private static final class CharSeqScratch implements CharSequence {
+        char[] chars = new char[128];
+        Style[] styles = new Style[128];
+        int len;
+        private final FormattedCharSink collector = (pos, style, codePoint) -> {
+            ensureCapacity(len + Character.charCount(codePoint));
+            Style safeStyle = style != null ? style : Style.EMPTY;
+            if (Character.isBmpCodePoint(codePoint)) {
+                chars[len] = (char) codePoint;
+                styles[len] = safeStyle;
+                len++;
+            } else {
+                chars[len] = Character.highSurrogate(codePoint);
+                styles[len] = safeStyle;
+                len++;
+                chars[len] = Character.lowSurrogate(codePoint);
+                styles[len] = safeStyle;
+                len++;
+            }
+            return true;
+        };
+
+        void resetAndCollect(FormattedCharSequence seq) {
+            len = 0;
+            seq.accept(collector);
+        }
+
+        private void ensureCapacity(int required) {
+            if (required <= chars.length) {
+                return;
+            }
+            int next = Math.max(required, chars.length * 2);
+            chars = Arrays.copyOf(chars, next);
+            styles = Arrays.copyOf(styles, next);
+        }
+
+        @Override
+        public int length() {
+            return len;
+        }
+
+        @Override
+        public char charAt(int index) {
+            return chars[index];
+        }
+
+        @Override
+        public CharSequence subSequence(int start, int end) {
+            return new String(chars, start, end - start);
+        }
     }
 
     private record ReplacedPlainContents(String text, long snapshotVersion) implements PlainTextContents {
@@ -44,26 +140,49 @@ final class WordReplacerTextEngine {
     private record StyledSegment(String text, Style explicitStyle) {
     }
 
+    private record FlatPlainSpan(String text, Style relativeStyle, boolean alreadyReplaced) {
+    }
+
+    private record CoalesceResult(MutableComponent rebuiltRoot, List<Component> rebuiltSiblings) {
+    }
+
     private static final class PlainStyleState {
         private String colorPrefix = "";
+        private Integer hexColorRgb;
+        private ChatFormatting legacyColor;
         private boolean obfuscated;
         private boolean bold;
         private boolean strikethrough;
         private boolean underlined;
         private boolean italic;
 
-        void applySectionCode(String text, int index, int step) {
+        void applySectionCode(CharSequence text, int index, int step) {
             if (step == 14) {
-                colorPrefix = text.substring(index, index + 14);
+                StringBuilder prefix = new StringBuilder(14);
+                int rgb = 0;
+                for (int k = 0; k < 14; k++) {
+                    char ch = text.charAt(index + k);
+                    prefix.append(ch);
+                    if (k >= 2 && (k % 2) == 1) {
+                        rgb = (rgb << 4) | Character.digit(ch, 16);
+                    }
+                }
+                colorPrefix = prefix.toString();
+                hexColorRgb = rgb;
+                legacyColor = null;
                 clearFormats();
                 return;
             }
             char code = Character.toLowerCase(text.charAt(index + 1));
             if (code == 'r') {
                 colorPrefix = "";
+                hexColorRgb = null;
+                legacyColor = null;
                 clearFormats();
             } else if (isLegacyColorChar(code)) {
-                colorPrefix = text.substring(index, index + 2);
+                colorPrefix = "\u00A7" + code;
+                legacyColor = ChatFormatting.getByCode(code);
+                hexColorRgb = null;
                 clearFormats();
             } else {
                 switch (code) {
@@ -77,8 +196,22 @@ final class WordReplacerTextEngine {
             }
         }
 
-        void appendResetAndRestore(StringBuilder sb) {
-            sb.append("\u00A7r");
+        Style applyTo(Style base) {
+            Style result = base != null ? base : Style.EMPTY;
+            if (hexColorRgb != null) {
+                result = result.withColor(hexColorRgb);
+            } else if (legacyColor != null) {
+                result = result.withColor(legacyColor);
+            }
+            if (obfuscated) result = result.withObfuscated(true);
+            if (bold) result = result.withBold(true);
+            if (strikethrough) result = result.withStrikethrough(true);
+            if (underlined) result = result.withUnderlined(true);
+            if (italic) result = result.withItalic(true);
+            return result;
+        }
+
+        void appendSectionCodes(StringBuilder sb) {
             if (!colorPrefix.isEmpty()) {
                 sb.append(colorPrefix);
             }
@@ -87,6 +220,20 @@ final class WordReplacerTextEngine {
             if (strikethrough) sb.append("\u00A7m");
             if (underlined) sb.append("\u00A7n");
             if (italic) sb.append("\u00A7o");
+        }
+
+        String toSectionString() {
+            if (isEmpty()) {
+                return "";
+            }
+            StringBuilder sb = new StringBuilder(24);
+            appendSectionCodes(sb);
+            return sb.toString();
+        }
+
+        void appendResetAndRestore(StringBuilder sb) {
+            sb.append("\u00A7r");
+            appendSectionCodes(sb);
         }
 
         boolean isEmpty() {
@@ -102,6 +249,149 @@ final class WordReplacerTextEngine {
         }
     }
 
+    static FormattedCharSequence wrapVersion(FormattedCharSequence seq, long version) {
+        if (seq == null) {
+            return null;
+        }
+        if (seq instanceof MarkedCharSequence marked) {
+            if (marked.version() == version) {
+                return seq;
+            }
+            FormattedCharSequence inner = marked instanceof VersionedCharSequence vcs ? vcs.delegate() : marked;
+            return new VersionedCharSequence(inner, version);
+        }
+        return new VersionedCharSequence(seq, version);
+    }
+
+    static long getVersion(FormattedCharSequence seq) {
+        return seq instanceof MarkedCharSequence marked ? marked.version() : Long.MIN_VALUE;
+    }
+
+    static MutableComponent createMarkedLiteral(String text, Style style, long version) {
+        return MutableComponent.create(new ReplacedPlainContents(text != null ? text : "", version))
+                .withStyle(style != null ? style : Style.EMPTY);
+    }
+
+    static boolean isComponentMarkedReplaced(Component component, long version) {
+        if (component == null) {
+            return false;
+        }
+        if (!(component.getContents() instanceof ReplacedPlainContents rpc) || rpc.snapshotVersion() != version) {
+            return false;
+        }
+        for (Component sibling : component.getSiblings()) {
+            if (!isComponentMarkedReplaced(sibling, version)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static FormattedCharSequence replaceCharSequence(FormattedCharSequence seq, Snapshot snapshot) {
+        if (seq == null || snapshot == null || !snapshot.enabled() || snapshot.rules().isEmpty()) {
+            return seq;
+        }
+        long existingVersion = getVersion(seq);
+        if (existingVersion == BYPASSED_VERSION || existingVersion == snapshot.version()) {
+            return seq;
+        }
+        CharSeqScratch scratch = CHAR_SEQ_SCRATCH.get();
+        scratch.resetAndCollect(seq);
+        int len = scratch.len;
+        if (len < snapshot.minFromLength()) {
+            return seq;
+        }
+
+        List<String> outTexts = null;
+        List<Style> outStyles = null;
+        int literalStart = 0;
+        int lastVisibleChar = -1;
+        int i = 0;
+        while (i < len) {
+            char c = scratch.chars[i];
+            if (c == '\u00A7' && i + 1 < len) {
+                i += isSectionHexSeq(scratch, i) ? 14 : 2;
+                continue;
+            }
+            int urlEnd = scanUrlEndIfAtStart(scratch, i, lastVisibleChar);
+            if (urlEnd > i) {
+                lastVisibleChar = scratch.chars[urlEnd - 1];
+                i = urlEnd;
+                continue;
+            }
+            RuleMatch match = findMatchingRule(scratch, i, lastVisibleChar, snapshot);
+            if (match == null) {
+                lastVisibleChar = c;
+                i++;
+                continue;
+            }
+            if (outTexts == null) {
+                outTexts = new ArrayList<>(4);
+                outStyles = new ArrayList<>(4);
+            }
+            if (i > literalStart) {
+                appendScratchSlice(outTexts, outStyles, scratch, literalStart, i);
+            }
+            Style baseStyle = scratch.styles[i];
+            CompiledRule rule = match.rule();
+            if (!rule.hasFormatting() || rule.to().isEmpty()) {
+                appendMergedRun(outTexts, outStyles, rule.to(), baseStyle);
+            } else {
+                List<StyledSegment> segs = new ArrayList<>(4);
+                appendFormattedSegments(segs, rule.to(), baseStyle, null, false);
+                for (StyledSegment seg : segs) {
+                    appendMergedRun(outTexts, outStyles, seg.text(), seg.explicitStyle() != null ? seg.explicitStyle() : baseStyle);
+                }
+            }
+            lastVisibleChar = lastVisibleReplacementChar(rule.to(), lastVisibleChar);
+            i = match.end();
+            literalStart = i;
+        }
+
+        if (outTexts == null) {
+            return seq;
+        }
+        if (literalStart < len) {
+            appendScratchSlice(outTexts, outStyles, scratch, literalStart, len);
+        }
+        if (outTexts.isEmpty()) {
+            return new ReplacedCharSequence(new String[]{""}, new Style[]{Style.EMPTY}, snapshot.version());
+        }
+        return new ReplacedCharSequence(
+                outTexts.toArray(String[]::new),
+                outStyles.toArray(Style[]::new),
+                snapshot.version()
+        );
+    }
+
+    private static void appendScratchSlice(List<String> outTexts, List<Style> outStyles, CharSeqScratch scratch, int start, int end) {
+        int runStart = start;
+        Style runStyle = scratch.styles[start];
+        for (int idx = start + 1; idx < end; idx++) {
+            Style s = scratch.styles[idx];
+            if (!runStyle.equals(s)) {
+                appendMergedRun(outTexts, outStyles, new String(scratch.chars, runStart, idx - runStart), runStyle);
+                runStart = idx;
+                runStyle = s;
+            }
+        }
+        appendMergedRun(outTexts, outStyles, new String(scratch.chars, runStart, end - runStart), runStyle);
+    }
+
+    private static void appendMergedRun(List<String> outTexts, List<Style> outStyles, String text, Style style) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+        Style safeStyle = style != null ? style : Style.EMPTY;
+        int lastIdx = outTexts.size() - 1;
+        if (lastIdx >= 0 && outStyles.get(lastIdx).equals(safeStyle)) {
+            outTexts.set(lastIdx, outTexts.get(lastIdx) + text);
+            return;
+        }
+        outTexts.add(text);
+        outStyles.add(safeStyle);
+    }
+
     static String replacePlainString(String text, Snapshot snapshot) {
         if (text == null || snapshot == null || !snapshot.enabled() || snapshot.rules().isEmpty() || text.length() < snapshot.minFromLength()) {
             return text;
@@ -109,6 +399,7 @@ final class WordReplacerTextEngine {
         int len = text.length();
         StringBuilder sb = null;
         PlainStyleState styleState = new PlainStyleState();
+        int lastVisibleChar = -1;
         int i = 0;
         while (i < len) {
             if (text.charAt(i) == '\u00A7' && i + 1 < len) {
@@ -120,31 +411,56 @@ final class WordReplacerTextEngine {
                 i += step;
                 continue;
             }
-            int urlEnd = scanUrlEndIfAtStart(text, i);
+            int urlEnd = scanUrlEndIfAtStart(text, i, lastVisibleChar);
             if (urlEnd > i) {
                 if (sb != null) {
                     sb.append(text, i, urlEnd);
                 }
+                lastVisibleChar = text.charAt(urlEnd - 1);
                 i = urlEnd;
                 continue;
             }
-            CompiledRule match = findMatchingRule(text, i, snapshot);
+            RuleMatch match = findMatchingRule(text, i, lastVisibleChar, snapshot);
             if (match != null) {
                 if (sb == null) {
                     sb = new StringBuilder(len + 16);
                     sb.append(text, 0, i);
                 }
-                int nextIdx = i + match.from().length();
-                appendPlainReplacement(sb, match, styleState, nextIdx < len);
-                i = nextIdx;
+                advanceStyleState(text, i, match.end(), styleState);
+                appendPlainReplacement(sb, match.rule(), styleState, match.end() < len);
+                lastVisibleChar = lastVisibleReplacementChar(match.rule().to(), lastVisibleChar);
+                i = match.end();
                 continue;
             }
+            char c = text.charAt(i);
             if (sb != null) {
-                sb.append(text.charAt(i));
+                sb.append(c);
             }
+            lastVisibleChar = c;
             i++;
         }
         return sb != null ? sb.toString() : text;
+    }
+
+    private static void advanceStyleState(CharSequence text, int start, int end, PlainStyleState state) {
+        int i = start;
+        while (i < end) {
+            if (text.charAt(i) == '\u00A7' && i + 1 < end) {
+                int step = isSectionHexSeq(text, i) ? 14 : 2;
+                state.applySectionCode(text, i, step);
+                i += step;
+                continue;
+            }
+            i++;
+        }
+    }
+
+    private static int lastVisibleReplacementChar(String to, int fallback) {
+        if (to == null || to.isEmpty()) {
+            return fallback;
+        }
+        String clean = stripFormattingCodes(to);
+        return clean.isEmpty() ? fallback : clean.charAt(clean.length() - 1);
     }
 
     private static void appendPlainReplacement(StringBuilder sb, CompiledRule match, PlainStyleState styleState, boolean hasTrailing) {
@@ -237,6 +553,21 @@ final class WordReplacerTextEngine {
         return sb.toString();
     }
 
+    private record RuleMatch(int end, CompiledRule rule) {
+    }
+
+    private sealed interface CoalesceToken permits SpanToken, NodeToken {
+    }
+
+    private record SpanToken(String text, Style relStyle, Component sourceNode) implements CoalesceToken {
+    }
+
+    private record NodeToken(Component node) implements CoalesceToken {
+    }
+
+    private record PendingMatch(int start, int end, CompiledRule rule) {
+    }
+
     private static Component replaceNode(Component component, Style inheritedStyle, Snapshot snapshot) {
         ComponentContents contents = component.getContents();
         Style ownStyle = component.getStyle();
@@ -245,6 +576,13 @@ final class WordReplacerTextEngine {
         List<Component> origSiblings = component.getSiblings();
         List<Component> newSiblings = transformSiblings(origSiblings, effectiveStyle, snapshot);
         boolean siblingsChanged = newSiblings != origSiblings;
+
+        if (!newSiblings.isEmpty()) {
+            Component coalesced = coalesceComponentIfMatched(contents, ownStyle, effectiveStyle, newSiblings, snapshot);
+            if (coalesced != null) {
+                return coalesced;
+            }
+        }
 
         if (contents instanceof ReplacedPlainContents rpc && rpc.snapshotVersion() == snapshot.version()) {
             return siblingsChanged ? rebuildWithSiblings(MutableComponent.create(contents).withStyle(ownStyle), newSiblings) : component;
@@ -281,6 +619,256 @@ final class WordReplacerTextEngine {
         return modified != null ? modified : origSiblings;
     }
 
+    private static Component coalesceComponentIfMatched(
+            ComponentContents rootContents,
+            Style ownStyle,
+            Style effectiveStyle,
+            List<Component> siblings,
+            Snapshot snapshot
+    ) {
+        long version = snapshot.version();
+        boolean selfPlain = rootContents instanceof PlainTextContents ptc
+                && !(rootContents instanceof ReplacedPlainContents rpc && rpc.snapshotVersion() == version);
+        List<CoalesceToken> tokens = new ArrayList<>(siblings.size() + 2);
+        if (selfPlain) {
+            String rootText = ((PlainTextContents) rootContents).text();
+            if (!rootText.isEmpty()) {
+                tokens.add(new SpanToken(rootText, Style.EMPTY, null));
+            }
+        }
+        for (Component sibling : siblings) {
+            List<SpanToken> flat = new ArrayList<>(4);
+            if (collectPurePlainSubtree(sibling, Style.EMPTY, version, sibling, flat)) {
+                tokens.addAll(flat);
+            } else {
+                tokens.add(new NodeToken(sibling));
+            }
+        }
+
+        boolean anyCoalesced = false;
+        boolean selfConsumedByRun = false;
+        List<Component> outSiblings = new ArrayList<>(tokens.size());
+        int idx = 0;
+        while (idx < tokens.size()) {
+            CoalesceToken tok = tokens.get(idx);
+            if (tok instanceof NodeToken nt) {
+                outSiblings.add(nt.node());
+                idx++;
+                continue;
+            }
+            int runEnd = idx + 1;
+            while (runEnd < tokens.size() && tokens.get(runEnd) instanceof SpanToken) {
+                runEnd++;
+            }
+            boolean runIncludesSelf = selfPlain && idx == 0 && !((PlainTextContents) rootContents).text().isEmpty();
+            if (runEnd - idx >= 2) {
+                List<SpanToken> runSpans = new ArrayList<>(runEnd - idx);
+                for (int k = idx; k < runEnd; k++) {
+                    runSpans.add((SpanToken) tokens.get(k));
+                }
+                List<Component> coalescedRun = tryCoalesceSpanRun(runSpans, effectiveStyle, snapshot);
+                if (coalescedRun != null) {
+                    anyCoalesced = true;
+                    if (runIncludesSelf) {
+                        selfConsumedByRun = true;
+                    }
+                    outSiblings.addAll(coalescedRun);
+                    idx = runEnd;
+                    continue;
+                }
+            }
+            for (int k = idx; k < runEnd; k++) {
+                SpanToken st = (SpanToken) tokens.get(k);
+                if (st.sourceNode() != null) {
+                    if (k == idx || tokens.get(k - 1) instanceof NodeToken || ((SpanToken) tokens.get(k - 1)).sourceNode() != st.sourceNode()) {
+                        outSiblings.add(st.sourceNode());
+                    }
+                }
+            }
+            idx = runEnd;
+        }
+
+        if (!anyCoalesced) {
+            return null;
+        }
+        MutableComponent rebuiltRoot = selfConsumedByRun
+                ? MutableComponent.create(new ReplacedPlainContents("", version)).withStyle(ownStyle)
+                : MutableComponent.create(rootContents).withStyle(ownStyle);
+        return rebuildWithSiblings(rebuiltRoot, outSiblings);
+    }
+
+    private static boolean collectPurePlainSubtree(
+            Component node,
+            Style parentRelStyle,
+            long version,
+            Component topLevelSource,
+            List<SpanToken> out
+    ) {
+        ComponentContents c = node.getContents();
+        if (!(c instanceof PlainTextContents ptc)) {
+            return false;
+        }
+        if (c instanceof ReplacedPlainContents rpc && rpc.snapshotVersion() == version) {
+            return false;
+        }
+        Style relStyle = node.getStyle().applyTo(parentRelStyle);
+        if (!ptc.text().isEmpty()) {
+            out.add(new SpanToken(ptc.text(), relStyle, topLevelSource));
+        }
+        for (Component child : node.getSiblings()) {
+            if (!collectPurePlainSubtree(child, relStyle, version, topLevelSource, out)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static List<Component> tryCoalesceSpanRun(
+            List<SpanToken> spans,
+            Style rootEffectiveStyle,
+            Snapshot snapshot
+    ) {
+        int count = spans.size();
+        int[] starts = new int[count];
+        int[] ends = new int[count];
+        StringBuilder combined = new StringBuilder();
+        for (int k = 0; k < count; k++) {
+            starts[k] = combined.length();
+            combined.append(spans.get(k).text());
+            ends[k] = combined.length();
+        }
+        int totalLen = combined.length();
+        if (totalLen < snapshot.minFromLength()) {
+            return null;
+        }
+
+        List<PendingMatch> matches = null;
+        boolean hasCrossBoundaryMatch = false;
+        int lastVisibleChar = -1;
+        int i = 0;
+        while (i < totalLen) {
+            if (combined.charAt(i) == '\u00A7' && i + 1 < totalLen) {
+                i += isSectionHexSeq(combined, i) ? 14 : 2;
+                continue;
+            }
+            int urlEnd = scanUrlEndIfAtStart(combined, i, lastVisibleChar);
+            if (urlEnd > i) {
+                lastVisibleChar = combined.charAt(urlEnd - 1);
+                i = urlEnd;
+                continue;
+            }
+            RuleMatch match = findMatchingRule(combined, i, lastVisibleChar, snapshot);
+            if (match == null) {
+                lastVisibleChar = combined.charAt(i);
+                i++;
+                continue;
+            }
+            if (matches == null) {
+                matches = new ArrayList<>(4);
+            }
+            matches.add(new PendingMatch(i, match.end(), match.rule()));
+            if (!hasCrossBoundaryMatch) {
+                int startSpan = findSpanAt(starts, ends, i);
+                int endSpan = findSpanAt(starts, ends, match.end() - 1);
+                if (startSpan != endSpan) {
+                    hasCrossBoundaryMatch = true;
+                }
+            }
+            lastVisibleChar = lastVisibleReplacementChar(match.rule().to(), lastVisibleChar);
+            i = match.end();
+        }
+
+        if (!hasCrossBoundaryMatch || matches == null) {
+            return null;
+        }
+
+        long version = snapshot.version();
+        List<Component> emitted = new ArrayList<>(count + matches.size());
+        int cursor = 0;
+        for (PendingMatch m : matches) {
+            if (m.start() > cursor) {
+                emitSpanSliceRange(spans, starts, ends, cursor, m.start(), version, emitted);
+            }
+            emitMatchedReplacement(spans, starts, ends, m, rootEffectiveStyle, version, emitted);
+            cursor = m.end();
+        }
+        if (cursor < totalLen) {
+            emitSpanSliceRange(spans, starts, ends, cursor, totalLen, version, emitted);
+        }
+        return emitted;
+    }
+
+    private static int findSpanAt(int[] starts, int[] ends, int pos) {
+        for (int k = 0; k < starts.length; k++) {
+            if (pos >= starts[k] && pos < ends[k]) {
+                return k;
+            }
+        }
+        return starts.length - 1;
+    }
+
+    private static void emitSpanSliceRange(
+            List<SpanToken> spans,
+            int[] starts,
+            int[] ends,
+            int rangeStart,
+            int rangeEnd,
+            long version,
+            List<Component> out
+    ) {
+        for (int k = 0; k < spans.size(); k++) {
+            int overlapStart = Math.max(rangeStart, starts[k]);
+            int overlapEnd = Math.min(rangeEnd, ends[k]);
+            if (overlapEnd <= overlapStart) {
+                continue;
+            }
+            SpanToken span = spans.get(k);
+            int localStart = overlapStart - starts[k];
+            int localEnd = overlapEnd - starts[k];
+            String sub = span.text().substring(localStart, localEnd);
+            PlainStyleState stateBefore = computeStyleStateAt(span.text(), localStart);
+            Style relStyle = stateBefore.isEmpty() ? span.relStyle() : stateBefore.applyTo(span.relStyle());
+            out.add(createMarkedLiteral(sub, relStyle, version));
+        }
+    }
+
+    private static void emitMatchedReplacement(
+            List<SpanToken> spans,
+            int[] starts,
+            int[] ends,
+            PendingMatch match,
+            Style rootEffectiveStyle,
+            long version,
+            List<Component> out
+    ) {
+        CompiledRule rule = match.rule();
+        if (rule.to().isEmpty()) {
+            return;
+        }
+        int startSpanIdx = findSpanAt(starts, ends, match.start());
+        SpanToken startSpan = spans.get(startSpanIdx);
+        int localStart = match.start() - starts[startSpanIdx];
+        PlainStyleState styleAtStart = computeStyleStateAt(startSpan.text(), localStart);
+        Style matchRelStyle = styleAtStart.applyTo(startSpan.relStyle());
+        if (!rule.hasFormatting()) {
+            out.add(createMarkedLiteral(rule.to(), matchRelStyle, version));
+            return;
+        }
+        Style matchAbsStyle = matchRelStyle.applyTo(rootEffectiveStyle);
+        List<StyledSegment> segs = new ArrayList<>(4);
+        appendFormattedSegments(segs, rule.to(), matchAbsStyle, null, false);
+        for (StyledSegment seg : segs) {
+            Style segStyle = seg.explicitStyle() != null ? seg.explicitStyle() : matchAbsStyle;
+            out.add(createMarkedLiteral(seg.text(), segStyle, version));
+        }
+    }
+
+    private static PlainStyleState computeStyleStateAt(String text, int limit) {
+        PlainStyleState state = new PlainStyleState();
+        advanceStyleState(text, 0, Math.min(limit, text.length()), state);
+        return state;
+    }
+
     private static MutableComponent replacePlainLeaf(String text, Style ownStyle, Style effectiveStyle, Snapshot snapshot) {
         if (text == null || text.length() < snapshot.minFromLength()) {
             return null;
@@ -288,20 +876,28 @@ final class WordReplacerTextEngine {
         List<StyledSegment> segments = null;
         int len = text.length();
         int literalStart = 0;
+        PlainStyleState styleState = new PlainStyleState();
+        PlainStyleState literalStartStyle = new PlainStyleState();
+        boolean emittedStyledSegment = false;
+        int lastVisibleChar = -1;
         int i = 0;
 
         while (i < len) {
             if (text.charAt(i) == '\u00A7' && i + 1 < len) {
-                i += 2;
+                int step = isSectionHexSeq(text, i) ? 14 : 2;
+                styleState.applySectionCode(text, i, step);
+                i += step;
                 continue;
             }
-            int urlEnd = scanUrlEndIfAtStart(text, i);
+            int urlEnd = scanUrlEndIfAtStart(text, i, lastVisibleChar);
             if (urlEnd > i) {
+                lastVisibleChar = text.charAt(urlEnd - 1);
                 i = urlEnd;
                 continue;
             }
-            CompiledRule match = findMatchingRule(text, i, snapshot);
+            RuleMatch match = findMatchingRule(text, i, lastVisibleChar, snapshot);
             if (match == null) {
+                lastVisibleChar = text.charAt(i);
                 i++;
                 continue;
             }
@@ -309,10 +905,24 @@ final class WordReplacerTextEngine {
                 segments = new ArrayList<>(4);
             }
             if (i > literalStart) {
-                segments.add(new StyledSegment(text.substring(literalStart, i), null));
+                Style litStyle = emittedStyledSegment && !literalStartStyle.isEmpty()
+                        ? literalStartStyle.applyTo(Style.EMPTY)
+                        : null;
+                segments.add(new StyledSegment(text.substring(literalStart, i), litStyle));
             }
-            appendRuleSegments(segments, match, effectiveStyle);
-            i += match.from().length();
+            if (match.rule().hasFormatting()) {
+                emittedStyledSegment = true;
+                appendRuleSegments(segments, match.rule(), styleState.applyTo(effectiveStyle));
+            } else {
+                Style matchStyle = emittedStyledSegment && !styleState.isEmpty()
+                        ? styleState.applyTo(Style.EMPTY)
+                        : null;
+                segments.add(new StyledSegment(match.rule().to(), matchStyle));
+            }
+            advanceStyleState(text, i, match.end(), styleState);
+            copyStyleState(styleState, literalStartStyle);
+            lastVisibleChar = lastVisibleReplacementChar(match.rule().to(), lastVisibleChar);
+            i = match.end();
             literalStart = i;
         }
 
@@ -320,9 +930,23 @@ final class WordReplacerTextEngine {
             return null;
         }
         if (literalStart < len) {
-            segments.add(new StyledSegment(text.substring(literalStart), null));
+            Style trailingStyle = emittedStyledSegment && !literalStartStyle.isEmpty()
+                    ? literalStartStyle.applyTo(Style.EMPTY)
+                    : null;
+            segments.add(new StyledSegment(text.substring(literalStart), trailingStyle));
         }
         return buildLeafFromSegments(segments, ownStyle, snapshot.version());
+    }
+
+    private static void copyStyleState(PlainStyleState src, PlainStyleState dst) {
+        dst.colorPrefix = src.colorPrefix;
+        dst.hexColorRgb = src.hexColorRgb;
+        dst.legacyColor = src.legacyColor;
+        dst.obfuscated = src.obfuscated;
+        dst.bold = src.bold;
+        dst.strikethrough = src.strikethrough;
+        dst.underlined = src.underlined;
+        dst.italic = src.italic;
     }
 
     private static MutableComponent buildLeafFromSegments(List<StyledSegment> segments, Style ownStyle, long version) {
@@ -499,58 +1123,87 @@ final class WordReplacerTextEngine {
         return root;
     }
 
-    private static CompiledRule findMatchingRule(String text, int index, Snapshot snapshot) {
+    private static RuleMatch findMatchingRule(CharSequence text, int index, int lastVisibleChar, Snapshot snapshot) {
         boolean ignoreCase = !snapshot.caseSensitive();
-        int textLen = text.length();
         for (CompiledRule rule : snapshot.rules()) {
-            int fromLen = rule.from().length();
-            if (index + fromLen > textLen || !text.regionMatches(ignoreCase, index, rule.from(), 0, fromLen)) {
+            int matchEnd = matchRuleAt(text, index, rule.from(), ignoreCase);
+            if (matchEnd < 0) {
                 continue;
             }
-            if (snapshot.wholeWord() && !matchesWordBoundaries(text, index, index + fromLen, rule.from())) {
+            if (snapshot.wholeWord() && !matchesWordBoundaries(text, matchEnd, lastVisibleChar, rule.from())) {
                 continue;
             }
-            return rule;
+            return new RuleMatch(matchEnd, rule);
         }
         return null;
     }
 
-    private static boolean matchesWordBoundaries(String text, int start, int end, String pattern) {
-        if (isWordChar(pattern.charAt(0)) && !isBoundaryBefore(text, start)) {
+    private static int matchRuleAt(CharSequence text, int startIndex, String pattern, boolean ignoreCase) {
+        int textLen = text.length();
+        int patLen = pattern.length();
+        if (patLen == 0 || startIndex + patLen > textLen) {
+            return -1;
+        }
+        if (!charsMatch(text.charAt(startIndex), pattern.charAt(0), ignoreCase)) {
+            return -1;
+        }
+        int ti = startIndex + 1;
+        int fi = 1;
+        while (fi < patLen) {
+            char fc = pattern.charAt(fi);
+            if (fc != '\u00A7') {
+                while (ti + 1 < textLen && text.charAt(ti) == '\u00A7') {
+                    ti += isSectionHexSeq(text, ti) ? 14 : 2;
+                }
+            }
+            if (ti >= textLen || !charsMatch(text.charAt(ti), fc, ignoreCase)) {
+                return -1;
+            }
+            ti++;
+            fi++;
+        }
+        return ti;
+    }
+
+    private static boolean charsMatch(char rawTextChar, char rawPatternChar, boolean ignoreCase) {
+        char tc = rawTextChar == '\u00A0' ? ' ' : rawTextChar;
+        char fc = rawPatternChar == '\u00A0' ? ' ' : rawPatternChar;
+        if (tc == fc) {
+            return true;
+        }
+        if (!ignoreCase) {
             return false;
         }
-        return !isWordChar(pattern.charAt(pattern.length() - 1)) || isBoundaryAfter(text, end);
+        return Character.toLowerCase(tc) == Character.toLowerCase(fc)
+                || Character.toUpperCase(tc) == Character.toUpperCase(fc);
     }
 
-    private static boolean isBoundaryBefore(String text, int start) {
-        return start <= 0 || isPrecededBySectionCode(text, start) || !isWordChar(text.charAt(start - 1));
-    }
-
-    private static boolean isBoundaryAfter(String text, int end) {
-        return end >= text.length() || text.charAt(end) == '\u00A7' || !isWordChar(text.charAt(end));
-    }
-
-    private static boolean isPrecededBySectionCode(String text, int index) {
-        if (index < 2 || text.charAt(index - 2) != '\u00A7') {
+    private static boolean matchesWordBoundaries(CharSequence text, int end, int lastVisibleChar, String pattern) {
+        if (isWordChar(pattern.charAt(0)) && lastVisibleChar != -1 && isWordChar((char) lastVisibleChar)) {
             return false;
         }
-        int sectionCount = 0;
-        for (int cursor = index - 2; cursor >= 0 && text.charAt(cursor) == '\u00A7'; cursor--) {
-            sectionCount++;
+        return !isWordChar(pattern.charAt(pattern.length() - 1)) || isBoundaryAfterSkippingSection(text, end);
+    }
+
+    private static boolean isBoundaryAfterSkippingSection(CharSequence text, int end) {
+        int len = text.length();
+        int cursor = end;
+        while (cursor + 1 < len && text.charAt(cursor) == '\u00A7') {
+            cursor += isSectionHexSeq(text, cursor) ? 14 : 2;
         }
-        return (sectionCount % 2) == 1;
+        return cursor >= len || !isWordChar(text.charAt(cursor));
     }
 
     private static boolean isWordChar(char c) {
         return Character.isLetterOrDigit(c) || c == '_';
     }
 
-    private static int scanUrlEndIfAtStart(String text, int index) {
-        if (index > 0 && isWordChar(text.charAt(index - 1)) && !isPrecededBySectionCode(text, index)) {
+    private static int scanUrlEndIfAtStart(CharSequence text, int index, int lastVisibleChar) {
+        if (lastVisibleChar != -1 && isWordChar((char) lastVisibleChar)) {
             return -1;
         }
-        boolean isHttp = text.regionMatches(true, index, "http://", 0, 7);
-        boolean isHttps = !isHttp && text.regionMatches(true, index, "https://", 0, 8);
+        boolean isHttp = regionMatchesIgnoreCase(text, index, "http://");
+        boolean isHttps = !isHttp && regionMatchesIgnoreCase(text, index, "https://");
         if (!isHttp && !isHttps) {
             return -1;
         }
@@ -564,6 +1217,19 @@ final class WordReplacerTextEngine {
             end++;
         }
         return end;
+    }
+
+    private static boolean regionMatchesIgnoreCase(CharSequence text, int offset, String needle) {
+        int needleLen = needle.length();
+        if (offset + needleLen > text.length()) {
+            return false;
+        }
+        for (int i = 0; i < needleLen; i++) {
+            if (!charsMatch(text.charAt(offset + i), needle.charAt(i), true)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static void appendRuleSegments(List<StyledSegment> out, CompiledRule match, Style effectiveStyle) {
@@ -631,7 +1297,7 @@ final class WordReplacerTextEngine {
         buf.setLength(0);
     }
 
-    private static boolean isSectionHexSeq(String text, int start) {
+    private static boolean isSectionHexSeq(CharSequence text, int start) {
         if (start + 13 >= text.length()) {
             return false;
         }

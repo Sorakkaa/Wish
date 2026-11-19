@@ -2,6 +2,9 @@ package com.wish.client.features.visual;
 
 import com.wish.client.config.ModConfig;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.util.FormattedCharSequence;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -20,6 +23,7 @@ public final class WordReplacerManager {
     private static volatile Snapshot cachedSnapshot = Snapshot.EMPTY;
 
     private static final ThreadLocal<DepthCounter> GUI_BYPASS_DEPTH = ThreadLocal.withInitial(DepthCounter::new);
+    private static final ThreadLocal<DepthCounter> ALREADY_REPLACED_DEPTH = ThreadLocal.withInitial(DepthCounter::new);
 
     private WordReplacerManager() {
     }
@@ -58,6 +62,21 @@ public final class WordReplacerManager {
 
     public static boolean isBypassed() {
         return GUI_BYPASS_DEPTH.get().depth > 0;
+    }
+
+    public static void beginAlreadyReplaced() {
+        ALREADY_REPLACED_DEPTH.get().depth++;
+    }
+
+    public static void endAlreadyReplaced() {
+        DepthCounter counter = ALREADY_REPLACED_DEPTH.get();
+        if (counter.depth > 0) {
+            counter.depth--;
+        }
+    }
+
+    public static boolean isAlreadyReplaced() {
+        return ALREADY_REPLACED_DEPTH.get().depth > 0;
     }
 
     public static CopyOnWriteArrayList<ModConfig.WordReplacementRule> sanitizeRules(List<ModConfig.WordReplacementRule> raw) {
@@ -270,7 +289,7 @@ public final class WordReplacerManager {
     }
 
     public static String replacePlainString(String text) {
-        if (text == null || isBypassed()) {
+        if (text == null || isBypassed() || isAlreadyReplaced()) {
             return text;
         }
         return WordReplacerTextEngine.replacePlainString(text, cachedSnapshot);
@@ -281,10 +300,43 @@ public final class WordReplacerManager {
     }
 
     public static Component replaceComponent(Component component) {
-        if (component == null || isBypassed()) {
+        if (component == null || isBypassed() || isAlreadyReplaced()) {
             return component;
         }
         return WordReplacerTextEngine.replaceComponent(component, cachedSnapshot);
+    }
+
+    public static FormattedCharSequence replaceCharSequence(FormattedCharSequence seq) {
+        if (seq == null) {
+            return null;
+        }
+        if (isBypassed()) {
+            return markBypassed(seq);
+        }
+        if (isAlreadyReplaced()) {
+            return markReplaced(seq);
+        }
+        return WordReplacerTextEngine.replaceCharSequence(seq, cachedSnapshot);
+    }
+
+    public static FormattedCharSequence replaceCharSequence(FormattedCharSequence seq, Snapshot snapshot) {
+        return WordReplacerTextEngine.replaceCharSequence(seq, snapshot);
+    }
+
+    public static FormattedCharSequence markBypassed(FormattedCharSequence seq) {
+        return WordReplacerTextEngine.wrapVersion(seq, WordReplacerTextEngine.BYPASSED_VERSION);
+    }
+
+    public static FormattedCharSequence markReplaced(FormattedCharSequence seq) {
+        return WordReplacerTextEngine.wrapVersion(seq, cachedSnapshot.version());
+    }
+
+    public static MutableComponent createMarkedLiteral(String text, Style style) {
+        return WordReplacerTextEngine.createMarkedLiteral(text, style, cachedSnapshot.version());
+    }
+
+    public static boolean isComponentMarkedReplaced(Component component) {
+        return WordReplacerTextEngine.isComponentMarkedReplaced(component, cachedSnapshot.version());
     }
 
     public static List<Component> replaceComponentList(List<Component> lines) {

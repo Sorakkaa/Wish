@@ -1,0 +1,11 @@
+name = "wish-cosmetics-worker"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+[triggers]
+crons = ["0 4 * * *"]
+
+[[d1_databases]]
+binding = "COSMETICS_DB"
+database_name = "wish-cosmetics-db"
+database_id = "174f0d64-8afd-4cf9-a91c-7a8eff79f621"

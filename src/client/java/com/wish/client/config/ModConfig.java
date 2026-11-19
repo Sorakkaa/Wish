@@ -61,6 +61,14 @@ public class ModConfig {
 	public boolean playerSizeEnabled = true;
 	public int cosmeticVisibility = 0;
 
+	public int selectedWing = 0;
+	public int selectedHalo = 0;
+	public int selectedParticle = 0;
+	public boolean cosmeticCustomColorEnabled = false;
+	public String cosmeticCustomColor = "#FF55FF";
+	public boolean enableCosmeticAutoSync = true;
+	public String cosmeticSyncApiUrl = "";
+
 	public boolean enablePlayerSpin = false;
 	public float playerSpinSpeedY = 0.00f;
 
@@ -253,6 +261,16 @@ public class ModConfig {
 					} else {
 						INSTANCE.catPawTrailDuration = Math.max(1.0f, Math.min(6.0f, INSTANCE.catPawTrailDuration));
 					}
+					INSTANCE.selectedWing = com.wish.client.features.cosmetic.PlayerCosmeticsManager.clampId(INSTANCE.selectedWing);
+					INSTANCE.selectedHalo = com.wish.client.features.cosmetic.PlayerCosmeticsManager.clampId(INSTANCE.selectedHalo);
+					INSTANCE.selectedParticle = com.wish.client.features.cosmetic.PlayerCosmeticsManager.clampId(INSTANCE.selectedParticle);
+					int parsedCosmeticRgb = (INSTANCE.cosmeticCustomColor != null && INSTANCE.cosmeticCustomColor.startsWith("#") && INSTANCE.cosmeticCustomColor.length() <= 7)
+							? com.wish.client.color.ColorUtils.parseHexRgb(INSTANCE.cosmeticCustomColor, -1)
+							: -1;
+					INSTANCE.cosmeticCustomColor = parsedCosmeticRgb >= 0
+							? com.wish.client.color.ColorUtils.formatHexRgb(parsedCosmeticRgb)
+							: "#FF55FF";
+					INSTANCE.cosmeticSyncApiUrl = INSTANCE.cosmeticSyncApiUrl != null ? INSTANCE.cosmeticSyncApiUrl.trim() : "";
 					if (INSTANCE.ignoredUpdateVersion == null) {
 						INSTANCE.ignoredUpdateVersion = "";
 					} else {
@@ -277,6 +295,7 @@ public class ModConfig {
 	}
 
 	public void save() {
+		com.wish.client.features.cosmetic.CosmeticSyncManager.notifyLocalCosmeticsChanged();
 		synchronized (SAVE_LOCK) {
 			if (pendingSaveTask != null && !pendingSaveTask.isDone()) {
 				pendingSaveTask.cancel(false);

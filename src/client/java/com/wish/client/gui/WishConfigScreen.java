@@ -56,6 +56,7 @@ public class WishConfigScreen extends Screen {
     private static boolean otherPlayersSizeSectionOpen = false;
     private static boolean catPawTrailsSectionOpen = false;
     private final WordReplacerSectionController wordReplacerSection = new WordReplacerSectionController();
+    private final CosmeticSectionController cosmeticSection = new CosmeticSectionController();
 
     private static boolean chatChannelsOpen = false;
     private static boolean funCommandsOpen = false;
@@ -333,7 +334,7 @@ public class WishConfigScreen extends Screen {
         int mainWinH = Math.min(this.height - 80, 360);
         int mainWinY = (this.height - mainWinH) / 2;
         int boxCenterX;
-        if (activeTab != -1 && activeTab != 1 && activeTab != 5) {
+        if (activeTab != -1 && activeTab != 1 && activeTab != 5 && activeTab != 8) {
             int vertX = computeVertX(getBarAnimProgress());
             boxCenterX = vertX + (this.width - vertX) / 2;
         } else {
@@ -473,7 +474,7 @@ public class WishConfigScreen extends Screen {
         int baseVertX = 160;
         int vertX = baseVertX + (int)(65 * barAnim);
 
-        String[] menuCategories = {"Custom Player", "Feature", "Misc Setting"};
+        String[] menuCategories = {"Cosmetic", "Feature", "Misc Setting"};
         int categorySpacing = 38;
         int sidebarStartY = (this.height - (menuCategories.length * categorySpacing)) / 2;
 
@@ -495,10 +496,10 @@ public class WishConfigScreen extends Screen {
             pseudoColor = parseHex(ModConfig.INSTANCE.customHexColor, 0xFFFFFFFF);
         }
 
-        if (openCategoryPopup == 0 && barAnim <= 0.05f && (activeTab == 1 || activeTab == 5)) {
+        if (openCategoryPopup == 0 && barAnim <= 0.05f && (activeTab == 1 || activeTab == 5 || activeTab == 8)) {
             int sliderBoxX = this.width / 2 + 55;
-            int targetCrossX = (activeTab == 5) ? ((vertX + sliderBoxX) / 2 - 20) : (lineX - 120);
-            int targetVisualCenterY = (activeTab == 5) ? (this.height / 2 + 25) : (this.height / 2 + 45);
+            int targetCrossX = (activeTab == 5 || activeTab == 8) ? ((vertX + sliderBoxX) / 2 - 20) : (lineX - 120);
+            int targetVisualCenterY = (activeTab == 5 || activeTab == 8) ? (this.height / 2 + 25) : (this.height / 2 + 45);
 
             int crossX = targetCrossX;
             int visualCenterY = targetVisualCenterY;
@@ -506,7 +507,7 @@ public class WishConfigScreen extends Screen {
             int pseudoW = getPseudoWidth(font, customPseudo);
 
             float skinScale = 1.0f;
-            int baseSize = (activeTab == 5) ? 75 : 45;
+            int baseSize = (activeTab == 5 || activeTab == 8) ? 75 : 45;
             int renderSize = (int)(baseSize * skinScale);
             int absRenderSize = Math.max(1, Math.abs(renderSize));
             int totalHeight = 15 + (int)(absRenderSize * 2.2f);
@@ -520,7 +521,7 @@ public class WishConfigScreen extends Screen {
 
             int pseudoY = skinHeadY - 75;
             boolean pseudoHover = mx >= crossX - pseudoW / 2 - 10 && mx <= crossX + pseudoW / 2 + 10 && my >= pseudoY - 5 && my <= pseudoY + 15;
-            if (activeTab == 5) {
+            if (activeTab == 5 || activeTab == 8) {
                 pseudoHover = false;
                 skinHover = false;
             }
@@ -532,12 +533,20 @@ public class WishConfigScreen extends Screen {
                 g.text(font, "✎", crossX + (int)(skinHalfW * 1.2f), skinHeadY - 45, 0xFFFFFFFF);
             }
 
-            if (activeTab == 5) {
+            if (activeTab == 5 || activeTab == 8) {
                 if (player != null) {
+                    boolean isolatePreviewSize = (activeTab == 8);
+                    if (isolatePreviewSize) {
+                        com.wish.client.features.cosmetic.PlayerCosmeticsManager.beginPreviewIgnoreSize();
+                    }
                     try {
                         net.minecraft.client.gui.screens.inventory.InventoryScreen.extractEntityInInventoryFollowsMouse(g, crossX - skinHalfW * 6, skinHeadY - 100, crossX + skinHalfW * 6, skinFeetY, renderSize, 0.0625F, mx, my, player);
                     } catch (Exception e) {
                         g.text(font, "SKIN", crossX - font.width("SKIN") / 2, skinFeetY - 30, 0xFFFFFFFF);
+                    } finally {
+                        if (isolatePreviewSize) {
+                            com.wish.client.features.cosmetic.PlayerCosmeticsManager.endPreviewIgnoreSize();
+                        }
                     }
                 } else {
                     g.text(font, "SKIN", crossX - font.width("SKIN") / 2, skinFeetY - 30, 0xFFFFFFFF);
@@ -552,7 +561,7 @@ public class WishConfigScreen extends Screen {
             boolean isCategoryActive = false;
             boolean isPopupOpen = false;
             if (i == 0) {
-                isCategoryActive = (activeTab == 1 || activeTab == 5);
+                isCategoryActive = (activeTab == 1 || activeTab == 5 || activeTab == 8);
                 isPopupOpen = (openCategoryPopup == 1);
             } else if (i == 1) {
                 isCategoryActive = (activeTab == 0 || activeTab == 2 || activeTab == 3 || activeTab == 6 || activeTab == 7);
@@ -593,7 +602,7 @@ public class WishConfigScreen extends Screen {
             float tabAnim = 1.0f - (float) Math.pow(1.0f - tabRaw, 3);
             int contentSlideY = (int) ((1.0f - tabAnim) * 12);
 
-            if (activeTab != 1 && activeTab != 5) {
+            if (activeTab != 1 && activeTab != 5 && activeTab != 8) {
 
                 RenderUtils.fillRoundedRect(g, cx - 10, mainWinY, cw + 20, mainWinH, 6, 0x220C0C14);
                 RenderUtils.drawGradientOutline(g, cx - 10, mainWinY, cw + 20, mainWinH, 6, colAccent, colAccent);
@@ -602,7 +611,7 @@ public class WishConfigScreen extends Screen {
                 cw = 320;
                 cx = (this.width - cw) / 2;
                 cy = this.height / 2 - 80;
-            } else if (activeTab == 5) {
+            } else if (activeTab == 5 || activeTab == 8) {
                 cw = 280;
                 cx = this.width / 2 + 55;
                 cy = this.height / 2 - 80;
@@ -616,7 +625,7 @@ public class WishConfigScreen extends Screen {
             RenderUtils.drawGradientOutline(g, closeX, closeY, closeBtnSize, closeBtnSize, 4, 0xFFFF3333, 0x88FF0000);
             g.text(font, "X", closeX + (closeBtnSize - font.width("X"))/2 + 1, closeY + (closeBtnSize - 8)/2, 0xFFFFFFFF);
 
-            if (activeTab != 1 && activeTab != 5) {
+            if (activeTab != 1 && activeTab != 5 && activeTab != 8) {
                 String menuTitle = "";
                 if (activeTab == 0) menuTitle = "COMMAND";
                 else if (activeTab == 2) menuTitle = "DUNGEON";
@@ -1065,6 +1074,10 @@ public class WishConfigScreen extends Screen {
                 RenderUtils.fillRoundedRect(g, scrollTrackX, scrollTrackY, 3, scrollTrackH, 1, 0x22FFFFFF);
                 RenderUtils.fillRoundedRect(g, scrollTrackX, barY, 3, barH, 1, colAccentDim);
             }
+        } else if (activeTab == 8) {
+            int clipTop = py + 24;
+            int clipBottom = py + WIN_H - 10;
+            cosmeticSection.render(g, font, cx, clipTop, cw, clipBottom, mx, my, colAccent, colAccentDim, colHover);
         } else if (activeTab == 2) {
             int hH = 22;
 
@@ -1781,19 +1794,16 @@ public class WishConfigScreen extends Screen {
 
         if (activeSubMenuCategory == 1) {
             int catY = sidebarStartY;
-            int opt1Y = catY - 11;
-            int opt2Y = catY + 11;
+            String[] cosLabels = {"Custom Name", "Player Size", "Cosmetics"};
+            int[] optYs = {catY - 18, catY, catY + 18};
 
-            boolean hov1 = mx >= curOptX - 8 && mx < curOptX + 110 && my >= opt1Y - 6 && my < opt1Y + 16;
-            g.text(font, "Custom Name", curOptX, opt1Y, hov1 ? colHovered : colNormal);
-            if (hov1) {
-                g.text(font, ">", curOptX + font.width("Custom Name") + 5, opt1Y, colArrow);
-            }
-
-            boolean hov2 = mx >= curOptX - 8 && mx < curOptX + 110 && my >= opt2Y - 6 && my < opt2Y + 16;
-            g.text(font, "Player Size", curOptX, opt2Y, hov2 ? colHovered : colNormal);
-            if (hov2) {
-                g.text(font, ">", curOptX + font.width("Player Size") + 5, opt2Y, colArrow);
+            for (int k = 0; k < cosLabels.length; k++) {
+                int y = optYs[k];
+                boolean hov = mx >= curOptX - 8 && mx < curOptX + 110 && my >= y - 6 && my < y + 16;
+                g.text(font, cosLabels[k], curOptX, y, hov ? colHovered : colNormal);
+                if (hov) {
+                    g.text(font, ">", curOptX + font.width(cosLabels[k]) + 5, y, colArrow);
+                }
             }
 
         } else if (activeSubMenuCategory == 2) {
@@ -2132,40 +2142,33 @@ public class WishConfigScreen extends Screen {
 
         float currentBarAnim = getBarAnimProgress();
         if (currentBarAnim > 0.3f && activeSubMenuCategory > 0) {
-            String[] menuCategories = {"Custom Player", "Feature", "Misc Setting"};
+            String[] menuCategories = {"Cosmetic", "Feature", "Misc Setting"};
             int categorySpacing = 38;
             int sidebarStartY = (this.height - (menuCategories.length * categorySpacing)) / 2;
             int optX = 126;
 
             if (activeSubMenuCategory == 1) {
                 int catY = sidebarStartY;
-                int opt1Y = catY - 11;
-                int opt2Y = catY + 11;
+                int[] cosTabs = {1, 5, 8};
+                int[] optYs = {catY - 18, catY, catY + 18};
 
-                if (mx >= optX - 8 && mx < optX + 110 && my >= opt1Y - 6 && my < opt1Y + 16) {
-                    activeTab = 1;
-                    tabTransitionStartTime = System.currentTimeMillis();
-                    setCategoryPopup(0);
-                    hexInputFocused = spoofInputFocused = false; wordReplacerSection.clearFocus();
-                    providerDropdownOpen = false;
-                    cosmeticDropdownOpen = false;
-                    activeVisualDropdown = 0;
-                    pseudoSubWindow = 0;
-                    updateHSBFromConfig();
-                    return true;
-                }
-
-                if (mx >= optX - 8 && mx < optX + 110 && my >= opt2Y - 6 && my < opt2Y + 16) {
-                    activeTab = 5;
-                    tabTransitionStartTime = System.currentTimeMillis();
-                    setCategoryPopup(0);
-                    hexInputFocused = spoofInputFocused = false; wordReplacerSection.clearFocus();
-                    providerDropdownOpen = false;
-                    cosmeticDropdownOpen = false;
-                    activeVisualDropdown = 0;
-                    pseudoSubWindow = 0;
-                    updateHSBFromConfig();
-                    return true;
+                for (int k = 0; k < cosTabs.length; k++) {
+                    int y = optYs[k];
+                    if (mx >= optX - 8 && mx < optX + 110 && my >= y - 6 && my < y + 16) {
+                        activeTab = cosTabs[k];
+                        tabTransitionStartTime = System.currentTimeMillis();
+                        setCategoryPopup(0);
+                        hexInputFocused = spoofInputFocused = false;
+                        wordReplacerSection.clearFocus();
+                        cosmeticSection.clearTransientState();
+                        providerDropdownOpen = false;
+                        cosmeticDropdownOpen = false;
+                        activeVisualDropdown = 0;
+                        pseudoSubWindow = 0;
+                        openColorPopupTarget = COLOR_POPUP_NONE;
+                        updateHSBFromConfig();
+                        return true;
+                    }
                 }
             } else if (activeSubMenuCategory == 2) {
                 int catY = sidebarStartY + categorySpacing;
@@ -2179,7 +2182,9 @@ public class WishConfigScreen extends Screen {
                         activeTab = fTab;
                         tabTransitionStartTime = System.currentTimeMillis();
                         setCategoryPopup(0);
-                        hexInputFocused = spoofInputFocused = false; wordReplacerSection.clearFocus();
+                        hexInputFocused = spoofInputFocused = false;
+                        wordReplacerSection.clearFocus();
+                        cosmeticSection.clearTransientState();
                         providerDropdownOpen = false;
                         cosmeticDropdownOpen = false;
                         activeVisualDropdown = 0;
@@ -2196,7 +2201,7 @@ public class WishConfigScreen extends Screen {
             }
         }
 
-        String[] menuCategories = {"Custom Player", "Feature", "Misc Setting"};
+        String[] menuCategories = {"Cosmetic", "Feature", "Misc Setting"};
         int categorySpacing = 38;
         int sidebarStartY = (this.height - (menuCategories.length * categorySpacing)) / 2;
 
@@ -2293,7 +2298,7 @@ public class WishConfigScreen extends Screen {
         int cx = vertX + spaceRight / 2 - cw / 2;
 
         int cy = py + 40;
-        if (activeTab == 5) {
+        if (activeTab == 5 || activeTab == 8) {
             cw = 280;
             cx = this.width / 2 + 55;
             cy = this.height / 2 - 80;
@@ -2530,6 +2535,12 @@ public class WishConfigScreen extends Screen {
                 return true;
             } cy += 26;
 
+        } else if (activeTab == 8) {
+            int clipTop = py + 24;
+            int clipBottom = py + WIN_H - 10;
+            if (cosmeticSection.handleClick(cx, clipTop, cw, clipBottom, mx, my)) {
+                return true;
+            }
         } else if (activeTab == 2) {
             int hH = 22;
 
@@ -2580,6 +2591,9 @@ public class WishConfigScreen extends Screen {
             int hH = 22;
             if (isHeaderDotClicked(mx, my, cx, cy, cw)) {
                 ModConfig.INSTANCE.enableSlayerCarry = !ModConfig.INSTANCE.enableSlayerCarry;
+                if (!ModConfig.INSTANCE.enableSlayerCarry) {
+                    com.wish.client.features.SlayerCarryManager.reset();
+                }
                 ModConfig.INSTANCE.save();
                 return true;
             } else if (mx >= cx && mx < cx + cw && my >= cy && my < cy + hH) {
@@ -3217,7 +3231,7 @@ public class WishConfigScreen extends Screen {
                         }
                     }
                 }
-            } else if (activeTab == 5) {
+            } else if (activeTab == 5 || activeTab == 8) {
                 cw = 280;
                 cx = this.width / 2 + 55;
             }
@@ -3243,6 +3257,9 @@ public class WishConfigScreen extends Screen {
 
                     int maxScroll = Math.max(0, totalContentH - clipHeight);
                     customPlayerScrollY = Math.max(0, Math.min(maxScroll, customPlayerScrollY - (int)(scrollY * 18)));
+                    return true;
+                } else if (activeTab == 8) {
+                    cosmeticSection.scroll(scrollY, clipHeight);
                     return true;
                 } else if (activeTab == 4) {
                     int totalContentH = ROW_H * 3 + 4 * 3 + 14 + 22 + 10;
@@ -3297,6 +3314,12 @@ public class WishConfigScreen extends Screen {
             playerObj.addProperty("scaleY", ModConfig.INSTANCE.playerSizeEnabled ? ModConfig.INSTANCE.playerSizeY : 1.0f);
             playerObj.addProperty("scaleZ", ModConfig.INSTANCE.playerSizeEnabled ? ModConfig.INSTANCE.playerSizeZ : 1.0f);
             playerObj.addProperty("spinSpeedY", ModConfig.INSTANCE.enablePlayerSpin ? ModConfig.INSTANCE.playerSpinSpeedY : 0.0f);
+            playerObj.addProperty("wing", ModConfig.INSTANCE.selectedWing);
+            playerObj.addProperty("halo", ModConfig.INSTANCE.selectedHalo);
+            playerObj.addProperty("particle", ModConfig.INSTANCE.selectedParticle);
+            if (ModConfig.INSTANCE.cosmeticCustomColorEnabled) {
+                playerObj.addProperty("cosmeticColor", ModConfig.INSTANCE.cosmeticCustomColor);
+            }
 
             com.google.gson.JsonObject root = new com.google.gson.JsonObject();
             root.add(playerUuid, playerObj);

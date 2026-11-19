@@ -157,7 +157,7 @@ public class GuiMixin {
             com.wish.client.features.PrecursorCityLocator.renderWaypoint(guiGraphics, mc, screenW, screenH);
         }
 
-        if (ModConfig.INSTANCE.enableBossSpawnHud) {
+        if (ModConfig.INSTANCE.enableSlayerCarry && ModConfig.INSTANCE.enableBossSpawnHud) {
             var boss = HudStateContainer.getBossSnapshot();
             if (boss.isVisible()) {
                 int padX = 8;

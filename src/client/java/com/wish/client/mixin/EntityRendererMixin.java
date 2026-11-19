@@ -2,11 +2,13 @@ package com.wish.client.mixin;
 
 import com.wish.client.color.NameColorManager;
 import net.minecraft.client.renderer.entity.EntityRenderer;
+import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(value = EntityRenderer.class, priority = 2000)
@@ -19,6 +21,19 @@ public class EntityRendererMixin {
             Component colored = NameColorManager.colorizeText(original);
             if (colored != null) {
                 cir.setReturnValue(colored);
+            }
+        }
+    }
+
+    @Inject(
+        method = "extractRenderState(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/client/renderer/entity/state/EntityRenderState;F)V",
+        at = @At("RETURN")
+    )
+    private void wish$onExtractScoreText(Entity entity, EntityRenderState state, float tickDelta, CallbackInfo ci) {
+        if (state.scoreText != null) {
+            Component colored = NameColorManager.colorizeText(state.scoreText);
+            if (colored != null) {
+                state.scoreText = colored;
             }
         }
     }

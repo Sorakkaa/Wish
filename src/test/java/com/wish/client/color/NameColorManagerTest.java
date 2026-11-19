@@ -281,6 +281,66 @@ class NameColorManagerTest {
         assertEquals(1, countOccurrences(measuredByFont.getString(), "\uE001"));
     }
 
+    @Test
+    void syncedRemoteColorAndFontRenderAcrossChatAndTabWithoutSpoofedName() {
+        ModConfig.INSTANCE.cosmeticVisibility = 0;
+        UUID friendUuid = UUID.fromString("66666666-7777-8888-9999-aaaaaaaaaaaa");
+        CustomPlayerManager.applySyncedBatch(java.util.List.of(
+                new CustomPlayerManager.SyncedCosmeticRecord(
+                        friendUuid,
+                        "SecondAcct",
+                        0, 0, 0, null,
+                        "#FF66CC",
+                        1,
+                        1.0,
+                        "Peach",
+                        1.0f, 1.0f, 1.0f, 0.0f
+                )
+        ));
+
+        Component chat = NameColorManager.colorizeText(Component.literal("[MVP+] SecondAcct: hello"), true, false);
+        assertEquals("[MVP+] SecondAcct: hello", chat.getString());
+        Component acctLeaf = findLeafContaining(chat, "SecondAcct");
+        assertNotNull(acctLeaf);
+        assertNotNull(acctLeaf.getStyle().getColor());
+        assertEquals(0xFF66CC, acctLeaf.getStyle().getColor().getValue());
+        assertTrue(acctLeaf.getStyle().isBold());
+
+        Component tab = NameColorManager.colorizeText(Component.literal("[120] SecondAcct"), false, true);
+        assertEquals("[120] SecondAcct", tab.getString());
+    }
+
+    @Test
+    void localCustomColorOverridesRepoFallbackOnlyWhenConfigured() {
+        UUID localUuid = UUID.fromString("77777777-8888-9999-aaaa-bbbbbbbbbbbb");
+        NameColorManager.setTestLocalPlayer(localUuid, "MainAcct");
+        CustomPlayerManager.CustomPlayerData repoData = new CustomPlayerManager.CustomPlayerData(
+                localUuid, "#AA55FF", 2, 1.0, true, "\uE001", 1.0f, 0.5f, 1.0f, 0.0f
+        );
+        CustomPlayerManager.setTestState(Map.of(localUuid, repoData), Map.of(localUuid, "MainAcct"));
+
+        ModConfig.INSTANCE.cosmeticVisibility = 0;
+        ModConfig.INSTANCE.enableNameColor = true;
+        ModConfig.INSTANCE.pseudoAnimation = 0;
+        ModConfig.INSTANCE.customHexColor = "#FFFFFF";
+        ModConfig.INSTANCE.customHexColor2 = "#FFFFFF";
+        ModConfig.INSTANCE.pseudoFont = 0;
+
+        Component fallback = NameColorManager.colorizeText(Component.literal("[487] MainAcct"), false, true);
+        Component fallbackLeaf = findLeafContaining(fallback, "MainAcct");
+        assertNotNull(fallbackLeaf);
+        assertEquals(0xAA55FF, fallbackLeaf.getStyle().getColor().getValue());
+        assertTrue(fallbackLeaf.getStyle().isItalic());
+
+        ModConfig.INSTANCE.customHexColor = "#00FFAA";
+        ModConfig.INSTANCE.pseudoFont = 1;
+        Component overridden = NameColorManager.colorizeText(Component.literal("[487] MainAcct"), false, true);
+        Component overrideLeaf = findLeafContaining(overridden, "MainAcct");
+        assertNotNull(overrideLeaf);
+        assertEquals(0x00FFAA, overrideLeaf.getStyle().getColor().getValue());
+        assertTrue(overrideLeaf.getStyle().isBold());
+    }
+
     private static int countOccurrences(String text, String needle) {
         int count = 0;
         int index = 0;

@@ -5,6 +5,7 @@
 	"client": [
 		"EntityRendererMixin",
 		"EntityRenderDispatcherMixin",
+		"LivingEntityRendererAccessor",
 		"PlayerRendererMixin",
 		"HumanoidModelMixin",
 		"AvatarRenderStateMixin",
@@ -31,6 +32,8 @@
 		"WeatherEffectRendererMixin",
 		"WeatherRenderStateMixin",
 		"GuiGraphicsExtractorMixin",
+		"GuiTextRenderStateMixin",
+		"MutableComponentMixin",
 		"PlayerInfoMixin",
 		"FontMixin"
 	],

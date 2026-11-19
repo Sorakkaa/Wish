@@ -23,6 +23,16 @@ public class AvatarRenderStateMixin implements ISizeableState {
     private float wish$spinSpeedY = 0.0f;
     @Unique
     private boolean wish$smolPeople = false;
+    @Unique
+    private int wish$wingId = 0;
+    @Unique
+    private int wish$haloId = 0;
+    @Unique
+    private int wish$particleId = 0;
+    @Unique
+    private int wish$cosmeticColorRgb = 0xFF55FF;
+    @Unique
+    private boolean wish$hasCustomCosmeticColor = false;
 
     @Override
     public float wish$getScaleX() {
@@ -90,5 +100,55 @@ public class AvatarRenderStateMixin implements ISizeableState {
     @Override
     public void wish$setSmolPeople(boolean smolPeople) {
         this.wish$smolPeople = smolPeople;
+    }
+
+    @Override
+    public int wish$getWingId() {
+        return wish$wingId;
+    }
+
+    @Override
+    public void wish$setWingId(int wingId) {
+        this.wish$wingId = wingId;
+    }
+
+    @Override
+    public int wish$getHaloId() {
+        return wish$haloId;
+    }
+
+    @Override
+    public void wish$setHaloId(int haloId) {
+        this.wish$haloId = haloId;
+    }
+
+    @Override
+    public int wish$getParticleId() {
+        return wish$particleId;
+    }
+
+    @Override
+    public void wish$setParticleId(int particleId) {
+        this.wish$particleId = particleId;
+    }
+
+    @Override
+    public int wish$getCosmeticColorRgb() {
+        return wish$cosmeticColorRgb;
+    }
+
+    @Override
+    public void wish$setCosmeticColorRgb(int rgb) {
+        this.wish$cosmeticColorRgb = rgb;
+    }
+
+    @Override
+    public boolean wish$hasCustomCosmeticColor() {
+        return wish$hasCustomCosmeticColor;
+    }
+
+    @Override
+    public void wish$setHasCustomCosmeticColor(boolean customColor) {
+        this.wish$hasCustomCosmeticColor = customColor;
     }
 }

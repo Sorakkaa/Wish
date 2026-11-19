@@ -92,6 +92,31 @@ class LyricsVisualMathTest {
         assertTrue(LyricsVisualMath.doAngularBoxesOverlap(-178.0f, 10.0f, 5.0f, 1.6f, 179.0f, 10.0f, 5.0f, 1.6f, 3.5f, 2.5f));
     }
 
+    @Test
+    void phraseTargetPitchClampsCleanlyAboveCrosshair() {
+        assertEquals(-8.0f, LyricsVisualMath.computePhraseTargetPitchDeg(0.0f), 1e-4f);
+        assertEquals(-55.0f, LyricsVisualMath.computePhraseTargetPitchDeg(-85.0f), 1e-4f);
+        assertEquals(12.0f, LyricsVisualMath.computePhraseTargetPitchDeg(70.0f), 1e-4f);
+        assertEquals(-8.0f, LyricsVisualMath.computePhraseTargetPitchDeg(Float.NaN), 1e-4f);
+    }
+
+    @Test
+    void relativeOffsetFromAnglesPreservesDistanceAndMinecraftAxes() {
+        float dist = 10.5f;
+        assertEquals(0.0, LyricsVisualMath.computeRelativeOffsetX(0.0f, 0.0f, dist), 1e-5);
+        assertEquals(0.0, LyricsVisualMath.computeRelativeOffsetY(0.0f, dist), 1e-5);
+        assertEquals(dist, LyricsVisualMath.computeRelativeOffsetZ(0.0f, 0.0f, dist), 1e-5);
+
+        assertEquals(-dist, LyricsVisualMath.computeRelativeOffsetX(90.0f, 0.0f, dist), 1e-5);
+        assertEquals(0.0, LyricsVisualMath.computeRelativeOffsetZ(90.0f, 0.0f, dist), 1e-5);
+
+        double rx = LyricsVisualMath.computeRelativeOffsetX(42.0f, -30.0f, dist);
+        double ry = LyricsVisualMath.computeRelativeOffsetY(-30.0f, dist);
+        double rz = LyricsVisualMath.computeRelativeOffsetZ(42.0f, -30.0f, dist);
+        assertTrue(ry > 0.0, "Negative Minecraft camera pitch looks upward (+Y)");
+        assertEquals(dist * dist, rx * rx + ry * ry + rz * rz, 1e-4);
+    }
+
     private static int luminance(int rgb) {
         return ((rgb >> 16) & 0xFF) + ((rgb >> 8) & 0xFF) + (rgb & 0xFF);
     }

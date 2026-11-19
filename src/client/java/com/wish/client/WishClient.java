@@ -53,6 +53,7 @@ public class WishClient implements ClientModInitializer {
 		ModConfig.load();
 		UpdateManager.checkForUpdates();
 		com.wish.client.color.CustomPlayerManager.init();
+		com.wish.client.features.cosmetic.CosmeticSyncManager.init();
 		GhostBlockManager.init();
 		AutomatonManager.init();
 		com.wish.client.features.visual.LyricsManager.init();
@@ -69,6 +70,7 @@ public class WishClient implements ClientModInitializer {
 			MineshaftPortalManager.onClientTick(mc);
 			CatPawTrailManager.onClientTick(mc);
 			com.wish.client.color.CustomPlayerManager.onClientTick();
+			com.wish.client.features.cosmetic.CosmeticSyncManager.onClientTick(mc);
 			SlayerCarryManager.onClientTick(mc);
 		});
 
@@ -83,12 +85,14 @@ public class WishClient implements ClientModInitializer {
 
 		ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
 			com.wish.client.color.CustomPlayerManager.onPlayerJoin();
+			com.wish.client.features.cosmetic.CosmeticSyncManager.onWorldJoin();
 			UpdateManager.onPlayerJoin(client, handler != null ? handler.getConnection() : null);
 			AutomatonManager.fetchBazaarPricesAsync(false);
 		});
 
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
 			com.wish.client.color.CustomPlayerManager.onDisconnect();
+			com.wish.client.features.cosmetic.CosmeticSyncManager.onDisconnect();
 			UpdateManager.onDisconnect(client, handler != null ? handler.getConnection() : null);
 			LyricsRenderer.onDisconnect();
 			CatPawTrailManager.reset();
@@ -97,6 +101,7 @@ public class WishClient implements ClientModInitializer {
 			MineshaftPortalManager.reset();
 			PrecursorCityLocator.reset();
 			SlayerCarryManager.reset();
+			com.wish.client.features.SlayerOwnBossTracker.INSTANCE.reset();
 			DungeonLagTracker.forceEndRun();
 			JerryModeManager.deactivate();
 			SorakaModeManager.deactivate();
@@ -152,6 +157,7 @@ public class WishClient implements ClientModInitializer {
 			String text = message.getString();
 			if (text != null && !text.contains("[Wish]")) {
 				DungeonLagTracker.onChatMessage(text);
+				SlayerCarryManager.onChatMessage(text);
 				if (ModConfig.INSTANCE.enableMiningAutomaton) {
 					AutomatonManager.onChatMessage(message);
 					if (ModConfig.INSTANCE.enablePrecursorCityScanner) {
@@ -166,6 +172,7 @@ public class WishClient implements ClientModInitializer {
 			String text = message.getString();
 			if (text != null && !text.contains("[Wish]")) {
 				DungeonLagTracker.onChatMessage(text);
+				SlayerCarryManager.onChatMessage(text);
 				if (ModConfig.INSTANCE.enableMiningAutomaton) {
 					AutomatonManager.onChatMessage(message);
 					if (ModConfig.INSTANCE.enablePrecursorCityScanner) {

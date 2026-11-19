@@ -19,4 +19,19 @@ public interface ISizeableState {
 
     boolean wish$isSmolPeople();
     void wish$setSmolPeople(boolean smolPeople);
+
+    int wish$getWingId();
+    void wish$setWingId(int wingId);
+
+    int wish$getHaloId();
+    void wish$setHaloId(int haloId);
+
+    int wish$getParticleId();
+    void wish$setParticleId(int particleId);
+
+    int wish$getCosmeticColorRgb();
+    void wish$setCosmeticColorRgb(int rgb);
+
+    boolean wish$hasCustomCosmeticColor();
+    void wish$setHasCustomCosmeticColor(boolean customColor);
 }

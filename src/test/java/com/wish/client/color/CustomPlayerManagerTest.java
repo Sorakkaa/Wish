@@ -1,5 +1,6 @@
 package com.wish.client.color;
 
+import com.wish.client.features.cosmetic.CosmeticSyncManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -80,5 +81,61 @@ class CustomPlayerManagerTest {
         assertNull(CustomPlayerManager.parseMojangProfileName("{\"name\":\"has space\"}"));
         assertNull(CustomPlayerManager.parseMojangProfileName("{\"name\":\"NameLongerThanSixteenChars\"}"));
         assertNull(CustomPlayerManager.parseMojangProfileName("invalid-json"));
+    }
+
+    @Test
+    void parseJsonAndMergeSyncedCosmeticsPreservesRepositoryBadges() {
+        UUID repoUuid = UUID.fromString("14b458e1-1374-4981-ab21-8bd942449ef7");
+        UUID remoteUuid = UUID.fromString("22222222-2222-2222-2222-222222222222");
+
+        CustomPlayerManager.CustomPlayerData repoPlayer = new CustomPlayerManager.CustomPlayerData(
+                repoUuid, "#FF00AA", 2, 1.0, true, "\uE002", 1.0f, 0.8f, 1.0f, 1.5f
+        );
+        CustomPlayerManager.setTestState(Map.of(repoUuid, repoPlayer), Map.of(repoUuid, "RepoUser"));
+
+        String batchJson = """
+                {
+                  "ok": true,
+                  "players": {
+                    "14b458e1-1374-4981-ab21-8bd942449ef7": {
+                      "username": "RepoUser",
+                      "wing": 2,
+                      "halo": 4,
+                      "particle": 1,
+                      "cosmeticColor": "#00ffaa"
+                    },
+                    "22222222-2222-2222-2222-222222222222": {
+                      "username": "SyncedFriend",
+                      "wing": 25,
+                      "halo": 8,
+                      "particle": 10,
+                      "cosmeticColor": "#112233",
+                      "badge": true
+                    }
+                  }
+                }
+                """;
+
+        int count = CosmeticSyncManager.parseAndApplyBatchResponse(batchJson);
+        assertEquals(2, count);
+
+        CustomPlayerManager.CustomPlayerData mergedRepo = CustomPlayerManager.getPlayer(repoUuid);
+        assertNotNull(mergedRepo);
+        assertTrue(mergedRepo.badge());
+        assertEquals("\uE002", mergedRepo.badgeIcon());
+        assertEquals("#FF00AA", mergedRepo.color());
+        assertEquals(0.8f, mergedRepo.scaleY(), 1e-5f);
+        assertEquals(2, mergedRepo.wingId());
+        assertEquals(4, mergedRepo.haloId());
+        assertEquals(1, mergedRepo.particleId());
+        assertEquals("#00FFAA", mergedRepo.cosmeticColor());
+
+        CustomPlayerManager.CustomPlayerData mergedRemote = CustomPlayerManager.getPlayer(remoteUuid, "SyncedFriend");
+        assertNotNull(mergedRemote);
+        assertFalse(mergedRemote.badge(), "Sync payload must never grant repository badges");
+        assertEquals(10, mergedRemote.wingId(), "Out-of-range wing ID must be clamped to 10");
+        assertEquals(8, mergedRemote.haloId());
+        assertEquals(10, mergedRemote.particleId());
+        assertEquals("#112233", mergedRemote.cosmeticColor());
     }
 }

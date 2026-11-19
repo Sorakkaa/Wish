@@ -4,8 +4,12 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.wish.client.color.CustomPlayerManager;
 import com.wish.client.color.NameColorManager;
 import com.wish.client.config.ModConfig;
+import com.wish.client.features.cosmetic.PlayerCosmeticsLayer;
+import com.wish.client.features.cosmetic.PlayerCosmeticsManager;
 import com.wish.client.util.ISizeableState;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.model.player.PlayerModel;
+import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.player.AvatarRenderer;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.world.entity.Avatar;
@@ -16,6 +20,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(AvatarRenderer.class)
 public class PlayerRendererMixin {
+
+    @SuppressWarnings("unchecked")
+    @Inject(method = "<init>(Lnet/minecraft/client/renderer/entity/EntityRendererProvider$Context;Z)V", at = @At("RETURN"))
+    private void wish$onInit(EntityRendererProvider.Context context, boolean slim, CallbackInfo ci) {
+        ((LivingEntityRendererAccessor<AvatarRenderState, PlayerModel>) this)
+                .wish$invokeAddLayer(new PlayerCosmeticsLayer((AvatarRenderer<?>) (Object) this));
+    }
 
     @Inject(method = "extractRenderState(Lnet/minecraft/world/entity/Avatar;Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;F)V", at = @At("RETURN"))
     private void wish$onExtractRenderState(Avatar entity, AvatarRenderState renderState, float f, CallbackInfo ci) {
@@ -37,27 +48,54 @@ public class PlayerRendererMixin {
         boolean isLocalPlayer = mc.player != null && entity.getId() == mc.player.getId();
         sizeable.wish$setLocalPlayer(isLocalPlayer);
 
-        CustomPlayerManager.CustomPlayerData customData = CustomPlayerManager.getPlayer(entity.getUUID());
+        CustomPlayerManager.CustomPlayerData customData = CustomPlayerManager.getPlayer(entity.getUUID(), entity.getScoreboardName());
         if (customData != null) {
             CustomPlayerManager.observePlayer(entity.getUUID(), entity.getScoreboardName());
         }
         boolean isCustomPlayer = customData != null;
         sizeable.wish$setCustomPlayer(isCustomPlayer);
-        sizeable.wish$setSpinSpeedY(isCustomPlayer ? customData.spinSpeedY() : 0.0f);
+        float spinSpeedY = isCustomPlayer ? customData.spinSpeedY() : 0.0f;
+        if (isLocalPlayer && ModConfig.INSTANCE.enablePlayerSpin) {
+            spinSpeedY = ModConfig.INSTANCE.playerSpinSpeedY;
+        }
+        sizeable.wish$setSpinSpeedY(spinSpeedY);
 
+        PlayerCosmeticsManager.CosmeticLoadout loadout = renderState.isInvisible
+                ? PlayerCosmeticsManager.CosmeticLoadout.NONE
+                : PlayerCosmeticsManager.resolveLoadout(isLocalPlayer, customData, ModConfig.INSTANCE);
+        sizeable.wish$setWingId(loadout.wingId());
+        sizeable.wish$setHaloId(loadout.haloId());
+        sizeable.wish$setParticleId(loadout.particleId());
+        sizeable.wish$setCosmeticColorRgb(loadout.accentRgb());
+        sizeable.wish$setHasCustomCosmeticColor(loadout.customColor());
+
+        boolean ignoreSize = PlayerCosmeticsManager.isPreviewIgnoringSize();
         float scaleX = 1.0f;
         float scaleY = 1.0f;
         float scaleZ = 1.0f;
 
-        if (cosMode != 2 && !(cosMode == 1 && !isLocalPlayer)) {
-            if (isCustomPlayer) {
+        if (!ignoreSize && cosMode != 2 && !(cosMode == 1 && !isLocalPlayer)) {
+            if (isLocalPlayer) {
+                boolean hasLocalModifiedSize = Math.abs(ModConfig.INSTANCE.playerSizeX - 1.0f) > 1e-4f
+                        || Math.abs(ModConfig.INSTANCE.playerSizeY - 1.0f) > 1e-4f
+                        || Math.abs(ModConfig.INSTANCE.playerSizeZ - 1.0f) > 1e-4f;
+                if (!ModConfig.INSTANCE.playerSizeEnabled) {
+                    scaleX = 1.0f;
+                    scaleY = 1.0f;
+                    scaleZ = 1.0f;
+                } else if (hasLocalModifiedSize || !isCustomPlayer) {
+                    scaleX = ModConfig.INSTANCE.playerSizeX;
+                    scaleY = ModConfig.INSTANCE.playerSizeY;
+                    scaleZ = ModConfig.INSTANCE.playerSizeZ;
+                } else {
+                    scaleX = customData.scaleX();
+                    scaleY = customData.scaleY();
+                    scaleZ = customData.scaleZ();
+                }
+            } else if (isCustomPlayer) {
                 scaleX = customData.scaleX();
                 scaleY = customData.scaleY();
                 scaleZ = customData.scaleZ();
-            } else if (isLocalPlayer && ModConfig.INSTANCE.playerSizeEnabled) {
-                scaleX = ModConfig.INSTANCE.playerSizeX;
-                scaleY = ModConfig.INSTANCE.playerSizeY;
-                scaleZ = ModConfig.INSTANCE.playerSizeZ;
             }
         }
         sizeable.wish$setScale(scaleX, scaleY, scaleZ);
@@ -68,7 +106,8 @@ public class PlayerRendererMixin {
                 || Math.abs(entity.getScale() - 1.0f) > 1e-4f;
 
         boolean isRealPlayer = com.wish.client.features.visual.RealPlayerFilter.isRealPlayer(entity, isLocalPlayer);
-        boolean applySmol = ModConfig.INSTANCE.enableOtherPlayersSize
+        boolean applySmol = !ignoreSize
+                && ModConfig.INSTANCE.enableOtherPlayersSize
                 && !hasModifiedScale
                 && isRealPlayer
                 && (!isLocalPlayer || ModConfig.INSTANCE.smolPeopleIncludeSelf);

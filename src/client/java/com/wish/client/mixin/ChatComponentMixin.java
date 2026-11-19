@@ -3,19 +3,51 @@ package com.wish.client.mixin;
 import com.wish.client.color.NameColorManager;
 import com.wish.client.config.ModConfig;
 import com.wish.client.features.SkyblockDetector;
+import com.wish.client.features.visual.WordReplacerManager;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.client.multiplayer.chat.GuiMessageSource;
 import net.minecraft.client.multiplayer.chat.GuiMessageTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MessageSignature;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(value = ChatComponent.class, priority = 2000)
-public class ChatComponentMixin {
+public abstract class ChatComponentMixin {
+
+    @Unique
+    private long wish$lastWordReplacerVersion = WordReplacerManager.getVersion();
+
+    @Shadow
+    public abstract void rescaleChat();
+
+    @Inject(
+            method = "extractRenderState(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/gui/Font;IIILnet/minecraft/client/gui/components/ChatComponent$DisplayMode;Z)V",
+            at = @At("HEAD")
+    )
+    private void wish$syncChatOnWordReplacerChange(
+            GuiGraphicsExtractor gui,
+            Font font,
+            int currentTick,
+            int mouseX,
+            int mouseY,
+            ChatComponent.DisplayMode displayMode,
+            boolean focused,
+            CallbackInfo ci
+    ) {
+        long ver = WordReplacerManager.getVersion();
+        if (wish$lastWordReplacerVersion != ver) {
+            wish$lastWordReplacerVersion = ver;
+            this.rescaleChat();
+        }
+    }
 
     @ModifyVariable(
             method = "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;Lnet/minecraft/client/multiplayer/chat/GuiMessageSource;Lnet/minecraft/client/multiplayer/chat/GuiMessageTag;)V",

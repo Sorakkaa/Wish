@@ -98,6 +98,15 @@ public class NameColorManager {
         return localName != null && localName.equalsIgnoreCase(name);
     }
 
+    public static boolean hasLocalCustomColorConfigured(ModConfig cfg) {
+        if (cfg == null) {
+            return false;
+        }
+        return cfg.pseudoAnimation != 0
+                || !"#FFFFFF".equalsIgnoreCase(cfg.customHexColor)
+                || !"#FFFFFF".equalsIgnoreCase(cfg.customHexColor2);
+    }
+
     public static String getColorForPlayer(UUID uuid, String name) {
         int cosMode = ModConfig.INSTANCE.cosmeticVisibility;
         if (cosMode == 2) return null;
@@ -113,11 +122,20 @@ public class NameColorManager {
         if (customData == null && isLocal && localUuid != null) {
             customData = CustomPlayerManager.getPlayer(localUuid);
         }
-        if (customData != null && customData.color() != null && !customData.color().isEmpty()) {
+        if (isLocal) {
+            if (!ModConfig.INSTANCE.enableNameColor) {
+                return "";
+            }
+            if (hasLocalCustomColorConfigured(ModConfig.INSTANCE)
+                    || customData == null
+                    || customData.color() == null
+                    || customData.color().isEmpty()) {
+                return getCurrentColorCode();
+            }
             return customData.color();
         }
-        if (isLocal) {
-            return ModConfig.INSTANCE.enableNameColor ? getCurrentColorCode() : "";
+        if (customData != null && customData.color() != null && !customData.color().isEmpty()) {
+            return customData.color();
         }
         return null;
     }
@@ -593,10 +611,14 @@ public class NameColorManager {
     private static net.minecraft.network.chat.Style applyCustomFont(net.minecraft.network.chat.Style st, String nameLower) {
         var mc = getMinecraftOrNull();
         String canonicalLower = resolveCanonicalLower(nameLower);
+        boolean isLocal = isLocalPlayerName(mc, canonicalLower);
         CustomPlayerManager.CustomPlayerData customData = resolveCustomPlayer(mc, canonicalLower);
+        if (isLocal && ModConfig.INSTANCE.pseudoFont != 0) {
+            return applyFontBitmask(st, ModConfig.INSTANCE.pseudoFont);
+        }
         if (customData != null) {
             return applyFontBitmask(st, customData.font());
-        } else if (isLocalPlayerName(mc, canonicalLower)) {
+        } else if (isLocal) {
             return applyFontBitmask(st, ModConfig.INSTANCE.pseudoFont);
         }
         return st;
@@ -644,6 +666,10 @@ public class NameColorManager {
             for (CustomPlayerManager.ResolvedCustomPlayer rp : CustomPlayerManager.getResolvedPlayers()) {
                 CustomPlayerManager.CustomPlayerData cp = rp.data();
                 String liveName = rp.liveName();
+                if ((localUuid != null && localUuid.equals(cp.uuid()))
+                        || (localName != null && localName.equalsIgnoreCase(liveName))) {
+                    continue;
+                }
                 String liveLower = liveName.toLowerCase(Locale.ROOT);
                 String col = (cp.color() != null && !cp.color().isEmpty())
                         ? cp.color()
@@ -662,20 +688,18 @@ public class NameColorManager {
             String localColor = "";
             boolean hasSpoofConfigured = cfg.spoofedName != null && !cfg.spoofedName.trim().isEmpty();
 
-            if (localCustom != null) {
-                if (localCustom.color() != null && !localCustom.color().isEmpty()) {
-                    localColor = localCustom.color();
-                } else if (cfg.enableNameColor) {
-                    localColor = getCurrentColorCode();
-                } else if (localCustom.font() != 0 || localCustom.badge() || hasSpoofConfigured || cfg.pseudoFont != 0) {
+            if (!cfg.enableNameColor) {
+                if ((localCustom != null && (localCustom.font() != 0 || localCustom.badge()))
+                        || hasSpoofConfigured || cfg.pseudoFont != 0) {
                     localColor = "PLAIN";
                 }
+            } else if (hasLocalCustomColorConfigured(cfg)
+                    || localCustom == null
+                    || localCustom.color() == null
+                    || localCustom.color().isEmpty()) {
+                localColor = getCurrentColorCode();
             } else {
-                if (cfg.enableNameColor) {
-                    localColor = getCurrentColorCode();
-                } else if (hasSpoofConfigured || cfg.pseudoFont != 0) {
-                    localColor = "PLAIN";
-                }
+                localColor = localCustom.color();
             }
 
             if (!targetNames.contains(localName)) targetNames.add(localName);
@@ -776,6 +800,12 @@ public class NameColorManager {
         }
     }
 
+    private static net.minecraft.network.chat.MutableComponent createLiteral(String text) {
+        return WordReplacerManager.isEnabled()
+                ? WordReplacerManager.createMarkedLiteral(text, net.minecraft.network.chat.Style.EMPTY)
+                : net.minecraft.network.chat.Component.literal(text);
+    }
+
     private static net.minecraft.network.chat.Component recursivelyModify(
             net.minecraft.network.chat.Component component,
             java.util.List<String> targetNames,
@@ -849,7 +879,7 @@ public class NameColorManager {
             String rawText = (coalescedChanged && coalescedSelfText != null) ? coalescedSelfText : plain.text();
             if (coalescedChanged && coalescedSelfText != null && !coalescedSelfText.equals(plain.text())) {
                 selfChanged = true;
-                newSelf = net.minecraft.network.chat.Component.literal(rawText).withStyle(component.getStyle());
+                newSelf = createLiteral(rawText).withStyle(component.getStyle());
             }
             if (rawText != null && !rawText.isEmpty()) {
                 if (!originalSiblings.isEmpty()) {
@@ -885,7 +915,7 @@ public class NameColorManager {
 
                 if (!text.equals(rawText)) {
                     selfChanged = true;
-                    newSelf = net.minecraft.network.chat.Component.literal(text).withStyle(component.getStyle());
+                    newSelf = createLiteral(text).withStyle(component.getStyle());
                 }
 
                 ComponentTextMatcher.TargetSpanMatch spanMatch = ComponentTextMatcher.findFirstTargetMatch(text, targetNames);
@@ -898,9 +928,10 @@ public class NameColorManager {
                     boolean isLocal = isLocalPlayerName(mc, canonicalLower);
                     CustomPlayerManager.CustomPlayerData customData = resolveCustomPlayer(mc, canonicalLower);
                     boolean hasSpoof = isLocal && ModConfig.INSTANCE.spoofedName != null && !ModConfig.INSTANCE.spoofedName.trim().isEmpty();
+                    boolean isWordReplacerAlias = !nameLower.equals(canonicalLower);
                     if ((colorCode != null && !colorCode.isEmpty()) || hasSpoof) {
                         selfChanged = true;
-                        String originalCaseName = hasSpoof ? ModConfig.INSTANCE.spoofedName.trim() : spanMatch.matchedCleanName();
+                        String originalCaseName = (hasSpoof && !isWordReplacerAlias) ? ModConfig.INSTANCE.spoofedName.trim() : spanMatch.matchedCleanName();
                         String before = spanMatch.before();
                         String plainTrailingColors = getLastColors(before);
 
@@ -969,7 +1000,9 @@ public class NameColorManager {
 
                             String normHex = normalizeHex(colorCode);
                             String finalBefore = cleanBefore;
-                            int effectiveFont = isCustomUser ? customData.font() : (isLocal ? ModConfig.INSTANCE.pseudoFont : 0);
+                            int effectiveFont = isLocal
+                                    ? (ModConfig.INSTANCE.pseudoFont != 0 ? ModConfig.INSTANCE.pseudoFont : (isCustomUser ? customData.font() : 0))
+                                    : (isCustomUser ? customData.font() : 0);
                             boolean keepBold = (effectiveFont & 1) != 0;
                             boolean keepItalic = (effectiveFont & 2) != 0;
                             if (!keepBold) finalBefore = BOLD_CODE_PATTERN.matcher(finalBefore).replaceAll("");
@@ -979,12 +1012,12 @@ public class NameColorManager {
                             if (!keepItalic) finalAfter = ITALIC_CODE_PATTERN.matcher(finalAfter).replaceAll("");
 
                             if (colorCode == null || colorCode.isEmpty() || "PLAIN".equalsIgnoreCase(colorCode)) {
-                                net.minecraft.network.chat.MutableComponent builder = net.minecraft.network.chat.Component.literal("");
+                                net.minecraft.network.chat.MutableComponent builder = createLiteral("");
                                 appendPrefixAndBadge(builder, finalBefore, addBadge, badgeCode);
                                 net.minecraft.network.chat.Style st = applyTrailingLegacyColors(net.minecraft.network.chat.Style.EMPTY, plainTrailingColors, keepBold, keepItalic);
                                 st = applyCustomFont(st, canonicalLower);
-                                builder.append(net.minecraft.network.chat.Component.literal(originalCaseName).withStyle(st));
-                                if (!finalAfter.isEmpty()) builder.append(net.minecraft.network.chat.Component.literal(finalAfter));
+                                builder.append(createLiteral(originalCaseName).withStyle(st));
+                                if (!finalAfter.isEmpty()) builder.append(createLiteral(finalAfter));
                                 newSelf = builder.withStyle(component.getStyle());
                             } else {
 
@@ -995,7 +1028,7 @@ public class NameColorManager {
 
                             if (isAnimatedColorCode(colorCode)) {
                                 String cleanAnimatedName = BOLD_OR_ITALIC_CODE_PATTERN.matcher(originalCaseName).replaceAll("");
-                                net.minecraft.network.chat.MutableComponent builder = net.minecraft.network.chat.Component.literal("");
+                                net.minecraft.network.chat.MutableComponent builder = createLiteral("");
                                 appendPrefixAndBadge(builder, finalBefore, addBadge, badgeCode);
                                 appendAnimatedNameCharacters(
                                         builder,
@@ -1005,37 +1038,37 @@ public class NameColorManager {
                                         System.currentTimeMillis(),
                                         canonicalLower
                                 );
-                                if (!finalAfter.isEmpty()) builder.append(net.minecraft.network.chat.Component.literal(finalAfter));
+                                if (!finalAfter.isEmpty()) builder.append(createLiteral(finalAfter));
                                 newSelf = builder.withStyle(component.getStyle());
                             } else if (normHex != null) {
                                 try {
                                     int hexInt = Integer.parseInt(normHex.substring(1), 16);
                                     net.minecraft.network.chat.TextColor tc = net.minecraft.network.chat.TextColor.fromRgb(hexInt);
-                                    net.minecraft.network.chat.MutableComponent builder = net.minecraft.network.chat.Component.literal("");
+                                    net.minecraft.network.chat.MutableComponent builder = createLiteral("");
                                     appendPrefixAndBadge(builder, finalBefore, addBadge, badgeCode);
                                     String justName = BOLD_OR_ITALIC_CODE_PATTERN.matcher(originalCaseName).replaceAll("");
                                     net.minecraft.network.chat.Style st = applyCustomFont(net.minecraft.network.chat.Style.EMPTY.withColor(tc), canonicalLower);
-                                    builder.append(net.minecraft.network.chat.Component.literal(justName).withStyle(st));
-                                    if (!finalAfter.isEmpty()) builder.append(net.minecraft.network.chat.Component.literal(finalAfter));
+                                    builder.append(createLiteral(justName).withStyle(st));
+                                    if (!finalAfter.isEmpty()) builder.append(createLiteral(finalAfter));
                                     newSelf = builder.withStyle(component.getStyle());
                                 } catch (Exception ignored) {}
                             } else {
                                 net.minecraft.ChatFormatting fmt = net.minecraft.ChatFormatting.getByCode(colorCode.length() > 1 ? colorCode.charAt(1) : 'r');
                                 if (fmt != null) {
                                     net.minecraft.network.chat.TextColor tc = net.minecraft.network.chat.TextColor.fromLegacyFormat(fmt);
-                                    net.minecraft.network.chat.MutableComponent builder = net.minecraft.network.chat.Component.literal("");
+                                    net.minecraft.network.chat.MutableComponent builder = createLiteral("");
                                     appendPrefixAndBadge(builder, finalBefore, addBadge, badgeCode);
                                     String justName = BOLD_OR_ITALIC_CODE_PATTERN.matcher(originalCaseName).replaceAll("");
                                     net.minecraft.network.chat.Style st = applyCustomFont(net.minecraft.network.chat.Style.EMPTY.withColor(tc), canonicalLower);
-                                    builder.append(net.minecraft.network.chat.Component.literal(justName).withStyle(st));
-                                    if (!finalAfter.isEmpty()) builder.append(net.minecraft.network.chat.Component.literal(finalAfter));
+                                    builder.append(createLiteral(justName).withStyle(st));
+                                    if (!finalAfter.isEmpty()) builder.append(createLiteral(finalAfter));
                                     newSelf = builder.withStyle(component.getStyle());
                                 }
                             }
                             }
                         } else if (!text.equals(rawText)) {
                             selfChanged = true;
-                            newSelf = net.minecraft.network.chat.Component.literal(text).withStyle(component.getStyle());
+                            newSelf = createLiteral(text).withStyle(component.getStyle());
                         }
                     }
                 }
@@ -1068,9 +1101,9 @@ public class NameColorManager {
                         int sIdx = nextStr.indexOf("'s");
                         if (sIdx == -1) sIdx = nextStr.indexOf("'S");
                         if (sIdx != -1) {
-                            net.minecraft.network.chat.MutableComponent mergedCur = net.minecraft.network.chat.Component.literal(curStr + nextStr.substring(sIdx, sIdx + 2)).withStyle(curSib.getStyle());
+                            net.minecraft.network.chat.MutableComponent mergedCur = createLiteral(curStr + nextStr.substring(sIdx, sIdx + 2)).withStyle(curSib.getStyle());
                             for (net.minecraft.network.chat.Component ch : curSib.getSiblings()) mergedCur.append(ch);
-                            net.minecraft.network.chat.MutableComponent trimmedNext = net.minecraft.network.chat.Component.literal(nextStr.substring(sIdx + 2)).withStyle(nextSib.getStyle());
+                            net.minecraft.network.chat.MutableComponent trimmedNext = createLiteral(nextStr.substring(sIdx + 2)).withStyle(nextSib.getStyle());
                             for (net.minecraft.network.chat.Component ch : nextSib.getSiblings()) trimmedNext.append(ch);
                             originalSiblings.set(i, mergedCur);
                             originalSiblings.set(i + 1, trimmedNext);
@@ -1288,6 +1321,10 @@ public class NameColorManager {
         if (cosMode == 0) {
             for (CustomPlayerManager.ResolvedCustomPlayer rp : CustomPlayerManager.getResolvedPlayers()) {
                 CustomPlayerManager.CustomPlayerData cp = rp.data();
+                if ((localUuid != null && localUuid.equals(cp.uuid()))
+                        || (localName != null && localName.equalsIgnoreCase(rp.liveName()))) {
+                    continue;
+                }
                 String col = (cp.color() != null && !cp.color().isEmpty())
                         ? cp.color()
                         : ((cp.font() != 0 || cp.badge()) ? "PLAIN" : "");
