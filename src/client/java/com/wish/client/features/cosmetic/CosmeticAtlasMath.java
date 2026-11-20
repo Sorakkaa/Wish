@@ -3,7 +3,7 @@ package com.wish.client.features.cosmetic;
 public final class CosmeticAtlasMath {
     public static final int CELL_SIZE = 128;
     public static final int COLUMNS = 4;
-    public static final int ROWS = 3;
+    public static final int ROWS = 4;
     public static final int ATLAS_WIDTH = COLUMNS * CELL_SIZE;
     public static final int ATLAS_HEIGHT = ROWS * CELL_SIZE;
     public static final int CELL_COUNT = COLUMNS * ROWS;
@@ -20,6 +20,10 @@ public final class CosmeticAtlasMath {
     public static final int CELL_SNOWFLAKE = 9;
     public static final int CELL_LIGHTNING = 10;
     public static final int CELL_DIAMOND = 11;
+    public static final int CELL_EMBER = 12;
+    public static final int CELL_CRESCENT = 13;
+    public static final int CELL_RING_RUNE = 14;
+    public static final int CELL_STAR_4PT = 15;
 
     public static final float SOLID_WHITE_U = 0.5f / COLUMNS;
     public static final float SOLID_WHITE_V = 1.5f / ROWS;
@@ -62,96 +66,106 @@ public final class CosmeticAtlasMath {
             case CELL_SNOWFLAKE -> sampleSnowflakeArgb(u, v);
             case CELL_LIGHTNING -> sampleLightningArgb(u, v);
             case CELL_DIAMOND -> sampleDiamondArgb(u, v);
+            case CELL_EMBER -> sampleEmberArgb(u, v);
+            case CELL_CRESCENT -> sampleCrescentArgb(u, v);
+            case CELL_RING_RUNE -> sampleRingRuneArgb(u, v);
+            case CELL_STAR_4PT -> sampleStar4PtArgb(u, v);
             default -> 0;
         };
         return argbToAbgr(argb);
     }
 
     private static int sampleFeatherBladeArgb(float u, float v) {
-        float center = 0.50f + 0.035f * (float) Math.sin(v * Math.PI);
-        float tipMask = smoothstep(0.98f, 0.88f, v);
-        float rootMask = smoothstep(0.01f, 0.08f, v);
-        float arch = (float) Math.sin(Math.pow(clamp01(v), 0.72) * Math.PI);
-        float halfW = 0.08f + 0.37f * arch;
-        float dist = Math.abs(u - center);
-        float mask = smoothstep(halfW, halfW - 0.04f, dist) * tipMask * rootMask;
-        if (mask <= 0.01f) {
+        int gx = Math.min(31, Math.max(0, (int) (u * 32.0f)));
+        int gy = Math.min(31, Math.max(0, (int) (v * 32.0f)));
+        float qu = (gx + 0.5f) / 32.0f;
+        float qv = (gy + 0.5f) / 32.0f;
+        if (gy == 0 || gy == 31) {
             return 0;
         }
-
-        float shaft = smoothstep(0.045f * (1.0f - v * 0.55f), 0.010f, dist);
-        float barbCoord = v * 26.0f - dist * 18.0f;
-        float barbShading = 0.86f + 0.14f * (float) Math.sin(barbCoord * Math.PI * 2.0f);
-
-        float lum = Math.min(1.0f, barbShading * (0.90f + shaft * 0.14f));
-        float alpha = clamp01(mask * (0.97f - v * 0.04f));
+        float arch = (float) Math.sin(Math.pow(clamp01(qv), 0.72) * Math.PI);
+        float halfW = 0.09f + 0.36f * arch;
+        float dist = Math.abs(qu - 0.50f);
+        if (dist > halfW) {
+            return 0;
+        }
+        boolean border = (halfW - dist) < 0.045f || gy == 1 || gy == 30;
+        boolean quill = dist < 0.038f;
+        boolean barb = ((gx + gy * 2) % 5 == 0) && dist > 0.06f;
+        float dither = (((gx + gy) & 1) == 0) ? 0.04f : -0.04f;
+        float lum = border ? 0.50f : (quill ? 1.0f : (barb ? 0.78f : clamp01(0.88f + dither)));
         int c = clampByte(lum * 255.0f);
-        int a = clampByte(alpha * 255.0f);
-        return (a << 24) | (c << 16) | (c << 8) | c;
+        return (0xFF << 24) | (c << 16) | (c << 8) | c;
     }
 
     private static int sampleBatMembraneArgb(float u, float v) {
-        float archBottom = 0.96f - 0.28f * (float) Math.sin(Math.PI * u);
-        float bottomMask = smoothstep(archBottom, archBottom - 0.045f, v);
-        if (bottomMask <= 0.01f) {
+        int gx = Math.min(31, Math.max(0, (int) (u * 32.0f)));
+        int gy = Math.min(31, Math.max(0, (int) (v * 32.0f)));
+        float qu = (gx + 0.5f) / 32.0f;
+        float qv = (gy + 0.5f) / 32.0f;
+
+        float jag = (gx % 4 == 0) ? 0.032f : 0.0f;
+        float archBottom = 0.96f - 0.30f * (float) Math.sin(Math.PI * qu) - jag;
+        if (qv > archBottom) {
             return 0;
         }
 
-        float archRim = smoothstep(0.065f, 0.0f, Math.abs(archBottom - 0.02f - v));
-        float veinA = smoothstep(0.032f, 0.006f, Math.abs(v - (0.16f + u * 0.44f)));
-        float veinB = smoothstep(0.032f, 0.006f, Math.abs(v - (0.58f - u * 0.40f)));
-        float grain = 0.78f + 0.10f * (float) Math.sin(u * Math.PI * 3.0f) * (1.0f - v);
-        float lum = Math.min(1.0f, grain + archRim * 0.24f + Math.max(veinA, veinB) * 0.16f);
-        float alpha = clamp01(bottomMask * Math.min(1.0f, 0.94f + archRim * 0.06f));
-
+        boolean bottomRim = (archBottom - qv) < 0.055f;
+        boolean veinA = Math.abs(qv - (0.18f + qu * 0.44f)) < 0.030f;
+        boolean veinB = Math.abs(qv - (0.56f - qu * 0.38f)) < 0.030f;
+        float dither = (((gx + gy) & 1) == 0) ? 0.045f : -0.045f;
+        float shade = 0.72f + 0.24f * clamp01(qv / Math.max(0.1f, archBottom)) + dither;
+        float lum = bottomRim ? 0.46f : ((veinA || veinB) ? Math.min(1.0f, shade + 0.16f) : clamp01(shade));
         int c = clampByte(lum * 255.0f);
-        int a = clampByte(alpha * 255.0f);
-        return (a << 24) | (c << 16) | (c << 8) | c;
+        return (0xFF << 24) | (c << 16) | (c << 8) | c;
     }
 
     private static int sampleButterflyLobeArgb(float u, float v) {
-        float dx = Math.max(0.0f, u);
-        float dy = v - 0.50f;
+        int gx = Math.min(31, Math.max(0, (int) (u * 32.0f)));
+        int gy = Math.min(31, Math.max(0, (int) (v * 32.0f)));
+        float qu = (gx + 0.5f) / 32.0f;
+        float qv = (gy + 0.5f) / 32.0f;
+
+        float dx = Math.max(0.0f, qu);
+        float dy = qv - 0.50f;
         float spanV = 0.28f + 0.20f * (float) Math.sin(clamp01(dx / 0.94f) * Math.PI * 0.72);
         float angle = (float) Math.atan2(dy, dx + 0.16f);
         float rNorm = (float) Math.sqrt((dx / 0.94f) * (dx / 0.94f) * 0.65f + (dy / spanV) * (dy / spanV) * 0.92f);
         float border = 1.0f + 0.045f * (float) Math.cos(angle * 10.0f);
-        float mask = smoothstep(border, border - 0.055f, rNorm);
-        if (mask <= 0.01f) {
+        if (rNorm > border) {
             return 0;
         }
 
-        float veins = Math.abs((float) Math.sin(angle * 7.5f));
-        float veinShade = smoothstep(0.95f, 0.84f, veins) * 0.30f + 0.70f;
-        float rimBand = smoothstep(border * 0.74f, border * 0.86f, rNorm) * smoothstep(border, border * 0.90f, rNorm);
-        float pearls = (rimBand > 0.25f && Math.cos(angle * 10.0f) > 0.35f) ? 0.30f : 0.0f;
-        float innerGlow = (1.0f - clamp01(rNorm / border)) * 0.24f;
-
-        float lum = Math.min(1.0f, (0.80f + innerGlow + pearls) * veinShade);
-        float alpha = clamp01(mask * (0.90f + innerGlow * 0.15f + pearls * 0.10f));
+        boolean outerRim = rNorm > border * 0.88f;
+        boolean vein = Math.abs((float) Math.sin(angle * 7.5f)) > 0.90f;
+        boolean pearlSpot = !outerRim && rNorm > border * 0.72f && Math.cos(angle * 10.0f) > 0.45f;
+        float dither = (((gx + gy) & 1) == 0) ? 0.04f : -0.04f;
+        float lum = outerRim ? 0.44f : (pearlSpot ? 1.0f : (vein ? 0.62f : clamp01(0.86f + (1.0f - rNorm) * 0.14f + dither)));
         int c = clampByte(lum * 255.0f);
-        int a = clampByte(alpha * 255.0f);
-        return (a << 24) | (c << 16) | (c << 8) | c;
+        return (0xFF << 24) | (c << 16) | (c << 8) | c;
     }
 
     private static int sampleEnergyBladeArgb(float u, float v) {
-        float rootTaper = smoothstep(0.0f, 0.10f, u);
-        float tipTaper = smoothstep(1.0f, 0.62f, u);
-        float halfW = 0.08f + 0.35f * Math.min(rootTaper, tipTaper);
-        float distV = Math.abs(v - 0.5f);
-        float shape = smoothstep(halfW, halfW - 0.05f, distV) * smoothstep(0.0f, 0.04f, u) * smoothstep(1.0f, 0.94f, u);
-        if (shape <= 0.01f) {
+        int gx = Math.min(31, Math.max(0, (int) (u * 32.0f)));
+        int gy = Math.min(31, Math.max(0, (int) (v * 32.0f)));
+        float qu = (gx + 0.5f) / 32.0f;
+        float qv = (gy + 0.5f) / 32.0f;
+        if (gx == 0 || gx == 31) {
             return 0;
         }
-
-        float core = smoothstep(halfW * 0.42f, 0.0f, distV);
-        float rim = smoothstep(halfW * 0.70f, halfW * 0.94f, distV);
-        float circuit = (Math.abs((u * 10.0f) % 1.0f - 0.5f) < 0.08f) ? 0.12f : 0.0f;
-        float lum = Math.min(1.0f, 0.72f + core * 0.28f + rim * 0.18f + circuit);
-        float alpha = clamp01(shape * (0.86f + core * 0.14f));
+        float rootTaper = clamp01(qu / 0.12f);
+        float tipTaper = clamp01((1.0f - qu) / 0.36f);
+        float halfW = 0.08f + 0.36f * Math.min(rootTaper, tipTaper);
+        float distV = Math.abs(qv - 0.5f);
+        if (distV > halfW) {
+            return 0;
+        }
+        boolean rim = (halfW - distV) < 0.045f;
+        boolean core = distV < halfW * 0.38f;
+        boolean notch = (gx % 6 == 0) && distV > halfW * 0.55f;
+        float lum = core ? 1.0f : (rim ? 0.58f : (notch ? 0.95f : 0.80f));
         int c = clampByte(lum * 255.0f);
-        int a = clampByte(alpha * 255.0f);
-        return (a << 24) | (c << 16) | (c << 8) | c;
+        return (0xFF << 24) | (c << 16) | (c << 8) | c;
     }
 
     private static int sampleOrbArgb(float u, float v) {
@@ -312,6 +326,52 @@ public final class CosmeticAtlasMath {
         int c = clampByte(lum * 255.0f);
         int a = clampByte(alpha * 255.0f);
         return (a << 24) | (c << 16) | (c << 8) | c;
+    }
+
+    private static int sampleEmberArgb(float u, float v) {
+        float px = (u - 0.5f) * 2.0f;
+        float py = (v - 0.5f) * 2.0f;
+        float w = 0.42f * clamp01(1.0f - (0.35f - py) * 0.65f);
+        float dBody = (float) Math.sqrt((px / Math.max(0.08f, w)) * (px / Math.max(0.08f, w)) + ((py - 0.14f) / 0.58f) * ((py - 0.14f) / 0.58f));
+        float wave = 0.08f * (float) Math.sin(py * 8.0f + px * 3.0f);
+        float tip = smoothstep(0.95f, 0.25f, dBody + wave);
+        float core = smoothstep(0.55f, 0.0f, (float) Math.sqrt(px * px + (py - 0.22f) * (py - 0.22f)));
+        float alpha = clamp01(tip * 0.92f + core * 0.35f);
+        int c = clampByte((0.78f + 0.22f * core) * 255.0f);
+        return (clampByte(alpha * 255.0f) << 24) | (c << 16) | (c << 8) | c;
+    }
+
+    private static int sampleCrescentArgb(float u, float v) {
+        float px = (u - 0.5f) * 2.0f;
+        float py = (v - 0.5f) * 2.0f;
+        float dOuter = (float) Math.sqrt(px * px + py * py);
+        float dInner = (float) Math.sqrt((px - 0.26f) * (px - 0.26f) + (py + 0.10f) * (py + 0.10f));
+        float mask = smoothstep(0.76f, 0.68f, dOuter) * smoothstep(0.46f, 0.56f, dInner);
+        float lum = 0.85f + 0.15f * smoothstep(0.68f, 0.50f, dOuter);
+        int c = clampByte(lum * 255.0f);
+        return (clampByte(mask * 255.0f) << 24) | (c << 16) | (c << 8) | c;
+    }
+
+    private static int sampleRingRuneArgb(float u, float v) {
+        float px = (u - 0.5f) * 2.0f;
+        float py = (v - 0.5f) * 2.0f;
+        float r = (float) Math.sqrt(px * px + py * py);
+        float ring = smoothstep(0.11f, 0.03f, Math.abs(r - 0.56f));
+        float diag1 = smoothstep(0.08f, 0.02f, Math.abs(px - py)) * smoothstep(0.62f, 0.50f, r);
+        float diag2 = smoothstep(0.08f, 0.02f, Math.abs(px + py)) * smoothstep(0.62f, 0.50f, r);
+        float center = smoothstep(0.22f, 0.04f, r);
+        float alpha = clamp01(Math.max(ring, Math.max(diag1, Math.max(diag2, center))));
+        return (clampByte(alpha * 255.0f) << 24) | 0x00FFFFFF;
+    }
+
+    private static int sampleStar4PtArgb(float u, float v) {
+        float px = Math.abs((u - 0.5f) * 2.0f);
+        float py = Math.abs((v - 0.5f) * 2.0f);
+        float arm = (float) Math.pow(px, 0.55) + (float) Math.pow(py, 0.55);
+        float mask = smoothstep(0.92f, 0.72f, arm);
+        float core = smoothstep(0.32f, 0.0f, (float) Math.sqrt(px * px + py * py));
+        float alpha = clamp01(Math.max(mask, core));
+        return (clampByte(alpha * 255.0f) << 24) | 0x00FFFFFF;
     }
 
     private static float pointToSegmentDist(float px, float py, float ax, float ay, float bx, float by) {

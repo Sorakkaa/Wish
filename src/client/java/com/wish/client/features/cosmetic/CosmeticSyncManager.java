@@ -9,24 +9,35 @@ import com.wish.client.color.ColorUtils;
 import com.wish.client.color.CustomPlayerManager;
 import com.wish.client.color.NameColorManager;
 import com.wish.client.config.ModConfig;
+import com.wish.client.features.visual.RealPlayerFilter;
 import com.wish.client.util.HttpClientUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.User;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.client.multiplayer.ProfileKeyPairManager;
 import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.world.entity.player.ProfileKeyPair;
+import net.minecraft.world.entity.player.ProfilePublicKey;
 
 import java.math.BigInteger;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.security.SecureRandom;
+import java.security.Signature;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -45,12 +56,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class CosmeticSyncManager {
     private static final String MOJANG_JOIN_URL = "https://sessionserver.mojang.com/session/minecraft/join";
     private static final String DEFAULT_SYNC_API_URL = "https://wish-cosmetics-worker.wish-sync-mc.workers.dev";
-    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(5);
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
     private static final long UPLOAD_DEBOUNCE_MS = 700L;
     private static final long QUERY_INTERVAL_MS = 15_000L;
-    private static final long PLAYER_CACHE_TTL_MS = 60_000L;
+    private static final long NEW_PLAYER_QUERY_MIN_INTERVAL_MS = 1_200L;
+    private static final long PLAYER_CACHE_TTL_MS = 15_000L;
     private static final int MAX_BATCH_UUIDS = 64;
-    private static final long BASE_BACKOFF_MS = 10_000L;
+    private static final long BASE_BACKOFF_MS = 5_000L;
     private static final long MAX_BACKOFF_MS = 60_000L;
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
@@ -70,6 +82,7 @@ public final class CosmeticSyncManager {
 
     private static final ConcurrentHashMap<UUID, Long> lastQueriedByUuid = new ConcurrentHashMap<>();
     private static final AtomicBoolean uploadInProgress = new AtomicBoolean(false);
+    private static final AtomicBoolean uploadPending = new AtomicBoolean(false);
     private static final AtomicBoolean queryInProgress = new AtomicBoolean(false);
     private static final Object SCHED_LOCK = new Object();
 
@@ -78,15 +91,55 @@ public final class CosmeticSyncManager {
     private static volatile long sessionTokenExpiresAtMs;
     private static volatile UUID sessionTokenUuid;
     private static volatile long lastQuerySweepMs;
-    private static volatile long backoffUntilMs;
-    private static volatile long currentBackoffMs = BASE_BACKOFF_MS;
-    private static volatile String syncStatus = "Sync ready";
+    private static volatile long lastImmediateQueryMs;
+    private static volatile ClientLevel lastObservedLevel;
+    private static volatile boolean uploadRetryNeeded = false;
+    private static volatile long uploadBackoffUntilMs;
+    private static volatile long currentUploadBackoffMs = BASE_BACKOFF_MS;
+    private static volatile long queryBackoffUntilMs;
+    private static volatile long currentQueryBackoffMs = BASE_BACKOFF_MS;
+    private static volatile String uploadStatus = "Sync ready";
+    private static volatile boolean uploadSucceeded = false;
+    private static volatile int lastQueryAppliedCount = -1;
+
+    private static final long MOJANG_PROPAGATION_DELAY_MS = 250L;
+
+    record PlayerQueryCandidate(UUID uuid, String username) {
+    }
+
+    record MojangCertificateProof(
+            String publicKeyB64,
+            long expiresAtMs,
+            String keySignatureB64,
+            String challengeSignatureB64
+    ) {
+    }
+
+    private record SyncUploadResult(boolean ok, String errorDetail) {
+        static final SyncUploadResult SUCCESS = new SyncUploadResult(true, null);
+
+        static SyncUploadResult failure(String detail) {
+            return new SyncUploadResult(false, detail);
+        }
+    }
 
     private CosmeticSyncManager() {
     }
 
     public static String getStatusText() {
-        return syncStatus;
+        if (resolveEndpointUrl() == null) {
+            return "Local/LAN P2P Active";
+        }
+        if (!ModConfig.INSTANCE.enableCosmeticAutoSync && !uploadSucceeded) {
+            return "Auto-sync disabled";
+        }
+        if (!uploadSucceeded) {
+            return uploadStatus;
+        }
+        if (lastQueryAppliedCount > 0) {
+            return "Synced (" + lastQueryAppliedCount + " players)";
+        }
+        return uploadStatus;
     }
 
     public static void init() {
@@ -101,9 +154,16 @@ public final class CosmeticSyncManager {
     public static void onWorldJoin() {
         lastQueriedByUuid.clear();
         lastQuerySweepMs = 0L;
+        lastImmediateQueryMs = 0L;
+        lastObservedLevel = null;
+        lastQueryAppliedCount = -1;
         CosmeticLocalPeerSync.onLocalChangedOrJoin();
         if (resolveEndpointUrl() == null) {
-            syncStatus = "Local/LAN P2P Active";
+            uploadStatus = "Local/LAN P2P Active";
+            return;
+        }
+        if (!ModConfig.INSTANCE.enableCosmeticAutoSync) {
+            uploadStatus = "Auto-sync disabled";
             return;
         }
         triggerManualSync();
@@ -112,14 +172,21 @@ public final class CosmeticSyncManager {
     public static void onDisconnect() {
         lastQueriedByUuid.clear();
         lastQuerySweepMs = 0L;
+        lastImmediateQueryMs = 0L;
+        lastObservedLevel = null;
+        lastQueryAppliedCount = -1;
     }
 
     public static void notifyLocalCosmeticsChanged() {
         CosmeticLocalPeerSync.onLocalChangedOrJoin();
         if (resolveEndpointUrl() == null) {
-            syncStatus = "Local/LAN P2P Active";
+            uploadStatus = "Local/LAN P2P Active";
             return;
         }
+        if (!ModConfig.INSTANCE.enableCosmeticAutoSync) {
+            return;
+        }
+        uploadRetryNeeded = true;
         synchronized (SCHED_LOCK) {
             if (pendingDebounceTask != null && !pendingDebounceTask.isDone()) {
                 pendingDebounceTask.cancel(false);
@@ -135,11 +202,14 @@ public final class CosmeticSyncManager {
     public static void triggerManualSync() {
         CosmeticLocalPeerSync.onLocalChangedOrJoin();
         if (resolveEndpointUrl() == null) {
-            syncStatus = "Local/LAN P2P Active";
+            uploadStatus = "Local/LAN P2P Active";
             return;
         }
-        backoffUntilMs = 0L;
-        currentBackoffMs = BASE_BACKOFF_MS;
+        uploadBackoffUntilMs = 0L;
+        currentUploadBackoffMs = BASE_BACKOFF_MS;
+        queryBackoffUntilMs = 0L;
+        currentQueryBackoffMs = BASE_BACKOFF_MS;
+        uploadRetryNeeded = true;
         lastQueriedByUuid.clear();
         uploadLocalAsync();
         queryOnlinePlayersAsync(Minecraft.getInstance(), true);
@@ -147,18 +217,43 @@ public final class CosmeticSyncManager {
 
     public static void onClientTick(Minecraft mc) {
         if (mc == null || mc.level == null) {
+            lastObservedLevel = null;
             return;
         }
         CosmeticLocalPeerSync.onTick(mc);
-        if (resolveEndpointUrl() == null) {
+        if (resolveEndpointUrl() == null || !ModConfig.INSTANCE.enableCosmeticAutoSync) {
             return;
         }
         long now = System.currentTimeMillis();
-        if (now < backoffUntilMs || now - lastQuerySweepMs < QUERY_INTERVAL_MS) {
+        if (uploadRetryNeeded && now >= uploadBackoffUntilMs && !uploadInProgress.get()) {
+            uploadLocalAsync();
+        }
+
+        boolean levelSwitched = mc.level != lastObservedLevel;
+        if (levelSwitched) {
+            lastObservedLevel = mc.level;
+            lastQuerySweepMs = 0L;
+        }
+
+        boolean hasUnqueriedNearbyPlayer = false;
+        if (!levelSwitched && now - lastImmediateQueryMs >= NEW_PLAYER_QUERY_MIN_INTERVAL_MS) {
+            for (AbstractClientPlayer worldPlayer : mc.level.players()) {
+                UUID id = worldPlayer.getUUID();
+                if (id != null && isQueryEligibleUuid(id) && !lastQueriedByUuid.containsKey(id)) {
+                    hasUnqueriedNearbyPlayer = true;
+                    break;
+                }
+            }
+        }
+
+        if (now < queryBackoffUntilMs) {
             return;
         }
-        lastQuerySweepMs = now;
-        queryOnlinePlayersAsync(mc, false);
+        if (levelSwitched || hasUnqueriedNearbyPlayer || now - lastQuerySweepMs >= QUERY_INTERVAL_MS) {
+            lastQuerySweepMs = now;
+            lastImmediateQueryMs = now;
+            queryOnlinePlayersAsync(mc, levelSwitched);
+        }
     }
 
     private static void uploadLocalAsync() {
@@ -167,15 +262,19 @@ public final class CosmeticSyncManager {
         if (endpoint == null) {
             return;
         }
-        if (System.currentTimeMillis() < backoffUntilMs) {
+        long now = System.currentTimeMillis();
+        if (now < uploadBackoffUntilMs) {
+            uploadRetryNeeded = true;
             return;
         }
         Minecraft mc = Minecraft.getInstance();
         User user = mc != null ? mc.getUser() : null;
         if (user == null || user.getProfileId() == null || user.getName() == null) {
+            uploadRetryNeeded = true;
             return;
         }
         if (!uploadInProgress.compareAndSet(false, true)) {
+            uploadPending.set(true);
             return;
         }
 
@@ -186,46 +285,81 @@ public final class CosmeticSyncManager {
         CustomPlayerManager.SyncedCosmeticRecord localRecord = buildLocalSyncRecord(uuid, username, cfg);
 
         NETWORK_EXECUTOR.submit(() -> {
+            boolean shouldScheduleFollowUp = false;
             try {
-                syncStatus = "Syncing with Mojang session...";
+                uploadStatus = "Syncing with Mojang...";
                 String cachedBearer = getValidSessionToken(uuid);
                 if (cachedBearer != null) {
-                    if (postSyncPayload(endpoint, cachedBearer, compactUuid, null, localRecord)) {
-                        clearBackoff();
-                        syncStatus = "Synced (session active)";
+                    SyncUploadResult tokenResult = postSyncPayload(endpoint, cachedBearer, compactUuid, null, null, localRecord);
+                    if (tokenResult.ok()) {
+                        clearUploadBackoff();
+                        uploadRetryNeeded = false;
+                        uploadSucceeded = true;
+                        uploadStatus = "Synced (session active)";
                         return;
                     }
                     invalidateSessionToken();
                 }
 
                 if (accessToken == null || accessToken.isBlank() || accessToken.equals("0")) {
-                    syncStatus = "Offline session (Mojang auth required)";
+                    uploadRetryNeeded = false;
+                    uploadSucceeded = false;
+                    uploadStatus = "Offline session (Mojang auth required)";
                     return;
                 }
 
                 String clientNonce = generateRandomNonceHex();
                 String serverId = requestChallengeServerId(endpoint, compactUuid, clientNonce);
                 if (serverId == null) {
-                    recordBackoff("Sync server unreachable");
+                    uploadRetryNeeded = true;
+                    uploadSucceeded = false;
+                    recordUploadBackoff("Sync server unreachable");
                     return;
                 }
 
-                if (!joinMojangSession(accessToken, compactUuid, serverId)) {
-                    recordBackoff("Mojang session join failed");
-                    return;
+                MojangCertificateProof certProof = buildCertificateProof(mc, compactUuid, serverId);
+                if (certProof == null) {
+                    int mojangStatus = joinMojangSession(accessToken, compactUuid, serverId);
+                    if (mojangStatus != 204 && mojangStatus != 200) {
+                        uploadRetryNeeded = true;
+                        uploadSucceeded = false;
+                        String msg = mojangStatus > 0
+                                ? "Mojang session failed (HTTP " + mojangStatus + ")"
+                                : "Mojang session join failed";
+                        WishClient.LOGGER.warn("[Wish] Cosmetic sync {}", msg);
+                        recordUploadBackoff(msg);
+                        return;
+                    }
+                    Thread.sleep(MOJANG_PROPAGATION_DELAY_MS);
                 }
 
-                if (postSyncPayload(endpoint, null, compactUuid, serverId, localRecord)) {
-                    clearBackoff();
-                    syncStatus = "Synced (Mojang verified)";
+                SyncUploadResult syncResult = postSyncPayload(endpoint, null, compactUuid, serverId, certProof, localRecord);
+                if (syncResult.ok()) {
+                    clearUploadBackoff();
+                    uploadRetryNeeded = false;
+                    uploadSucceeded = true;
+                    uploadStatus = certProof != null ? "Synced (Mojang cert)" : "Synced (Mojang verified)";
                 } else {
-                    recordBackoff("Sync verification rejected");
+                    uploadRetryNeeded = true;
+                    uploadSucceeded = false;
+                    String reason = (syncResult.errorDetail() != null && !syncResult.errorDetail().isBlank())
+                            ? syncResult.errorDetail()
+                            : "Sync verification rejected";
+                    recordUploadBackoff(reason);
                 }
             } catch (Exception e) {
-                WishClient.LOGGER.debug("[Wish] Cosmetic upload failed: {}", e.getMessage());
-                recordBackoff("Sync error");
+                uploadRetryNeeded = true;
+                uploadSucceeded = false;
+                WishClient.LOGGER.warn("[Wish] Cosmetic upload failed: {}", e.getMessage());
+                recordUploadBackoff("Sync error");
             } finally {
                 uploadInProgress.set(false);
+                if (uploadPending.getAndSet(false)) {
+                    shouldScheduleFollowUp = true;
+                }
+            }
+            if (shouldScheduleFollowUp) {
+                uploadLocalAsync();
             }
         });
     }
@@ -239,33 +373,30 @@ public final class CosmeticSyncManager {
             return;
         }
         long now = System.currentTimeMillis();
-        Set<UUID> candidateUuids = new LinkedHashSet<>();
+        List<PlayerQueryCandidate> worldCandidates = new ArrayList<>();
+        for (AbstractClientPlayer worldPlayer : mc.level.players()) {
+            UUID id = worldPlayer.getUUID();
+            if (id != null) {
+                worldCandidates.add(new PlayerQueryCandidate(id, worldPlayer.getScoreboardName()));
+            }
+        }
+        List<PlayerQueryCandidate> tabCandidates = new ArrayList<>();
         ClientPacketListener connection = mc.getConnection();
         if (connection != null) {
             for (PlayerInfo info : connection.getOnlinePlayers()) {
                 GameProfile profile = info.getProfile();
-                if (profile != null && profile.id() != null && shouldQueryUuid(profile.id(), now, force)) {
-                    candidateUuids.add(profile.id());
+                if (profile != null && profile.id() != null) {
+                    tabCandidates.add(new PlayerQueryCandidate(profile.id(), profile.name()));
                 }
             }
         }
-        for (AbstractClientPlayer worldPlayer : mc.level.players()) {
-            UUID id = worldPlayer.getUUID();
-            if (id != null && shouldQueryUuid(id, now, force)) {
-                candidateUuids.add(id);
-            }
-        }
-        if (candidateUuids.isEmpty() || !queryInProgress.compareAndSet(false, true)) {
+        List<UUID> batch = collectCandidateQueryUuids(worldCandidates, tabCandidates, now, force);
+        if (batch.isEmpty() || !queryInProgress.compareAndSet(false, true)) {
             return;
         }
 
-        List<UUID> batch = new ArrayList<>(Math.min(MAX_BATCH_UUIDS, candidateUuids.size()));
-        for (UUID id : candidateUuids) {
-            batch.add(id);
+        for (UUID id : batch) {
             lastQueriedByUuid.put(id, now);
-            if (batch.size() >= MAX_BATCH_UUIDS) {
-                break;
-            }
         }
 
         NETWORK_EXECUTOR.submit(() -> {
@@ -279,19 +410,62 @@ public final class CosmeticSyncManager {
                         .build();
                 HttpResponse<String> resp = HTTP_CLIENT.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
                 if (resp.statusCode() != 200) {
-                    recordBackoff("Query HTTP " + resp.statusCode());
+                    WishClient.LOGGER.warn("[Wish] Cosmetic query failed with HTTP {}", resp.statusCode());
+                    recordQueryBackoff("Query HTTP " + resp.statusCode());
                     return;
                 }
                 int applied = parseAndApplyBatchResponse(resp.body());
-                clearBackoff();
-                syncStatus = applied > 0 ? "Synced (" + applied + " players)" : "Synced";
+                clearQueryBackoff();
+                lastQueryAppliedCount = applied;
             } catch (Exception e) {
                 WishClient.LOGGER.debug("[Wish] Cosmetic query failed: {}", e.getMessage());
-                recordBackoff("Query error");
+                recordQueryBackoff("Query error");
             } finally {
                 queryInProgress.set(false);
             }
         });
+    }
+
+    static List<UUID> collectCandidateQueryUuids(
+            Collection<PlayerQueryCandidate> worldPlayers,
+            Collection<PlayerQueryCandidate> tabPlayers,
+            long now,
+            boolean force
+    ) {
+        Set<UUID> ordered = new LinkedHashSet<>();
+        if (worldPlayers != null) {
+            for (PlayerQueryCandidate candidate : worldPlayers) {
+                if (candidate == null || candidate.uuid() == null) {
+                    continue;
+                }
+                if (isQueryEligibleUuid(candidate.uuid()) && shouldQueryUuid(candidate.uuid(), now, force)) {
+                    ordered.add(candidate.uuid());
+                    if (ordered.size() >= MAX_BATCH_UUIDS) {
+                        return new ArrayList<>(ordered);
+                    }
+                }
+            }
+        }
+        if (tabPlayers != null) {
+            for (PlayerQueryCandidate candidate : tabPlayers) {
+                if (candidate == null || candidate.uuid() == null) {
+                    continue;
+                }
+                if (RealPlayerFilter.isValidRealPlayerIdentity(candidate.uuid(), candidate.username(), null, true)
+                        && shouldQueryUuid(candidate.uuid(), now, force)) {
+                    ordered.add(candidate.uuid());
+                    if (ordered.size() >= MAX_BATCH_UUIDS) {
+                        break;
+                    }
+                }
+            }
+        }
+        return new ArrayList<>(ordered);
+    }
+
+    private static boolean isQueryEligibleUuid(UUID uuid) {
+        int ver = uuid.version();
+        return ver == 4 || ver == 3;
     }
 
     private static boolean shouldQueryUuid(UUID uuid, long now, boolean force) {
@@ -313,6 +487,7 @@ public final class CosmeticSyncManager {
                     .build();
             HttpResponse<String> resp = HTTP_CLIENT.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             if (resp.statusCode() != 200) {
+                WishClient.LOGGER.warn("[Wish] Cosmetic challenge failed with HTTP {}", resp.statusCode());
                 return null;
             }
             JsonObject obj = HttpClientUtils.parseJsonObject(resp.body());
@@ -322,11 +497,12 @@ public final class CosmeticSyncManager {
             String serverId = obj.get("serverId").getAsString().trim();
             return serverId.isEmpty() ? null : serverId;
         } catch (Exception e) {
+            WishClient.LOGGER.warn("[Wish] Cosmetic challenge error: {}", e.getMessage());
             return null;
         }
     }
 
-    private static boolean joinMojangSession(String accessToken, String compactUuid, String serverId) {
+    private static int joinMojangSession(String accessToken, String compactUuid, String serverId) {
         try {
             JsonObject body = new JsonObject();
             body.addProperty("accessToken", accessToken);
@@ -338,21 +514,105 @@ public final class CosmeticSyncManager {
                     .POST(HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8))
                     .build();
             HttpResponse<String> resp = HTTP_CLIENT.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            return resp.statusCode() == 204 || resp.statusCode() == 200;
+            return resp.statusCode();
+        } catch (Exception e) {
+            WishClient.LOGGER.warn("[Wish] Mojang session join error: {}", e.getMessage());
+            return -1;
+        }
+    }
+
+    private static MojangCertificateProof buildCertificateProof(Minecraft mc, String compactUuid, String serverId) {
+        if (mc == null) {
+            return null;
+        }
+        try {
+            ProfileKeyPairManager keyManager = mc.getProfileKeyPairManager();
+            if (keyManager == null || keyManager == ProfileKeyPairManager.EMPTY_KEY_MANAGER) {
+                return null;
+            }
+            ProfileKeyPair keyPair = keyManager.prepareKeyPair().get(5, TimeUnit.SECONDS).orElse(null);
+            if (keyPair == null || keyPair.privateKey() == null || keyPair.publicKey() == null) {
+                return null;
+            }
+            ProfilePublicKey.Data data = keyPair.publicKey().data();
+            if (data == null || data.key() == null || data.keySignature() == null || data.hasExpired()) {
+                return null;
+            }
+            byte[] encodedKey = data.key().getEncoded();
+            if (encodedKey == null || encodedKey.length == 0) {
+                return null;
+            }
+            String challengePayload = buildCertChallengeString(compactUuid, serverId);
+            String challengeSigB64 = signSha256RsaBase64(keyPair.privateKey(), challengePayload.getBytes(StandardCharsets.UTF_8));
+            if (challengeSigB64 == null) {
+                return null;
+            }
+            return new MojangCertificateProof(
+                    Base64.getEncoder().encodeToString(encodedKey),
+                    data.expiresAt().toEpochMilli(),
+                    Base64.getEncoder().encodeToString(data.keySignature()),
+                    challengeSigB64
+            );
+        } catch (Exception e) {
+            WishClient.LOGGER.debug("[Wish] Profile key pair unavailable, falling back to session join: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    static byte[] buildProfilePublicKeySignedPayload(UUID uuid, long expiresAtMs, byte[] spkiPublicKey) {
+        byte[] buf = new byte[24 + spkiPublicKey.length];
+        ByteBuffer.wrap(buf)
+                .order(ByteOrder.BIG_ENDIAN)
+                .putLong(uuid.getMostSignificantBits())
+                .putLong(uuid.getLeastSignificantBits())
+                .putLong(expiresAtMs)
+                .put(spkiPublicKey);
+        return buf;
+    }
+
+    static String buildCertChallengeString(String compactUuid, String serverId) {
+        return "wish-cosmetic-cert:" + compactUuid + ":" + serverId;
+    }
+
+    static String signSha256RsaBase64(PrivateKey privateKey, byte[] payload) {
+        if (privateKey == null || payload == null) {
+            return null;
+        }
+        try {
+            Signature sig = Signature.getInstance("SHA256withRSA");
+            sig.initSign(privateKey);
+            sig.update(payload);
+            return Base64.getEncoder().encodeToString(sig.sign());
+        } catch (Exception e) {
+            WishClient.LOGGER.warn("[Wish] Failed signing cosmetic challenge: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    static boolean verifySha256RsaBase64(PublicKey publicKey, byte[] payload, String sigBase64) {
+        if (publicKey == null || payload == null || sigBase64 == null) {
+            return false;
+        }
+        try {
+            Signature sig = Signature.getInstance("SHA256withRSA");
+            sig.initVerify(publicKey);
+            sig.update(payload);
+            return sig.verify(Base64.getDecoder().decode(sigBase64));
         } catch (Exception e) {
             return false;
         }
     }
 
-    private static boolean postSyncPayload(
+    private static SyncUploadResult postSyncPayload(
             String endpoint,
             String bearerToken,
             String compactUuid,
             String serverId,
+            MojangCertificateProof certProof,
             CustomPlayerManager.SyncedCosmeticRecord localRecord
     ) {
         try {
-            String json = buildSyncUploadJson(compactUuid, serverId, localRecord);
+            String json = buildSyncUploadJson(compactUuid, serverId, certProof, localRecord);
             HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(endpoint + "/v1/cosmetics/sync"))
                     .timeout(REQUEST_TIMEOUT)
                     .header("Content-Type", "application/json; charset=utf-8")
@@ -363,7 +623,12 @@ public final class CosmeticSyncManager {
             }
             HttpResponse<String> resp = HTTP_CLIENT.send(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             if (resp.statusCode() != 200) {
-                return false;
+                String serverErr = extractServerError(resp.body());
+                String detail = serverErr != null
+                        ? "HTTP " + resp.statusCode() + ": " + serverErr
+                        : "HTTP " + resp.statusCode();
+                WishClient.LOGGER.warn("[Wish] Cosmetic sync upload failed ({})", detail);
+                return SyncUploadResult.failure(detail);
             }
             JsonObject obj = HttpClientUtils.parseJsonObject(resp.body());
             if (obj != null && obj.has("token") && obj.get("token").isJsonPrimitive()) {
@@ -377,10 +642,24 @@ public final class CosmeticSyncManager {
                     sessionTokenExpiresAtMs = System.currentTimeMillis() + Math.max(60L, ttlSec - 30L) * 1000L;
                 }
             }
-            return true;
+            return SyncUploadResult.SUCCESS;
         } catch (Exception e) {
-            return false;
+            String msg = e.getClass().getSimpleName() + (e.getMessage() != null ? ": " + e.getMessage() : "");
+            WishClient.LOGGER.warn("[Wish] Cosmetic sync upload exception: {}", msg);
+            return SyncUploadResult.failure("Upload error (" + e.getClass().getSimpleName() + ")");
         }
+    }
+
+    private static String extractServerError(String body) {
+        if (body == null || body.isBlank()) {
+            return null;
+        }
+        JsonObject obj = HttpClientUtils.parseJsonObject(body);
+        if (obj != null && obj.has("error") && obj.get("error").isJsonPrimitive()) {
+            String err = obj.get("error").getAsString().trim();
+            return err.isEmpty() ? null : err;
+        }
+        return null;
     }
 
     private static String getValidSessionToken(UUID uuid) {
@@ -397,15 +676,28 @@ public final class CosmeticSyncManager {
         sessionTokenExpiresAtMs = 0L;
     }
 
-    private static void recordBackoff(String reason) {
-        syncStatus = reason;
-        backoffUntilMs = System.currentTimeMillis() + currentBackoffMs;
-        currentBackoffMs = Math.min(MAX_BACKOFF_MS, currentBackoffMs * 2L);
+    private static void recordUploadBackoff(String reason) {
+        uploadStatus = reason;
+        uploadBackoffUntilMs = System.currentTimeMillis() + currentUploadBackoffMs;
+        currentUploadBackoffMs = Math.min(MAX_BACKOFF_MS, currentUploadBackoffMs * 2L);
     }
 
-    private static void clearBackoff() {
-        backoffUntilMs = 0L;
-        currentBackoffMs = BASE_BACKOFF_MS;
+    private static void clearUploadBackoff() {
+        uploadBackoffUntilMs = 0L;
+        currentUploadBackoffMs = BASE_BACKOFF_MS;
+    }
+
+    private static void recordQueryBackoff(String reason) {
+        if (!uploadSucceeded) {
+            return;
+        }
+        queryBackoffUntilMs = System.currentTimeMillis() + currentQueryBackoffMs;
+        currentQueryBackoffMs = Math.min(MAX_BACKOFF_MS, currentQueryBackoffMs * 2L);
+    }
+
+    private static void clearQueryBackoff() {
+        queryBackoffUntilMs = 0L;
+        currentQueryBackoffMs = BASE_BACKOFF_MS;
     }
 
     private static String generateRandomNonceHex() {
@@ -631,11 +923,28 @@ public final class CosmeticSyncManager {
             String serverId,
             CustomPlayerManager.SyncedCosmeticRecord record
     ) {
+        return buildSyncUploadJson(uuid, serverId, null, record);
+    }
+
+    static String buildSyncUploadJson(
+            String uuid,
+            String serverId,
+            MojangCertificateProof certProof,
+            CustomPlayerManager.SyncedCosmeticRecord record
+    ) {
         JsonObject obj = new JsonObject();
         obj.addProperty("uuid", uuid != null ? uuid : "");
         obj.addProperty("username", record.username() != null ? record.username() : "");
         if (serverId != null && !serverId.isBlank()) {
             obj.addProperty("serverId", serverId);
+        }
+        if (certProof != null) {
+            JsonObject certObj = new JsonObject();
+            certObj.addProperty("publicKey", certProof.publicKeyB64());
+            certObj.addProperty("expiresAtMs", certProof.expiresAtMs());
+            certObj.addProperty("keySignature", certProof.keySignatureB64());
+            obj.add("cert", certObj);
+            obj.addProperty("challengeSignature", certProof.challengeSignatureB64());
         }
         writeSyncedRecordFields(obj, record, true);
         return obj.toString();

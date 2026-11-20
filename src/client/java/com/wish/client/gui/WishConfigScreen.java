@@ -57,6 +57,7 @@ public class WishConfigScreen extends Screen {
     private static boolean catPawTrailsSectionOpen = false;
     private final WordReplacerSectionController wordReplacerSection = new WordReplacerSectionController();
     private final CosmeticSectionController cosmeticSection = new CosmeticSectionController();
+    private final MiningAbilitySectionController miningAbilitySection = new MiningAbilitySectionController();
 
     private static boolean chatChannelsOpen = false;
     private static boolean funCommandsOpen = false;
@@ -1273,6 +1274,8 @@ public class WishConfigScreen extends Screen {
                 );
             }
 
+            cy = miningAbilitySection.render(g, font, cx, cy, cw, hH, ROW_H, clipTop, clipBottom, mx, my, colAccent, colHover);
+
             g.disableScissor();
 
             if (maxScroll > 0) {
@@ -1521,43 +1524,6 @@ public class WishConfigScreen extends Screen {
 
             if (otherPlayersSizeSectionOpen) {
                 cy = renderToggle(g, font, cx + 10, cy, cw - 10, "Include Yourself", ModConfig.INSTANCE.smolPeopleIncludeSelf, mx, my, "Include Yourself", "Also renders your own player with SmolPeople sizing.");
-            }
-
-            int pawHY = cy;
-            boolean pawHHover = (mx >= cx && mx < cx + cw && my >= Math.max(pawHY, clipTop) && my < Math.min(pawHY + hH, clipBottom));
-            RenderUtils.fillRoundedRect(g, cx, pawHY, cw, hH, 4, catPawTrailsSectionOpen ? colHover : (pawHHover ? 0x44444455 : 0x2A2A2E55));
-            RenderUtils.drawGradientOutline(g, cx, pawHY, cw, hH, 4, catPawTrailsSectionOpen ? colAccent : 0x55888888, 0x22444444);
-            g.text(font, (catPawTrailsSectionOpen ? "▼ " : "▶ ") + "Cat Paw Trails", cx + 8, pawHY + 7, COL_TEXT);
-
-            boolean pawState = ModConfig.INSTANCE.enableCatPawTrails;
-            int pawDotX = cx + cw - dotSize - 10;
-            int pawDotY = pawHY + 7;
-            boolean pawDotHover = isHeaderDotClicked(mx, my, cx, pawHY, cw);
-            int pawDotCol = pawState ? (pawDotHover ? 0xFFBB00FF : colAccent) : (pawDotHover ? 0xFFFF5566 : COL_OFF);
-            RenderUtils.fillRoundedRect(g, pawDotX, pawDotY, dotSize, dotSize, 4, pawDotCol);
-            RenderUtils.drawGradientOutline(g, pawDotX, pawDotY, dotSize, dotSize, 4, pawDotHover ? 0xAAFFFFFF : 0x44FFFFFF, 0x11000000);
-            cy += hH + 4;
-
-            if (catPawTrailsSectionOpen) {
-                boolean pawColorHover = (mx >= cx + 10 && mx < cx + cw && my >= Math.max(cy, clipTop) && my < Math.min(cy + ROW_H, clipBottom));
-                RenderUtils.fillRoundedRect(g, cx + 10, cy, cw - 10, ROW_H, 4, pawColorHover ? 0x443A3A42 : 0x2A2A2E33);
-                RenderUtils.drawGradientOutline(g, cx + 10, cy, cw - 10, ROW_H, 4, openColorPopupTarget == COLOR_POPUP_CAT_PAW ? colAccent : (pawColorHover ? 0x66888888 : 0x33555555), 0x22222222);
-                g.text(font, "Color", cx + 18, cy + 7, COL_TEXT);
-
-                int pawPreviewArgb = parseHex(ModConfig.INSTANCE.catPawTrailColor, 0xFFFFB0DE);
-                int pawSwatchX = computeColorSwatchX(cx + 10, cw - 10, false);
-                int pawSwatchY = cy + (ROW_H - SWATCH_H) / 2;
-                renderColorSwatchButton(g, pawSwatchX, pawSwatchY, pawPreviewArgb, openColorPopupTarget == COLOR_POPUP_CAT_PAW, true, colAccent, mx, my);
-                cy += ROW_H + 4;
-
-                cy = renderPercentSlider(g, font, cx + 10, cy, cw - 10, "Size", ModConfig.INSTANCE.catPawTrailScale, mx, my, 0.5f, 2.0f);
-
-                float dur = ModConfig.INSTANCE.catPawTrailDuration;
-                int durTenths = Math.max(10, Math.min(60, Math.round(dur * 10.0f)));
-                String durText = "Duration: §e" + (durTenths / 10) + "." + (durTenths % 10) + "s";
-                cy = renderSliderInternal(g, font, cx + 10, cy, cw - 10, durText, dur, mx, my, 1.0f, 6.0f);
-
-                cy = renderToggle(g, font, cx + 10, cy, cw - 10, "All Players", ModConfig.INSTANCE.catPawTrailIncludeOthers, mx, my, "All Players", "Also shows glowing cat paw trails for other real players nearby.");
             }
 
             cy = wordReplacerSection.renderHeader(g, font, cx, cy, cw, hH, mx, my, clipTop, clipBottom, colHover, colAccent, COL_TEXT, COL_OFF);
@@ -2732,6 +2698,10 @@ public class WishConfigScreen extends Screen {
                 }
                 cy += ROW_H + 4;
             }
+            if (miningAbilitySection.handleClick(mx, my, cx, cy, cw, hH, ROW_H, this)) {
+                hexInputFocused = false;
+                return true;
+            }
         } else if (activeTab == 7) {
             int clipTop = py + 40;
             int clipBottom = py + WIN_H - 10;
@@ -2943,43 +2913,6 @@ public class WishConfigScreen extends Screen {
             if (otherPlayersSizeSectionOpen) {
                 if (isToggleBtnClicked(mx, my, cx + 10, cy, cw - 10) && my >= clipTop && my <= clipBottom) {
                     ModConfig.INSTANCE.smolPeopleIncludeSelf = !ModConfig.INSTANCE.smolPeopleIncludeSelf;
-                    ModConfig.INSTANCE.save();
-                    return true;
-                }
-                cy += ROW_H + 4;
-            }
-
-            if (isHeaderDotClicked(mx, my, cx, cy, cw) && my >= clipTop && my <= clipBottom) {
-                ModConfig.INSTANCE.enableCatPawTrails = !ModConfig.INSTANCE.enableCatPawTrails;
-                if (!ModConfig.INSTANCE.enableCatPawTrails) {
-                    com.wish.client.features.visual.CatPawTrailManager.reset();
-                }
-                ModConfig.INSTANCE.save();
-                return true;
-            } else if (mx >= cx && mx < cx + cw && my >= cy && my < cy + hH && my >= clipTop && my <= clipBottom) {
-                catPawTrailsSectionOpen = !catPawTrailsSectionOpen;
-                return true;
-            }
-            cy += hH + 4;
-
-            if (catPawTrailsSectionOpen) {
-                if (mx >= cx + 10 && mx < cx + cw && my >= cy && my < cy + ROW_H && my >= clipTop && my <= clipBottom) {
-                    openOrToggleColorPopup(prevColorPopup, COLOR_POPUP_CAT_PAW);
-                    return true;
-                }
-                cy += ROW_H + 4;
-
-                for (int sliderId = 19; sliderId <= 20; sliderId++) {
-                    if (mx >= cx + 10 && mx < cx + cw && my >= cy && my < cy + 26 && my >= clipTop && my <= clipBottom) {
-                        draggingSlider = sliderId;
-                        applyVisualSliderValue(sliderId, mx, cx, cw);
-                        return true;
-                    }
-                    cy += 26 + 4;
-                }
-
-                if (isToggleBtnClicked(mx, my, cx + 10, cy, cw - 10) && my >= clipTop && my <= clipBottom) {
-                    ModConfig.INSTANCE.catPawTrailIncludeOthers = !ModConfig.INSTANCE.catPawTrailIncludeOthers;
                     ModConfig.INSTANCE.save();
                     return true;
                 }
@@ -3506,10 +3439,6 @@ public class WishConfigScreen extends Screen {
         if (otherPlayersSizeSectionOpen) {
             totalContentH += (ROW_H + 4);
         }
-        totalContentH += hH + 4;
-        if (catPawTrailsSectionOpen) {
-            totalContentH += (ROW_H + 4) * 2 + (26 + 4) * 2;
-        }
         totalContentH += wordReplacerSection.getContentHeight(hH, ROW_H);
         return totalContentH;
     }
@@ -3528,6 +3457,7 @@ public class WishConfigScreen extends Screen {
         if (miningMineshaftOpen) {
             totalContentH += (ROW_H + 4);
         }
+        totalContentH += miningAbilitySection.getContentHeight(hH, ROW_H);
         return totalContentH;
     }
 

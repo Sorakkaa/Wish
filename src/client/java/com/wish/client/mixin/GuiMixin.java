@@ -157,6 +157,28 @@ public class GuiMixin {
             com.wish.client.features.PrecursorCityLocator.renderWaypoint(guiGraphics, mc, screenW, screenH);
         }
 
+        if (ModConfig.INSTANCE.enableMiningAbilityHud) {
+            var mining = HudStateContainer.getMiningAbilitySnapshot();
+            if (mining.isVisible()) {
+                int padX = 4;
+                int padY = 3;
+                int cardW = Math.max(mining.headerWidth(), mining.detailWidth()) + padX * 2;
+                int cardH = mc.font.lineHeight * 2 + 2 + padY * 2;
+                int mx = GuiAnchor.TOP_LEFT.resolveX(ModConfig.INSTANCE.miningAbilityHudX, cardW, screenW);
+                int my = GuiAnchor.TOP_LEFT.resolveY(ModConfig.INSTANCE.miningAbilityHudY, cardH, screenH);
+                float scale = Math.max(0.2f, ModConfig.INSTANCE.miningAbilityHudScale);
+
+                guiGraphics.pose().pushMatrix();
+                guiGraphics.pose().translate(mx, my);
+                guiGraphics.pose().scale(scale, scale);
+
+                guiGraphics.text(mc.font, mining.header(), padX, padY, 0xFFFFFFFF);
+                guiGraphics.text(mc.font, mining.detailText(), padX, padY + mc.font.lineHeight + 2, 0xFFFFFFFF);
+
+                guiGraphics.pose().popMatrix();
+            }
+        }
+
         if (ModConfig.INSTANCE.enableSlayerCarry && ModConfig.INSTANCE.enableBossSpawnHud) {
             var boss = HudStateContainer.getBossSnapshot();
             if (boss.isVisible()) {

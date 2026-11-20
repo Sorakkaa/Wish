@@ -2,6 +2,7 @@ package com.wish.client.gui;
 
 import com.wish.client.config.ModConfig;
 import com.wish.client.features.cosmetic.PlayerCosmeticsManager;
+import com.wish.client.features.visual.CatPawTrailManager;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 
@@ -20,7 +21,7 @@ final class CosmeticSectionController {
     }
 
     int getContentHeight() {
-        int h = (ROW_H + ROW_GAP) * 3 + 26;
+        int h = (ROW_H + ROW_GAP) * 4 + 26;
         int openCount = getOpenItemCount();
         if (openCount > 0) {
             h += openCount * OPT_H + 6;
@@ -33,6 +34,7 @@ final class CosmeticSectionController {
             case 1 -> PlayerCosmeticsManager.WING_NAMES.size();
             case 2 -> PlayerCosmeticsManager.HALO_NAMES.size();
             case 3 -> PlayerCosmeticsManager.PARTICLE_NAMES.size();
+            case 4 -> PlayerCosmeticsManager.TRAIL_NAMES.size();
             default -> 0;
         };
     }
@@ -75,6 +77,11 @@ final class CosmeticSectionController {
                 3, "Particles", PlayerCosmeticsManager.PARTICLE_NAMES, cfg.selectedParticle, 2,
                 mx, my, colAccent, colHover);
 
+        int activeTrailId = cfg.selectedTrail > 0 ? cfg.selectedTrail : (cfg.enableCatPawTrails ? 1 : 0);
+        y = renderDropdownBlock(g, font, cx, y, cw, clipTop, clipBottom,
+                4, "Trails", PlayerCosmeticsManager.TRAIL_NAMES, activeTrailId, 3,
+                mx, my, colAccent, colHover);
+
         boolean resetHov = mx >= cx && mx < cx + cw && my >= Math.max(y, clipTop) && my < Math.min(y + 22, clipBottom);
         RenderUtils.fillRoundedRect(g, cx, y, cw, 22, 4, resetHov ? colHover : 0x332E2E33);
         RenderUtils.drawGradientOutline(g, cx, y, cw, 22, 4, resetHov ? 0xFFFF5566 : 0x44666666, 0x22222222);
@@ -110,7 +117,7 @@ final class CosmeticSectionController {
             int colAccent,
             int colHover
     ) {
-        int clamped = PlayerCosmeticsManager.clampId(selectedId);
+        int clamped = clampForKind(categoryKind, selectedId);
         boolean isOpen = (openDropdown == dropdownId);
         boolean rowHov = mx >= cx && mx < cx + cw && my >= Math.max(y, clipTop) && my < Math.min(y + ROW_H, clipBottom);
 
@@ -215,11 +222,30 @@ final class CosmeticSectionController {
         }
         y += ROW_H + (openDropdown == 3 ? PlayerCosmeticsManager.PARTICLE_NAMES.size() * OPT_H + 4 : 0) + ROW_GAP;
 
+        optChoice = hitTestDropdown(cx, y, cw, 4, PlayerCosmeticsManager.TRAIL_NAMES.size(), mx, my);
+        if (optChoice == -2) {
+            openDropdown = (openDropdown == 4) ? 0 : 4;
+            return true;
+        } else if (optChoice >= 0) {
+            cfg.selectedTrail = optChoice;
+            cfg.enableCatPawTrails = optChoice > 0;
+            if (optChoice == 0) {
+                CatPawTrailManager.reset();
+            }
+            cfg.save();
+            openDropdown = 0;
+            return true;
+        }
+        y += ROW_H + (openDropdown == 4 ? PlayerCosmeticsManager.TRAIL_NAMES.size() * OPT_H + 4 : 0) + ROW_GAP;
+
         if (my >= y && my < y + 22 && mx >= cx && mx < cx + cw) {
             cfg.selectedWing = 0;
             cfg.selectedHalo = 0;
             cfg.selectedParticle = 0;
+            cfg.selectedTrail = 0;
+            cfg.enableCatPawTrails = false;
             cfg.cosmeticCustomColorEnabled = false;
+            CatPawTrailManager.reset();
             cfg.save();
             openDropdown = 0;
             return true;
@@ -245,11 +271,16 @@ final class CosmeticSectionController {
         return -1;
     }
 
+    private static int clampForKind(int categoryKind, int id) {
+        return categoryKind == 3 ? PlayerCosmeticsManager.clampTrailId(id) : PlayerCosmeticsManager.clampId(id);
+    }
+
     private static int getCategoryRgb(int categoryKind, int idx) {
         return switch (categoryKind) {
             case 0 -> PlayerCosmeticsManager.getWingDefaultRgb(idx);
             case 1 -> PlayerCosmeticsManager.getHaloDefaultRgb(idx);
-            default -> PlayerCosmeticsManager.getParticleDefaultRgb(idx);
+            case 2 -> PlayerCosmeticsManager.getParticleDefaultRgb(idx);
+            default -> PlayerCosmeticsManager.getTrailDefaultRgb(idx);
         };
     }
 }

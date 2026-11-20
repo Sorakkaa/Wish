@@ -108,6 +108,13 @@ public class ModConfig {
 	public boolean enableMineshaftPortalGlow = true;
 	public String mineshaftPortalGlowColor = "#AA55FF";
 
+	public boolean enableMiningAbilityHud = true;
+	public boolean miningAbilityOnlyWithTool = false;
+	public boolean enableMiningAbilitySound = true;
+	public int miningAbilityHudX = 10;
+	public int miningAbilityHudY = 45;
+	public float miningAbilityHudScale = 1.0f;
+
 	public boolean enableLyrics = false;
 	public int lyricsMode = 0;
 	public String lyricsColor = "#FFFFFF";
@@ -147,7 +154,7 @@ public class ModConfig {
 	public boolean smolPeopleIncludeSelf = false;
 
 	public boolean enableCatPawTrails = false;
-	public boolean catPawTrailIncludeOthers = false;
+	public int selectedTrail = 0;
 	public String catPawTrailColor = "#FFB0DE";
 	public float catPawTrailScale = 1.0f;
 	public float catPawTrailDuration = 3.0f;
@@ -264,6 +271,11 @@ public class ModConfig {
 					INSTANCE.selectedWing = com.wish.client.features.cosmetic.PlayerCosmeticsManager.clampId(INSTANCE.selectedWing);
 					INSTANCE.selectedHalo = com.wish.client.features.cosmetic.PlayerCosmeticsManager.clampId(INSTANCE.selectedHalo);
 					INSTANCE.selectedParticle = com.wish.client.features.cosmetic.PlayerCosmeticsManager.clampId(INSTANCE.selectedParticle);
+					INSTANCE.selectedTrail = com.wish.client.features.cosmetic.PlayerCosmeticsManager.clampTrailId(INSTANCE.selectedTrail);
+					if (INSTANCE.selectedTrail == 0 && INSTANCE.enableCatPawTrails) {
+						INSTANCE.selectedTrail = 1;
+					}
+					INSTANCE.enableCatPawTrails = INSTANCE.selectedTrail > 0;
 					int parsedCosmeticRgb = (INSTANCE.cosmeticCustomColor != null && INSTANCE.cosmeticCustomColor.startsWith("#") && INSTANCE.cosmeticCustomColor.length() <= 7)
 							? com.wish.client.color.ColorUtils.parseHexRgb(INSTANCE.cosmeticCustomColor, -1)
 							: -1;

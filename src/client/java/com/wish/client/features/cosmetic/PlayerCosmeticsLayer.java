@@ -18,12 +18,14 @@ import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.Identifier;
 
 public final class PlayerCosmeticsLayer extends RenderLayer<AvatarRenderState, PlayerModel> {
-    private static final Identifier ATLAS_ID = Identifier.fromNamespaceAndPath("wish", "cosmetic_atlas_v6");
+    private static final Identifier ATLAS_ID = Identifier.fromNamespaceAndPath("wish", "cosmetic_atlas_v8");
+    private static final Identifier WING_ATLAS_ID = Identifier.fromNamespaceAndPath("wish", "wing_pixel_atlas_v1");
 
     private static volatile boolean atlasReady;
     private static volatile boolean atlasFailed;
     private static volatile RenderType cachedSolidRenderType;
     private static volatile RenderType cachedGlowRenderType;
+    private static volatile RenderType cachedWingRenderType;
 
     public PlayerCosmeticsLayer(RenderLayerParent<AvatarRenderState, PlayerModel> parent) {
         super(parent);
@@ -63,7 +65,7 @@ public final class PlayerCosmeticsLayer extends RenderLayer<AvatarRenderState, P
             float tipFold = PlayerCosmeticsManager.computeWingTipFoldRad(wingId, baseFlap, ageTicks);
 
             if (wingId > 0) {
-                collector.submitCustomGeometry(poseStack, cachedSolidRenderType, (pose, vc) ->
+                collector.submitCustomGeometry(poseStack, cachedWingRenderType, (pose, vc) ->
                         CosmeticWingRenderer.renderWingsSolid(pose, vc, lightCoords, wingId, baseFlap, tipFold, ageTicks));
             }
             collector.submitCustomGeometry(poseStack, cachedGlowRenderType, (pose, vc) -> {
@@ -90,7 +92,7 @@ public final class PlayerCosmeticsLayer extends RenderLayer<AvatarRenderState, P
     }
 
     private static boolean ensureAtlasRegistered() {
-        if (atlasReady && cachedSolidRenderType != null && cachedGlowRenderType != null) {
+        if (atlasReady && cachedSolidRenderType != null && cachedGlowRenderType != null && cachedWingRenderType != null) {
             return true;
         }
         if (atlasFailed) {
@@ -101,6 +103,7 @@ public final class PlayerCosmeticsLayer extends RenderLayer<AvatarRenderState, P
             return false;
         }
         NativeImage image = null;
+        NativeImage wingImage = null;
         try {
             image = new NativeImage(NativeImage.Format.RGBA, CosmeticAtlasMath.ATLAS_WIDTH, CosmeticAtlasMath.ATLAS_HEIGHT, false);
             for (int y = 0; y < CosmeticAtlasMath.ATLAS_HEIGHT; y++) {
@@ -111,13 +114,28 @@ public final class PlayerCosmeticsLayer extends RenderLayer<AvatarRenderState, P
             CosmeticAtlasTexture texture = new CosmeticAtlasTexture(image);
             image = null;
             mc.getTextureManager().register(ATLAS_ID, texture);
+
+            wingImage = new NativeImage(NativeImage.Format.RGBA, CosmeticWingAtlasMath.ATLAS_WIDTH, CosmeticWingAtlasMath.ATLAS_HEIGHT, false);
+            for (int y = 0; y < CosmeticWingAtlasMath.ATLAS_HEIGHT; y++) {
+                for (int x = 0; x < CosmeticWingAtlasMath.ATLAS_WIDTH; x++) {
+                    wingImage.setPixelABGR(x, y, CosmeticWingAtlasMath.sampleWingAtlasAbgr(x, y));
+                }
+            }
+            CosmeticAtlasTexture wingTexture = new CosmeticAtlasTexture(wingImage);
+            wingImage = null;
+            mc.getTextureManager().register(WING_ATLAS_ID, wingTexture);
+
             cachedSolidRenderType = RenderTypes.entityTranslucent(ATLAS_ID);
             cachedGlowRenderType = RenderTypes.entityTranslucentEmissive(ATLAS_ID);
+            cachedWingRenderType = RenderTypes.entityTranslucent(WING_ATLAS_ID);
             atlasReady = true;
             return true;
         } catch (Exception e) {
             if (image != null) {
                 image.close();
+            }
+            if (wingImage != null) {
+                wingImage.close();
             }
             atlasFailed = true;
             WishClient.LOGGER.error("[Wish] Failed to generate procedural cosmetic atlas", e);
@@ -127,8 +145,8 @@ public final class PlayerCosmeticsLayer extends RenderLayer<AvatarRenderState, P
 
     private static final class CosmeticAtlasTexture extends DynamicTexture {
         CosmeticAtlasTexture(NativeImage image) {
-            super(() -> "Wish Cosmetic Atlas v6", image);
-            this.sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR);
+            super(() -> "Wish Cosmetic Atlas v7", image);
+            this.sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST);
         }
     }
 }

@@ -1,6 +1,6 @@
 # Wish Mod 🌟
 
-[![Version](https://img.shields.io/badge/version-1.1.6-ff69b4?style=flat-square)](https://github.com/Sorakkaa/Wish/releases)
+[![Version](https://img.shields.io/badge/version-1.1.7-ff69b4?style=flat-square)](https://github.com/Sorakkaa/Wish/releases)
 [![Minecraft](https://img.shields.io/badge/minecraft-26.2-55ff55?style=flat-square)](https://fabricmc.net/)
 [![Loader](https://img.shields.io/badge/loader-Fabric%200.19.5-dbd0b4?style=flat-square)](https://fabricmc.net/)
 [![Java](https://img.shields.io/badge/java-25%2B-orange?style=flat-square)](https://adoptium.net/)
@@ -86,8 +86,8 @@ A client-side **Fabric** mod for **Minecraft 26.2** bringing Hypixel Skyblock qu
 - **Java** `25` or newer
 
 ### Steps
-1. Download `wish-1.1.6.jar` from the [Releases](https://github.com/Sorakkaa/Wish/releases) page.
-2. Place `wish-1.1.6.jar` and **Fabric API** inside your `.minecraft/mods` folder.
+1. Download `wish-1.1.7.jar` from the [Releases](https://github.com/Sorakkaa/Wish/releases) page.
+2. Place `wish-1.1.7.jar` and **Fabric API** inside your `.minecraft/mods` folder.
 3. Launch Minecraft `26.2` with Fabric and run `/wish` in-game to customize everything.
 
 ---
@@ -100,7 +100,7 @@ cd Wish
 ./gradlew build
 ```
 
-The compiled mod JAR will be output to `build/libs/wish-1.1.6.jar`.
+The compiled mod JAR will be output to `build/libs/wish-1.1.7.jar`.
 
 ---
 

@@ -179,6 +179,91 @@ final class CosmeticGeometryHelper {
         }
     }
 
+    static void emitVoxelStrut(
+            PoseStack.Pose pose,
+            VertexConsumer vc,
+            int light,
+            float ax, float ay, float az,
+            float bx, float by, float bz,
+            float halfW,
+            float halfD,
+            int r, int g, int b, int a
+    ) {
+        float dx = bx - ax, dy = by - ay, dz = bz - az;
+        float len = Mth.sqrt(dx * dx + dy * dy + dz * dz);
+        if (len < 1e-4f) {
+            return;
+        }
+        dx /= len;
+        dy /= len;
+        dz /= len;
+
+        float rx = Math.abs(dz) < 0.9f ? 0.0f : 1.0f;
+        float ry = 0.0f;
+        float rz = Math.abs(dz) < 0.9f ? 1.0f : 0.0f;
+
+        float ux = dy * rz - dz * ry;
+        float uy = dz * rx - dx * rz;
+        float uz = dx * ry - dy * rx;
+        float uLen = Mth.sqrt(ux * ux + uy * uy + uz * uz);
+        if (uLen < 1e-4f) {
+            return;
+        }
+        ux /= uLen;
+        uy /= uLen;
+        uz /= uLen;
+
+        float vx = dy * uz - dz * uy;
+        float vy = dz * ux - dx * uz;
+        float vz = dx * uy - dy * ux;
+
+        float uwx = ux * halfW, uwy = uy * halfW, uwz = uz * halfW;
+        float vdx = vx * halfD, vdy = vy * halfD, vdz = vz * halfD;
+
+        float a0x = ax + uwx + vdx, a0y = ay + uwy + vdy, a0z = az + uwz + vdz;
+        float a1x = ax - uwx + vdx, a1y = ay - uwy + vdy, a1z = az - uwz + vdz;
+        float a2x = ax - uwx - vdx, a2y = ay - uwy - vdy, a2z = az - uwz - vdz;
+        float a3x = ax + uwx - vdx, a3y = ay + uwy - vdy, a3z = az + uwz - vdz;
+
+        float b0x = bx + uwx + vdx, b0y = by + uwy + vdy, b0z = bz + uwz + vdz;
+        float b1x = bx - uwx + vdx, b1y = by - uwy + vdy, b1z = bz - uwz + vdz;
+        float b2x = bx - uwx - vdx, b2y = by - uwy - vdy, b2z = bz - uwz - vdz;
+        float b3x = bx + uwx - vdx, b3y = by + uwy - vdy, b3z = bz + uwz - vdz;
+
+        int darkR = Math.max(8, Math.round(r * 0.68f)), darkG = Math.max(8, Math.round(g * 0.68f)), darkB = Math.max(8, Math.round(b * 0.68f));
+        int midR = Math.max(8, Math.round(r * 0.86f)), midG = Math.max(8, Math.round(g * 0.86f)), midB = Math.max(8, Math.round(b * 0.86f));
+
+        emitQuadWhiteDoubleSided(pose, vc, light, a0x, a0y, a0z, a1x, a1y, a1z, b1x, b1y, b1z, b0x, b0y, b0z, r, g, b, a);
+        emitQuadWhiteDoubleSided(pose, vc, light, a1x, a1y, a1z, a2x, a2y, a2z, b2x, b2y, b2z, b1x, b1y, b1z, midR, midG, midB, a);
+        emitQuadWhiteDoubleSided(pose, vc, light, a2x, a2y, a2z, a3x, a3y, a3z, b3x, b3y, b3z, b2x, b2y, b2z, darkR, darkG, darkB, a);
+        emitQuadWhiteDoubleSided(pose, vc, light, a3x, a3y, a3z, a0x, a0y, a0z, b0x, b0y, b0z, b3x, b3y, b3z, midR, midG, midB, a);
+        emitQuadWhiteDoubleSided(pose, vc, light, a0x, a0y, a0z, a3x, a3y, a3z, a2x, a2y, a2z, a1x, a1y, a1z, darkR, darkG, darkB, a);
+        emitQuadWhiteDoubleSided(pose, vc, light, b0x, b0y, b0z, b1x, b1y, b1z, b2x, b2y, b2z, b3x, b3y, b3z, r, g, b, a);
+    }
+
+    static void emitVoxelCube(
+            PoseStack.Pose pose,
+            VertexConsumer vc,
+            int light,
+            float cx, float cy, float cz,
+            float hx, float hy, float hz,
+            int r, int g, int b, int a
+    ) {
+        float x0 = cx - hx, x1 = cx + hx;
+        float y0 = cy - hy, y1 = cy + hy;
+        float z0 = cz - hz, z1 = cz + hz;
+        int topR = Math.min(255, Math.round(r * 1.06f)), topG = Math.min(255, Math.round(g * 1.06f)), topB = Math.min(255, Math.round(b * 1.06f));
+        int sideR = Math.max(8, Math.round(r * 0.85f)), sideG = Math.max(8, Math.round(g * 0.85f)), sideB = Math.max(8, Math.round(b * 0.85f));
+        int botR = Math.max(8, Math.round(r * 0.68f)), botG = Math.max(8, Math.round(g * 0.68f)), botB = Math.max(8, Math.round(b * 0.68f));
+
+        emitQuadWhiteDoubleSided(pose, vc, light, x0, y0, z0, x1, y0, z0, x1, y1, z0, x0, y1, z0, r, g, b, a);
+        emitQuadWhiteDoubleSided(pose, vc, light, x1, y0, z1, x0, y0, z1, x0, y1, z1, x1, y1, z1, sideR, sideG, sideB, a);
+        emitQuadWhiteDoubleSided(pose, vc, light, x0, y0, z1, x0, y0, z0, x0, y1, z0, x0, y1, z1, sideR, sideG, sideB, a);
+        emitQuadWhiteDoubleSided(pose, vc, light, x1, y0, z0, x1, y0, z1, x1, y1, z1, x1, y1, z0, sideR, sideG, sideB, a);
+        emitQuadWhiteDoubleSided(pose, vc, light, x0, y0, z1, x1, y0, z1, x1, y0, z0, x0, y0, z0, topR, topG, topB, a);
+        emitQuadWhiteDoubleSided(pose, vc, light, x0, y1, z0, x1, y1, z0, x1, y1, z1, x0, y1, z1, botR, botG, botB, a);
+    }
+
     static void emitCameraBillboardQuad(
             PoseStack.Pose pose,
             VertexConsumer vc,

@@ -1,8 +1,18 @@
 const CHALLENGE_TTL_SECONDS = 60;
 const SESSION_TTL_SECONDS = 24 * 60 * 60;
 const RECORD_TTL_SECONDS = 14 * 24 * 60 * 60;
+const PUBLIC_KEYS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_BATCH_UUIDS = 64;
 const MAX_BODY_BYTES = 16384;
+
+const MOJANG_PUBLIC_KEYS_URL = "https://api.minecraftservices.com/publickeys";
+const MOJANG_FALLBACK_CERT_KEYS_B64 = [
+  "MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAylB4B6m5lz7jwrcFz6Fd/fnfUhcvlxsTSn5kIK/2aGG1C3kMy4VjhwlxF6BFUSnfxhNswPjh3ZitkBxEAFY25uzkJFRwHwVA9mdwjashXILtR6OqdLXXFVyUPIURLOSWqGNBtb08EN5fMnG8iFLgEJIBMxs9BvF3s3/FhuHyPKiVTZmXY0WY4ZyYqvoKR+XjaTRPPvBsDa4WI2u1zxXMeHlodT3lnCzVvyOYBLXL6CJgByuOxccJ8hnXfF9yY4F0aeL080Jz/3+EBNG8RO4ByhtBf4Ny8NQ6stWsjfeUIvH7bU/4zCYcYOq4WrInXHqS8qruDmIl7P5XXGcabuzQstPf/h2CRAUpP/PlHXcMlvewjmGU6MfDK+lifScNYwjPxRo4nKTGFZf/0aqHCh/EAsQyLKrOIYRE0lDG3bzBh8ogIMLAugsAfBb6M3mqCqKaTMAf/VAjh5FFJnjS+7bE+bZEV0qwax1CEoPPJL1fIQjOS8zj086gjpGRCtSy9+bTPTfTR/SJ+VUB5G2IeCItkNHpJX2ygojFZ9n5Fnj7R9ZnOM+L8nyIjPu3aePvtcrXlyLhH/hvOfIOjPxOlqW+O5QwSFP4OEcyLAUgDdUgyW36Z5mB285uKW/ighzZsOTevVUG2QwDItObIV6i8RCxFbN2oDHyPaO5j1tTaBNyVt8CAwEAAQ==",
+  "MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAt4t9NPuu7cktclnaH7eZj0omkLcJHeLz5MKsyJEntHZ0INtuBjSSul3Pp3pBeJN8k3ADdcdBLUN90bcAi7WsQqTx3Ft363q3W7TbM8j2iTEdp/0uVspoRt/DP1tkaWFs/w2WwUv9jbVoBUzfUc4pSTIxRwdjmqjZQfvjwKNDbOx3IhP2H0WXodbISejPi1wBZqNW4m1rnZAXp/EpUguxA8mobCa4vUCBkyFDyXdl69/wUSJHyCPmgcMJ364OlAhIqtwVPShBZObvrK/f0BYk6ShJD3N7TFDatSYsIIdcTKRknaIm91s+EsMrdB9U4Yw+ZJ/pyCB4S3vk8zfDCnb0DWIxYH3/EMzaxl77djmTmMzi/JDITup5z3jfWtRZmrAhU2/+W5IO5hEpo3/bCS9PXIY5xb41Lmp2ZO8dXKtyD66Chchy0W129n8vPl2GIruOdrxsjZAHnneyAb9jm0uaGaphwnEnuecX/qgHY6ZMtayvLLsPst8PO6R1vufMy8WqjK+j7LnC1krL7CPDg0NEhyQTmw5l+NCNjSlvB1juM9V4PARg0bYCOkGXm7ydRCjSSH8CJXZpwnd5cBB5WKAX3KPzutRgMi/LFwNSMZzFuUyXaYOZPpD259yqph1LmGqegEdDriACVU+dVEONFMm8eIuBofe7ljmsAFKW9BINwK0CAwEAAQ==",
+];
+
+let cachedCertKeys = null;
+let cachedCertKeysFetchedAt = 0;
 
 const RATE_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_BUCKETS = 4096;
@@ -184,11 +194,22 @@ async function handleSync(request, env) {
       return corsJson(401, { ok: false, error: "Challenge expired or invalid" });
     }
 
-    const mojangOk = await verifyMojangHasJoined(uuid, username, serverId);
-    if (!mojangOk) {
-      return corsJson(403, { ok: false, error: "Mojang session verification failed" });
+    if (body.cert && typeof body.challengeSignature === "string") {
+      const certCheck = await verifyMojangCertificateAndChallenge(uuid, serverId, body.cert, body.challengeSignature);
+      if (!certCheck.ok) {
+        return corsJson(403, { ok: false, error: certCheck.error });
+      }
+      verifiedBy = "mojang-cert";
+    } else {
+      const mojangCheck = await verifyMojangHasJoined(uuid, username, serverId);
+      if (!mojangCheck.ok) {
+        return corsJson(403, {
+          ok: false,
+          error: `Mojang session verification failed (Mojang HTTP ${mojangCheck.status})`,
+        });
+      }
+      verifiedBy = "mojang";
     }
-    verifiedBy = "mojang";
     if (env.HMAC_SECRET) {
       issuedToken = await signHmacToken(uuid, env.HMAC_SECRET, SESSION_TTL_SECONDS);
     }
@@ -289,22 +310,172 @@ async function handleQuery(request, env) {
   return corsJson(200, { ok: true, players });
 }
 
+async function verifyMojangCertificateAndChallenge(compactUuid, serverId, cert, challengeSignatureB64) {
+  if (!cert || typeof cert !== "object") {
+    return { ok: false, error: "Missing Mojang certificate" };
+  }
+  const publicKeyB64 = typeof cert.publicKey === "string" ? cert.publicKey.trim() : "";
+  const keySigB64 = typeof cert.keySignature === "string" ? cert.keySignature.trim() : "";
+  const expiresAtMs = Number(cert.expiresAtMs);
+  if (!publicKeyB64 || !keySigB64 || publicKeyB64.length > 2048 || keySigB64.length > 2048) {
+    return { ok: false, error: "Malformed Mojang certificate fields" };
+  }
+  if (!Number.isSafeInteger(expiresAtMs) || expiresAtMs <= Date.now() - 60_000) {
+    return { ok: false, error: "Mojang certificate expired" };
+  }
+  const cleanChallengeSig = challengeSignatureB64.trim();
+  if (!cleanChallengeSig || cleanChallengeSig.length > 2048) {
+    return { ok: false, error: "Malformed challenge signature" };
+  }
+
+  const publicKeyBytes = decodeBase64Bytes(publicKeyB64);
+  const keySigBytes = decodeBase64Bytes(keySigB64);
+  const challengeSigBytes = decodeBase64Bytes(cleanChallengeSig);
+  if (!publicKeyBytes || !keySigBytes || !challengeSigBytes || publicKeyBytes.length < 64) {
+    return { ok: false, error: "Invalid base64 certificate encoding" };
+  }
+
+  const certPayload = new Uint8Array(24 + publicKeyBytes.length);
+  for (let i = 0; i < 16; i++) {
+    certPayload[i] = parseInt(compactUuid.slice(i * 2, i * 2 + 2), 16);
+  }
+  new DataView(certPayload.buffer).setBigInt64(16, BigInt(expiresAtMs), false);
+  certPayload.set(publicKeyBytes, 24);
+
+  const rootKeys = await getMojangPlayerCertificateKeys();
+  let certTrusted = false;
+  for (const rootKey of rootKeys) {
+    try {
+      if (await crypto.subtle.verify("RSASSA-PKCS1-v1_5", rootKey, keySigBytes, certPayload)) {
+        certTrusted = true;
+        break;
+      }
+    } catch {
+    }
+  }
+  if (!certTrusted) {
+    return { ok: false, error: "Mojang certificate signature invalid" };
+  }
+
+  try {
+    const playerKey = await crypto.subtle.importKey(
+      "spki",
+      publicKeyBytes,
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false,
+      ["verify"]
+    );
+    const challengeMsg = new TextEncoder().encode(`wish-cosmetic-cert:${compactUuid}:${serverId}`);
+    const challengeValid = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", playerKey, challengeSigBytes, challengeMsg);
+    if (!challengeValid) {
+      return { ok: false, error: "Challenge signature invalid" };
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Invalid player public key" };
+  }
+}
+
+async function getMojangPlayerCertificateKeys() {
+  const now = Date.now();
+  if (cachedCertKeys && cachedCertKeys.length > 0 && now - cachedCertKeysFetchedAt < PUBLIC_KEYS_CACHE_TTL_MS) {
+    return cachedCertKeys;
+  }
+
+  const keyB64Set = new Set(MOJANG_FALLBACK_CERT_KEYS_B64);
+  try {
+    const res = await fetch(MOJANG_PUBLIC_KEYS_URL, {
+      method: "GET",
+      headers: {
+        "User-Agent": "Wish-Cosmetics-Worker/1.1.7",
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (res.status === 200) {
+      const data = await res.json().catch(() => null);
+      if (data && Array.isArray(data.playerCertificateKeys)) {
+        for (const entry of data.playerCertificateKeys) {
+          if (entry && typeof entry.publicKey === "string" && entry.publicKey.trim()) {
+            keyB64Set.add(entry.publicKey.trim());
+          }
+        }
+      }
+    }
+  } catch {
+  }
+
+  const imported = [];
+  for (const b64 of keyB64Set) {
+    const spki = decodeBase64Bytes(b64);
+    if (!spki) continue;
+    try {
+      const key = await crypto.subtle.importKey(
+        "spki",
+        spki,
+        { name: "RSASSA-PKCS1-v1_5", hash: "SHA-1" },
+        false,
+        ["verify"]
+      );
+      imported.push(key);
+    } catch {
+    }
+  }
+  if (imported.length > 0) {
+    cachedCertKeys = imported;
+    cachedCertKeysFetchedAt = now;
+  }
+  return imported;
+}
+
+function decodeBase64Bytes(b64) {
+  try {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) {
+      out[i] = bin.charCodeAt(i);
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
 async function verifyMojangHasJoined(expectedCompactUuid, username, serverId) {
   const url =
     `https://sessionserver.mojang.com/session/minecraft/hasJoined` +
     `?username=${encodeURIComponent(username)}&serverId=${encodeURIComponent(serverId)}`;
-  const res = await fetch(url, {
-    method: "GET",
-    signal: AbortSignal.timeout(4000),
-  });
-  if (res.status !== 200) {
-    return false;
+  let lastStatus = 0;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          "User-Agent": "Wish-Cosmetics-Worker/1.1.7",
+          Accept: "application/json",
+        },
+        signal: AbortSignal.timeout(4000),
+      });
+      lastStatus = res.status;
+      if (res.status === 200) {
+        const profile = await res.json().catch(() => null);
+        if (!profile || typeof profile.id !== "string") {
+          return { ok: false, status: 200 };
+        }
+        return { ok: normalizeCompactUuid(profile.id) === expectedCompactUuid, status: 200 };
+      }
+      if (res.status !== 204 || attempt === 1) {
+        return { ok: false, status: res.status };
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    } catch {
+      lastStatus = 0;
+      if (attempt === 1) {
+        return { ok: false, status: 0 };
+      }
+    }
   }
-  const profile = await res.json().catch(() => null);
-  if (!profile || typeof profile.id !== "string") {
-    return false;
-  }
-  return normalizeCompactUuid(profile.id) === expectedCompactUuid;
+  return { ok: false, status: lastStatus };
 }
 
 function mojangSignedHex(bytes) {

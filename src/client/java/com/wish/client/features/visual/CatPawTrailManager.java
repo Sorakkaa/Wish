@@ -14,7 +14,9 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.wish.client.color.ColorUtils;
 import com.wish.client.config.ModConfig;
+import com.wish.client.features.cosmetic.PlayerCosmeticsManager;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.RenderPipelines;
@@ -35,7 +37,6 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.Random;
@@ -43,7 +44,7 @@ import java.util.Random;
 public final class CatPawTrailManager {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("Wish-CatPawTrails");
-    private static final Identifier ATLAS_ID = Identifier.fromNamespaceAndPath("wish", "cat_paw_trail_atlas");
+    private static final Identifier ATLAS_ID = Identifier.fromNamespaceAndPath("wish", "cat_paw_trail_atlas_v2");
 
     private static final int MAX_FOOTPRINTS = 64;
     private static final int MAX_SPARKLES = 96;
@@ -53,12 +54,13 @@ public final class CatPawTrailManager {
     private static final double MIN_STEP_DIST_SQ = 0.25;
     private static final double TELEPORT_DIST_SQ = 9.0;
     private static final double TELEPORT_MAX_DY = 2.5;
-    private static final double TRACK_PLAYER_RADIUS_SQ = 32.0 * 32.0;
     private static final double RENDER_FOOTPRINT_MAX_DIST_SQ = 48.0 * 48.0;
     private static final double RENDER_SPARKLE_MAX_DIST_SQ = 40.0 * 40.0;
     private static final float COS_7_DEG = (float) Math.cos(CatPawTrailMath.STEP_TOE_OUT_RAD);
     private static final float SIN_7_DEG = (float) Math.sin(CatPawTrailMath.STEP_TOE_OUT_RAD);
     private static final float RIPPLE_LIFE_SEC = 0.46f;
+    private static final float FIXED_TRAIL_SCALE = 1.40f;
+    private static final float FIXED_TRAIL_DURATION_SEC = 3.0f;
     private static final float UV_PAD = 0.002f;
 
     private static final float[] FP_X = new float[MAX_FOOTPRINTS];
@@ -142,8 +144,24 @@ public final class CatPawTrailManager {
         }
     }
 
+    private static int resolveActiveTrailId() {
+        ModConfig cfg = ModConfig.INSTANCE;
+        if (cfg.selectedTrail > 0) {
+            return PlayerCosmeticsManager.clampTrailId(cfg.selectedTrail);
+        }
+        return cfg.enableCatPawTrails ? 1 : 0;
+    }
+
+    private static boolean isPlayerInvisible(Player player, Minecraft mc) {
+        if (player == null || player.isSpectator() || player.isInvisible()
+                || player.hasEffect(MobEffects.INVISIBILITY)) {
+            return true;
+        }
+        return mc != null && mc.player != null && player != mc.player && player.isInvisibleTo(mc.player);
+    }
+
     public static void onClientTick(Minecraft mc) {
-        if (mc == null || mc.level == null || mc.player == null || !ModConfig.INSTANCE.enableCatPawTrails) {
+        if (mc == null || mc.level == null || mc.player == null || resolveActiveTrailId() == 0) {
             if (lastLevel != null || activeFootprintCount > 0 || activeSparkleCount > 0) {
                 reset();
             }
@@ -159,37 +177,16 @@ public final class CatPawTrailManager {
 
         tickCounter++;
         long nowMs = System.currentTimeMillis();
-        trackPlayerStep(mc.level, mc.player, nowMs);
-
-        if (ModConfig.INSTANCE.catPawTrailIncludeOthers) {
-            double selfX = mc.player.getX();
-            double selfY = mc.player.getY();
-            double selfZ = mc.player.getZ();
-            List<? extends Player> players = mc.level.players();
-            for (int i = 0; i < players.size(); i++) {
-                Player other = players.get(i);
-                if (other == null || other == mc.player) {
-                    continue;
-                }
-                double dx = other.getX() - selfX;
-                double dy = other.getY() - selfY;
-                double dz = other.getZ() - selfZ;
-                if (dx * dx + dy * dy + dz * dz > TRACK_PLAYER_RADIUS_SQ) {
-                    continue;
-                }
-                if (RealPlayerFilter.isRealPlayer(other, false)) {
-                    trackPlayerStep(mc.level, other, nowMs);
-                }
-            }
-        }
+        trackPlayerStep(mc.level, mc.player, mc, nowMs);
     }
 
     public static void renderWorld(LevelRenderContext context) {
-        if (!ModConfig.INSTANCE.enableCatPawTrails || context == null || context.levelState() == null) {
+        int trailId = resolveActiveTrailId();
+        if (trailId == 0 || context == null || context.levelState() == null) {
             return;
         }
         long nowMs = System.currentTimeMillis();
-        float durationSec = clampDuration(ModConfig.INSTANCE.catPawTrailDuration);
+        float durationSec = FIXED_TRAIL_DURATION_SEC;
         sweepExpired(nowMs, durationSec);
         if (activeFootprintCount == 0 && activeSparkleCount == 0) {
             return;
@@ -286,11 +283,11 @@ public final class CatPawTrailManager {
         return vertexBuffer;
     }
 
-    private static void trackPlayerStep(ClientLevel level, Player player, long nowMs) {
+    private static void trackPlayerStep(ClientLevel level, Player player, Minecraft mc, long nowMs) {
         int slot = findOrAllocatePlayerSlot(player.getId(), player.getX(), player.getY(), player.getZ());
         TR_LAST_TICK_SEEN[slot] = tickCounter;
 
-        if (!player.onGround() || player.isSpectator() || player.isInvisible()
+        if (!player.onGround() || isPlayerInvisible(player, mc)
                 || player.isPassenger() || player.isSleeping()) {
             TR_LAST_X[slot] = player.getX();
             TR_LAST_Y[slot] = player.getY();
@@ -503,10 +500,10 @@ public final class CatPawTrailManager {
         }
         NativeImage image = null;
         try {
-            image = new NativeImage(NativeImage.Format.RGBA, CatPawTrailMath.ATLAS_SIZE, CatPawTrailMath.ATLAS_SIZE, false);
-            for (int y = 0; y < CatPawTrailMath.ATLAS_SIZE; y++) {
-                for (int x = 0; x < CatPawTrailMath.ATLAS_SIZE; x++) {
-                    image.setPixelABGR(x, y, CatPawTrailMath.sampleAtlasPixelAbgr(x, y));
+            image = new NativeImage(NativeImage.Format.RGBA, CatPawTrailMath.TRAIL_ATLAS_WIDTH, CatPawTrailMath.TRAIL_ATLAS_HEIGHT, false);
+            for (int y = 0; y < CatPawTrailMath.TRAIL_ATLAS_HEIGHT; y++) {
+                for (int x = 0; x < CatPawTrailMath.TRAIL_ATLAS_WIDTH; x++) {
+                    image.setPixelABGR(x, y, CatPawTrailMath.sampleTrailAtlas512x256Abgr(x, y));
                 }
             }
             atlasTexture = new CatPawAtlasTexture(image);
@@ -524,11 +521,12 @@ public final class CatPawTrailManager {
     }
 
     private static void emitAllGeometry(BufferBuilder builder, float durationSec) {
-        int customRgb = ColorUtils.parseHexRgb(ModConfig.INSTANCE.catPawTrailColor, CatPawTrailMath.DEFAULT_COLOR_RGB);
+        int trailId = resolveActiveTrailId();
+        int customRgb = PlayerCosmeticsManager.getTrailDefaultRgb(trailId);
         int glowRgb = CatPawTrailMath.resolveGlowRgb(customRgb);
         int bodyRgb = CatPawTrailMath.resolveBodyRgb(customRgb);
         int coreRgb = CatPawTrailMath.resolveCoreRgb(customRgb);
-        float configScale = clampScale(ModConfig.INSTANCE.catPawTrailScale);
+        float configScale = FIXED_TRAIL_SCALE;
 
         for (int offset = 0; offset < MAX_FOOTPRINTS; offset++) {
             int i = (fpCursor + offset) % MAX_FOOTPRINTS;
@@ -547,7 +545,7 @@ public final class CatPawTrailManager {
                 continue;
             }
 
-            emitFootprintLayers(builder, i, rx, ry, rz, ageSec, durationSec, configScale, glowRgb, bodyRgb, coreRgb);
+            emitFootprintLayers(builder, trailId, i, rx, ry, rz, ageSec, durationSec, configScale, glowRgb, bodyRgb, coreRgb);
         }
 
         for (int offset = 0; offset < MAX_SPARKLES; offset++) {
@@ -568,12 +566,13 @@ public final class CatPawTrailManager {
                 continue;
             }
 
-            emitSparkleQuad(builder, i, rx, ry, rz, ageSec, lifeSec, configScale, bodyRgb, coreRgb);
+            emitSparkleQuad(builder, trailId, i, rx, ry, rz, ageSec, lifeSec, configScale, bodyRgb, coreRgb);
         }
     }
 
     private static void emitFootprintLayers(
             BufferBuilder builder,
+            int trailId,
             int idx,
             float rx,
             float ry,
@@ -604,33 +603,65 @@ public final class CatPawTrailManager {
             emitHorizontalQuad(
                     builder, rx, ry + 0.0002f, rz,
                     fwdX, fwdZ, rightX, rightZ, rippleRadius,
-                    0.50f + UV_PAD, 0.50f + UV_PAD, 0.75f - UV_PAD, 0.75f - UV_PAD, packArgb(bodyRgb, rippleAlpha)
+                    0.250f + UV_PAD, 0.250f + UV_PAD, 0.375f - UV_PAD, 0.375f - UV_PAD, packArgb(bodyRgb, rippleAlpha)
             );
         }
 
-        float glowAlpha = clamp01(alpha * 0.72f * CatPawTrailMath.FIXED_GLOW_MULT);
-        float glowHalfSize = baseHalfSize * (1.0f + 0.14f * CatPawTrailMath.FIXED_GLOW_MULT);
-        emitHorizontalQuad(
-                builder, rx, ry, rz,
-                fwdX, fwdZ, rightX, rightZ, glowHalfSize,
-                0.00f + UV_PAD, 0.00f + UV_PAD, 0.50f - UV_PAD, 0.50f - UV_PAD, packArgb(glowRgb, glowAlpha)
-        );
+        if (trailId == 8) {
+            float pawHalf = baseHalfSize * 0.50f;
+            float glowAlpha = clamp01(alpha * 0.72f * CatPawTrailMath.FIXED_GLOW_MULT);
+            float glowHalfSize = pawHalf * (1.0f + 0.14f * CatPawTrailMath.FIXED_GLOW_MULT);
+            emitHorizontalQuad(
+                    builder, rx, ry, rz,
+                    fwdX, fwdZ, rightX, rightZ, glowHalfSize,
+                    0.00f + UV_PAD, 0.00f + UV_PAD, 0.25f - UV_PAD, 0.25f - UV_PAD, packArgb(glowRgb, glowAlpha)
+            );
+            emitHorizontalQuad(
+                    builder, rx, ry + 0.0016f, rz,
+                    fwdX, fwdZ, rightX, rightZ, pawHalf,
+                    0.25f + UV_PAD, 0.00f + UV_PAD, 0.50f - UV_PAD, 0.25f - UV_PAD, packArgb(bodyRgb, alpha * 0.98f)
+            );
+            emitHorizontalQuad(
+                    builder, rx, ry + 0.0024f, rz,
+                    fwdX, fwdZ, rightX, rightZ, pawHalf,
+                    0.00f + UV_PAD, 0.25f + UV_PAD, 0.25f - UV_PAD, 0.50f - UV_PAD, packArgb(coreRgb, alpha)
+            );
+            return;
+        }
 
+        float u0, v0, u1, v1;
+        switch (trailId) {
+            case 1 -> { u0 = 0.00f; v0 = 0.50f; u1 = 0.25f; v1 = 0.75f; }
+            case 2 -> { u0 = 0.25f; v0 = 0.50f; u1 = 0.50f; v1 = 0.75f; }
+            case 3 -> { u0 = 0.75f; v0 = 0.00f; u1 = 1.00f; v1 = 0.25f; }
+            case 4 -> { u0 = 0.50f; v0 = 0.50f; u1 = 0.75f; v1 = 0.75f; }
+            case 5 -> { u0 = 0.75f; v0 = 0.25f; u1 = 1.00f; v1 = 0.50f; }
+            case 6 -> { u0 = 0.75f; v0 = 0.50f; u1 = 1.00f; v1 = 0.75f; }
+            case 7 -> { u0 = 0.00f; v0 = 0.75f; u1 = 0.25f; v1 = 1.00f; }
+            case 9 -> { u0 = 0.25f; v0 = 0.75f; u1 = 0.50f; v1 = 1.00f; }
+            case 10 -> { u0 = 0.50f; v0 = 0.75f; u1 = 0.75f; v1 = 1.00f; }
+            default -> { u0 = 0.50f; v0 = 0.00f; u1 = 0.75f; v1 = 0.25f; }
+        }
         emitHorizontalQuad(
-                builder, rx, ry + 0.0016f, rz,
+                builder, rx, ry + 0.0008f, rz,
+                fwdX, fwdZ, rightX, rightZ, baseHalfSize * 1.16f,
+                u0 + UV_PAD, v0 + UV_PAD, u1 - UV_PAD, v1 - UV_PAD, packArgb(glowRgb, alpha * 0.72f)
+        );
+        emitHorizontalQuad(
+                builder, rx, ry + 0.0018f, rz,
                 fwdX, fwdZ, rightX, rightZ, baseHalfSize,
-                0.50f + UV_PAD, 0.00f + UV_PAD, 1.00f - UV_PAD, 0.50f - UV_PAD, packArgb(bodyRgb, alpha * 0.98f)
+                u0 + UV_PAD, v0 + UV_PAD, u1 - UV_PAD, v1 - UV_PAD, packArgb(bodyRgb, alpha * 0.98f)
         );
-
         emitHorizontalQuad(
                 builder, rx, ry + 0.0024f, rz,
-                fwdX, fwdZ, rightX, rightZ, baseHalfSize,
-                0.00f + UV_PAD, 0.50f + UV_PAD, 0.50f - UV_PAD, 1.00f - UV_PAD, packArgb(coreRgb, alpha)
+                fwdX, fwdZ, rightX, rightZ, baseHalfSize * 0.58f,
+                u0 + UV_PAD, v0 + UV_PAD, u1 - UV_PAD, v1 - UV_PAD, packArgb(coreRgb, alpha)
         );
     }
 
     private static void emitSparkleQuad(
             BufferBuilder builder,
+            int trailId,
             int idx,
             float rx,
             float ry,
@@ -665,10 +696,20 @@ public final class CatPawTrailManager {
         float uvy = (frameCamUpY * cosA - frameCamRightY * sinA) * halfS;
         float uvz = (frameCamUpZ * cosA - frameCamRightZ * sinA) * halfS;
 
-        float u0 = (isHeart ? 0.50f : 0.75f) + UV_PAD;
-        float v0 = (isHeart ? 0.75f : 0.50f) + UV_PAD;
-        float u1 = (isHeart ? 0.75f : 1.00f) - UV_PAD;
-        float v1 = (isHeart ? 1.00f : 0.75f) - UV_PAD;
+        float u0, v0, u1, v1;
+        switch (trailId) {
+            case 8 -> { u0 = 0.50f; v0 = 0.00f; u1 = 0.75f; v1 = 0.25f; }
+            case 2, 3, 4, 6, 7, 10 -> { u0 = 0.375f; v0 = 0.250f; u1 = 0.500f; v1 = 0.375f; }
+            case 1, 9 -> { u0 = 0.250f; v0 = 0.375f; u1 = 0.375f; v1 = 0.500f; }
+            case 5 -> { u0 = 0.375f; v0 = 0.375f; u1 = 0.500f; v1 = 0.500f; }
+            default -> {
+                u0 = isHeart ? 0.250f : 0.375f;
+                v0 = isHeart ? 0.375f : 0.250f;
+                u1 = isHeart ? 0.375f : 0.500f;
+                v1 = isHeart ? 0.500f : 0.375f;
+            }
+        }
+        u0 += UV_PAD; v0 += UV_PAD; u1 -= UV_PAD; v1 -= UV_PAD;
 
         emitVertex(builder, rx - rvx + uvx, ry - rvy + uvy, rz - rvz + uvz, u0, v0, argb);
         emitVertex(builder, rx - rvx - uvx, ry - rvy - uvy, rz - rvz - uvz, u0, v1, argb);

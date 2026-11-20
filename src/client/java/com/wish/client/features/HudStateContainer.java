@@ -12,15 +12,22 @@ public final class HudStateContainer {
     public record LagSnapshot(boolean isLagging, Component formattedText, long ms, int textWidth) {}
     public record AutomatonSnapshot(boolean isVisible, List<Component> mainLines, List<Component> dropLines, int maxWidth, int totalHeight) {}
     public record BossSnapshot(boolean isVisible, Component title, int titleWidth, String owner, int ownerWidth) {}
+    public record MiningAbilitySnapshot(boolean isVisible, Component header, int headerWidth, Component detailText, int detailWidth) {}
 
     public static final Component BOSS_SPAWN_TITLE = Component.literal("Boss Spawn")
             .withStyle(s -> s.withColor(0xFFFF55FF).withBold(true));
+    public static final Component MINING_ABILITY_HEADER = Component.literal("Pickaxe Ability")
+            .withStyle(s -> s.withColor(0xFF55FFFF).withBold(true));
     private static final BossSnapshot EMPTY_BOSS = new BossSnapshot(false, BOSS_SPAWN_TITLE, 0, "", 0);
+    private static final MiningAbilitySnapshot EMPTY_MINING_ABILITY = new MiningAbilitySnapshot(false, MINING_ABILITY_HEADER, 0, Component.empty(), 0);
 
     private static volatile LagSnapshot currentLag = new LagSnapshot(false, Component.empty(), 0, 0);
     private static volatile AutomatonSnapshot currentAutomaton = new AutomatonSnapshot(false, Collections.emptyList(), Collections.emptyList(), 0, 0);
     private static volatile BossSnapshot currentBoss = EMPTY_BOSS;
+    private static volatile MiningAbilitySnapshot currentMiningAbility = EMPTY_MINING_ABILITY;
+    private static volatile String lastMiningAbilityCacheKey = "";
     private static volatile int cachedBossTitleWidth = -1;
+    private static volatile int cachedMiningHeaderWidth = -1;
 
     private static final Component AUTOMATON_TITLE = Component.literal("Automaton Tracker")
             .withStyle(style -> style.withColor(0xFFFFAA00));
@@ -35,6 +42,45 @@ public final class HudStateContainer {
 
     public static BossSnapshot getBossSnapshot() {
         return currentBoss;
+    }
+
+    public static MiningAbilitySnapshot getMiningAbilitySnapshot() {
+        return currentMiningAbility;
+    }
+
+    public static void updateMiningAbilityState(
+            boolean visible,
+            String prefix,
+            String statusText,
+            int statusColor,
+            net.minecraft.client.gui.Font font
+    ) {
+        if (!visible || prefix == null || statusText == null) {
+            if (currentMiningAbility.isVisible()) {
+                currentMiningAbility = EMPTY_MINING_ABILITY;
+                lastMiningAbilityCacheKey = "";
+            }
+            return;
+        }
+        String cacheKey = prefix + "|" + statusText + "|" + statusColor;
+        if (currentMiningAbility.isVisible() && cacheKey.equals(lastMiningAbilityCacheKey)) {
+            return;
+        }
+        int headerW = cachedMiningHeaderWidth;
+        if (font != null) {
+            if (headerW <= 0) {
+                headerW = font.width(MINING_ABILITY_HEADER);
+                cachedMiningHeaderWidth = headerW;
+            }
+        } else if (headerW <= 0) {
+            headerW = 84;
+        }
+        Component detail = Component.literal(prefix + ": ")
+                .withStyle(s -> s.withColor(0xFFFFFFFF))
+                .append(Component.literal(statusText).withStyle(s -> s.withColor(statusColor)));
+        int detailW = font != null ? font.width(detail) : Math.max(80, (prefix.length() + statusText.length() + 2) * 6);
+        lastMiningAbilityCacheKey = cacheKey;
+        currentMiningAbility = new MiningAbilitySnapshot(true, MINING_ABILITY_HEADER, headerW, detail, detailW);
     }
 
     public static void updateBossState(boolean visible, String owner, net.minecraft.client.gui.Font font) {

@@ -9,6 +9,8 @@ public final class CatPawTrailMath {
     public static final float FIXED_SCALE = 1.0f;
 
     public static final int ATLAS_SIZE = 256;
+    public static final int TRAIL_ATLAS_WIDTH = 512;
+    public static final int TRAIL_ATLAS_HEIGHT = 512;
     public static final int QUADRANT_SIZE = 128;
     public static final int SUB_SPRITE_SIZE = 64;
 
@@ -151,6 +153,118 @@ public final class CatPawTrailMath {
         return (alphaByte << 24) | 0x00FFFFFF;
     }
 
+    public static int sampleTrailAtlas512x256Abgr(int x, int y) {
+        if (x < 0 || x >= TRAIL_ATLAS_WIDTH || y < 0 || y >= TRAIL_ATLAS_HEIGHT) {
+            return 0;
+        }
+        if (y >= ATLAS_SIZE) {
+            int cellX = x / QUADRANT_SIZE;
+            int cellY = y / QUADRANT_SIZE;
+            float nx = toNormalizedCoord(x % QUADRANT_SIZE, QUADRANT_SIZE);
+            float ny = toNormalizedCoord(y % QUADRANT_SIZE, QUADRANT_SIZE);
+            float borderFade = borderFalloff(nx, ny, 0.80f, 0.95f);
+            if (borderFade <= 0.0f) {
+                return 0;
+            }
+            float alpha = switch (cellY * 4 + cellX) {
+                case 8 -> sampleClawSlashAlpha(nx, ny);
+                case 9 -> sampleFlamePrintAlpha(nx, ny);
+                case 10 -> sampleRuneSigilAlpha(nx, ny);
+                case 11 -> sampleLightningPrintAlpha(nx, ny);
+                case 12 -> sampleVoidSpiralAlpha(nx, ny);
+                case 13 -> sampleWingPrintAlpha(nx, ny);
+                case 14 -> sampleCrescentPrintAlpha(nx, ny);
+                default -> 0.0f;
+            };
+            int alphaByte = Math.max(0, Math.min(255, Math.round(clamp01(alpha * borderFade) * 255.0f)));
+            return (alphaByte << 24) | 0x00FFFFFF;
+        }
+        if (x < ATLAS_SIZE) {
+            if (x >= QUADRANT_SIZE + SUB_SPRITE_SIZE && y >= QUADRANT_SIZE + SUB_SPRITE_SIZE) {
+                float nx = toNormalizedCoord(x - (QUADRANT_SIZE + SUB_SPRITE_SIZE), SUB_SPRITE_SIZE);
+                float ny = toNormalizedCoord(y - (QUADRANT_SIZE + SUB_SPRITE_SIZE), SUB_SPRITE_SIZE);
+                float alpha = sampleSnowflakeAlpha(nx, ny) * borderFalloff(nx, ny, 0.76f, 0.90f);
+                int alphaByte = Math.max(0, Math.min(255, Math.round(clamp01(alpha) * 255.0f)));
+                return (alphaByte << 24) | 0x00FFFFFF;
+            }
+            return sampleAtlasPixelAbgr(x, y);
+        }
+        int rx = x - ATLAS_SIZE;
+        int cellX = rx / QUADRANT_SIZE;
+        int cellY = y / QUADRANT_SIZE;
+        float nx = toNormalizedCoord(rx % QUADRANT_SIZE, QUADRANT_SIZE);
+        float ny = toNormalizedCoord(y % QUADRANT_SIZE, QUADRANT_SIZE);
+        float borderFade = borderFalloff(nx, ny, 0.80f, 0.95f);
+        if (borderFade <= 0.0f) {
+            return 0;
+        }
+        float alpha;
+        if (cellX == 0 && cellY == 0) {
+            alpha = sampleSakuraBlossomAlpha(nx, ny);
+        } else if (cellX == 1 && cellY == 0) {
+            alpha = sampleStarlightPrintAlpha(nx, ny);
+        } else if (cellX == 0 && cellY == 1) {
+            alpha = sampleHeartPrintAlpha(nx, ny);
+        } else {
+            alpha = sampleSnowflakeAlpha(nx, ny);
+        }
+        int alphaByte = Math.max(0, Math.min(255, Math.round(clamp01(alpha * borderFade) * 255.0f)));
+        return (alphaByte << 24) | 0x00FFFFFF;
+    }
+
+    private static float sampleSakuraBlossomAlpha(float nx, float ny) {
+        float r = (float) Math.hypot(nx, ny);
+        if (r > 0.88f) {
+            return 0.0f;
+        }
+        double theta = Math.atan2(ny, nx);
+        float petalShape = 0.44f + 0.24f * (float) Math.cos(theta * 5.0);
+        float notch = 0.07f * (float) Math.pow(Math.max(0.0, Math.cos(theta * 5.0)), 6.0);
+        float d = r - (petalShape - notch);
+        float body = smoothstep(0.045f, -0.045f, d);
+        float glow = (float) Math.exp(-(Math.max(0.0f, d) * Math.max(0.0f, d)) / (2.0f * 0.09f * 0.09f)) * 0.55f;
+        float centerHole = smoothstep(0.11f, 0.17f, r);
+        float centerDot = smoothstep(0.08f, 0.03f, r) * 0.90f;
+        return clamp01(Math.max(Math.max(body * centerHole, centerDot), glow));
+    }
+
+    private static float sampleStarlightPrintAlpha(float nx, float ny) {
+        float ax = Math.abs(nx);
+        float ay = Math.abs(ny);
+        float astroid = (float) (Math.pow(ax, 0.58) + Math.pow(ay, 0.58));
+        float star = smoothstep(0.92f, 0.62f, astroid);
+        float r = (float) Math.hypot(nx, ny);
+        float core = smoothstep(0.32f, 0.0f, r);
+        float glow = (float) Math.exp(-r * r * 5.2f) * 0.52f;
+        return clamp01(Math.max(star, Math.max(core, glow)));
+    }
+
+    private static float sampleHeartPrintAlpha(float nx, float ny) {
+        float dHeart = sdHeart(nx * 1.12f, ny * 1.12f);
+        float core = smoothstep(0.04f, -0.04f, dHeart);
+        float outDist = Math.max(0.0f, dHeart);
+        float glow = (float) Math.exp(-(outDist * outDist) / (2.0f * 0.11f * 0.11f)) * 0.60f;
+        return clamp01(Math.max(core, glow));
+    }
+
+    private static float sampleSnowflakeAlpha(float nx, float ny) {
+        float r = (float) Math.hypot(nx, ny);
+        if (r > 0.92f) {
+            return 0.0f;
+        }
+        double angle = Math.atan2(ny, nx);
+        double sector = Math.PI / 3.0;
+        double localAngle = Math.abs(((angle % sector) + sector) % sector - sector * 0.5);
+        float ax = (float) (r * Math.cos(localAngle));
+        float ay = (float) (r * Math.sin(localAngle));
+        float arm = smoothstep(0.070f, 0.025f, ay) * smoothstep(0.86f, 0.68f, ax);
+        float branch = smoothstep(0.055f, 0.018f, Math.abs(ax - 0.42f - ay * 0.85f))
+                * smoothstep(0.36f, 0.24f, ay) * smoothstep(0.02f, 0.08f, ay);
+        float core = smoothstep(0.24f, 0.06f, r);
+        float glow = (float) Math.exp(-r * r * 4.2f) * 0.48f;
+        return clamp01(Math.max(Math.max(arm, branch), Math.max(core, glow)));
+    }
+
     private static float sampleOuterGlowAlpha(float nx, float ny) {
         float borderFade = borderFalloff(nx, ny, 0.78f, 0.92f);
         if (borderFade <= 0.0f) {
@@ -280,6 +394,90 @@ public final class CatPawTrailMath {
     private static float borderFalloff(float nx, float ny, float fadeStart, float fadeEnd) {
         float maxCoord = Math.max(Math.abs(nx), Math.abs(ny));
         return 1.0f - smoothstep(fadeStart, fadeEnd, maxCoord);
+    }
+
+    private static float sampleClawSlashAlpha(float nx, float ny) {
+        float u = (nx + ny) * 0.7071f;
+        float v = (-nx + ny) * 0.7071f;
+        float best = 0.0f;
+        for (int i = -1; i <= 1; i++) {
+            float off = i * 0.28f;
+            float lenLim = (i == 0) ? 0.68f : 0.56f;
+            float dv = Math.abs(v - off);
+            float taper = smoothstep(lenLim, 0.0f, Math.abs(u));
+            float w = 0.075f * taper;
+            best = Math.max(best, smoothstep(w + 0.03f, w * 0.35f, dv) * taper);
+        }
+        return clamp01(best);
+    }
+
+    private static float sampleFlamePrintAlpha(float nx, float ny) {
+        float w = 0.44f * clamp01(1.0f - (0.35f - ny) * 0.65f);
+        float dBody = (float) Math.hypot(nx / Math.max(0.08f, w), (ny - 0.14f) / 0.58f);
+        float wave = 0.09f * (float) Math.sin(ny * 8.0f + nx * 3.0f);
+        float outer = smoothstep(0.95f, 0.30f, dBody + wave);
+        float core = smoothstep(0.50f, 0.0f, (float) Math.hypot(nx, ny - 0.22f));
+        return clamp01(Math.max(outer, core));
+    }
+
+    private static float sampleRuneSigilAlpha(float nx, float ny) {
+        float r = (float) Math.hypot(nx, ny);
+        float ring = smoothstep(0.08f, 0.02f, Math.abs(r - 0.62f));
+        float hex = Math.max(Math.abs(nx) * 0.866f + Math.abs(ny) * 0.5f, Math.abs(ny));
+        float hexRing = smoothstep(0.07f, 0.02f, Math.abs(hex - 0.46f));
+        float diag1 = smoothstep(0.06f, 0.015f, Math.abs(nx - ny)) * smoothstep(0.62f, 0.52f, r);
+        float diag2 = smoothstep(0.06f, 0.015f, Math.abs(nx + ny)) * smoothstep(0.62f, 0.52f, r);
+        float center = smoothstep(0.18f, 0.04f, r);
+        return clamp01(Math.max(ring, Math.max(hexRing, Math.max(diag1, Math.max(diag2, center)))));
+    }
+
+    private static float sampleLightningPrintAlpha(float nx, float ny) {
+        float r = (float) Math.hypot(nx, ny);
+        float ring = smoothstep(0.06f, 0.015f, Math.abs(r - 0.66f)) * 0.65f;
+        float d1 = segmentDist(nx, ny, 0.16f, -0.60f, -0.18f, 0.02f);
+        float d2 = segmentDist(nx, ny, -0.18f, 0.02f, 0.14f, 0.02f);
+        float d3 = segmentDist(nx, ny, 0.14f, 0.02f, -0.18f, 0.62f);
+        float bolt = smoothstep(0.10f, 0.03f, Math.min(d1, Math.min(d2, d3)));
+        return clamp01(Math.max(ring, bolt));
+    }
+
+    private static float sampleVoidSpiralAlpha(float nx, float ny) {
+        float r = (float) Math.hypot(nx, ny);
+        if (r > 0.78f) {
+            return 0.0f;
+        }
+        double angle = Math.atan2(ny, nx) + r * 6.5;
+        float arm = (float) Math.abs(Math.sin(angle));
+        float spiral = smoothstep(0.45f, 0.08f, arm) * smoothstep(0.76f, 0.15f, r);
+        float core = smoothstep(0.24f, 0.05f, r);
+        return clamp01(Math.max(spiral, core));
+    }
+
+    private static float sampleWingPrintAlpha(float nx, float ny) {
+        float ax = Math.abs(nx);
+        float d1 = segmentDist(ax, ny, 0.04f, 0.25f, 0.58f, -0.32f);
+        float d2 = segmentDist(ax, ny, 0.04f, 0.02f, 0.48f, -0.10f);
+        float d3 = segmentDist(ax, ny, 0.04f, -0.18f, 0.34f, 0.22f);
+        float wing = smoothstep(0.11f, 0.03f, Math.min(d1, Math.min(d2, d3)));
+        return clamp01(wing);
+    }
+
+    private static float sampleCrescentPrintAlpha(float nx, float ny) {
+        float dOuter = (float) Math.hypot(nx, ny);
+        float dInner = (float) Math.hypot(nx - 0.24f, ny + 0.08f);
+        float crescent = smoothstep(0.70f, 0.60f, dOuter) * smoothstep(0.40f, 0.50f, dInner);
+        float star = smoothstep(0.18f, 0.03f, (float) Math.hypot(nx - 0.28f, ny + 0.10f));
+        return clamp01(Math.max(crescent, star));
+    }
+
+    private static float segmentDist(float px, float py, float ax, float ay, float bx, float by) {
+        float vx = bx - ax;
+        float vy = by - ay;
+        float wx = px - ax;
+        float wy = py - ay;
+        float c2 = vx * vx + vy * vy;
+        float t = c2 > 1e-6f ? clamp01((wx * vx + wy * vy) / c2) : 0.0f;
+        return (float) Math.hypot(px - (ax + t * vx), py - (ay + t * vy));
     }
 
     private static int brightenRgb(int rgb, float amount) {

@@ -15,22 +15,28 @@ class PlayerCosmeticsManagerTest {
     @Test
     void categoriesExposeTenNamedCosmeticsPlusNoneAndClampOutOfRangeIds() {
         assertEquals(10, PlayerCosmeticsManager.COUNT_PER_CATEGORY);
+        assertEquals(10, PlayerCosmeticsManager.TRAIL_COUNT);
         assertEquals(11, PlayerCosmeticsManager.WING_NAMES.size());
         assertEquals(11, PlayerCosmeticsManager.HALO_NAMES.size());
         assertEquals(11, PlayerCosmeticsManager.PARTICLE_NAMES.size());
+        assertEquals(11, PlayerCosmeticsManager.TRAIL_NAMES.size());
 
         assertEquals("None", PlayerCosmeticsManager.getWingName(-3));
-        assertEquals("Demon Wings", PlayerCosmeticsManager.getWingName(1));
-        assertEquals("Eclipse Seraph", PlayerCosmeticsManager.getWingName(2));
-        assertEquals("Mecha Valkyrie", PlayerCosmeticsManager.getWingName(99));
+        assertEquals("Crimson Demon", PlayerCosmeticsManager.getWingName(1));
+        assertEquals("Phoenix Flame", PlayerCosmeticsManager.getWingName(2));
+        assertEquals("Shadow Obsidian", PlayerCosmeticsManager.getWingName(99));
 
-        assertEquals("Angel Ring", PlayerCosmeticsManager.getHaloName(1));
-        assertEquals("Runic Sigil", PlayerCosmeticsManager.getHaloName(5));
-        assertEquals("Eclipse Halo", PlayerCosmeticsManager.getHaloName(10));
+        assertEquals("Crimson Horns", PlayerCosmeticsManager.getHaloName(1));
+        assertEquals("Frost Diadem", PlayerCosmeticsManager.getHaloName(5));
+        assertEquals("Shadow Eclipse", PlayerCosmeticsManager.getHaloName(10));
 
-        assertEquals("Arcane Orbs", PlayerCosmeticsManager.getParticleName(1));
-        assertEquals("Musical Notes", PlayerCosmeticsManager.getParticleName(5));
-        assertEquals("Emerald Shards", PlayerCosmeticsManager.getParticleName(10));
+        assertEquals("Crimson Hearts", PlayerCosmeticsManager.getParticleName(1));
+        assertEquals("Frost Crystals", PlayerCosmeticsManager.getParticleName(5));
+        assertEquals("Shadow Orbs", PlayerCosmeticsManager.getParticleName(10));
+
+        assertEquals("Crimson Claws", PlayerCosmeticsManager.TRAIL_NAMES.get(1));
+        assertEquals("Sakura Paws", PlayerCosmeticsManager.TRAIL_NAMES.get(8));
+        assertEquals("Shadow Crescents", PlayerCosmeticsManager.TRAIL_NAMES.get(10));
     }
 
     @Test
@@ -100,9 +106,9 @@ class PlayerCosmeticsManagerTest {
     @Test
     void proceduralAtlasGeneratesValidAbgrPixelsAndOpaqueBoneAttachmentEdges() {
         assertEquals(512, CosmeticAtlasMath.ATLAS_WIDTH);
-        assertEquals(384, CosmeticAtlasMath.ATLAS_HEIGHT);
+        assertEquals(512, CosmeticAtlasMath.ATLAS_HEIGHT);
         assertEquals(128, CosmeticAtlasMath.CELL_SIZE);
-        assertEquals(12, CosmeticAtlasMath.CELL_COUNT);
+        assertEquals(16, CosmeticAtlasMath.CELL_COUNT);
 
         int centerFeather = CosmeticAtlasMath.sampleAtlasPixelAbgr(64, 64);
         assertTrue((centerFeather >>> 24) > 0);

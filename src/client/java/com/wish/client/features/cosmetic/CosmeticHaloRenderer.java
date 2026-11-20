@@ -25,15 +25,15 @@ final class CosmeticHaloRenderer {
     ) {
         float centerY = -0.61f + floatY;
         switch (haloId) {
-            case 1 -> renderAngelRingHalo(pose, vc, centerY, ageTicks, renderSolid, renderGlow);
-            case 2 -> renderVoidCrownHalo(pose, vc, centerY, ageTicks, renderSolid, renderGlow);
-            case 3 -> renderStarlightAstrolabeHalo(pose, vc, centerY, ageTicks, renderSolid, renderGlow);
-            case 4 -> renderSakuraWreathHalo(pose, vc, centerY, ageTicks, renderSolid, renderGlow);
-            case 5 -> renderRunicSigilHalo(pose, vc, centerY, ageTicks, renderSolid, renderGlow);
-            case 6 -> renderSolarFlareHalo(pose, vc, centerY, ageTicks, renderSolid, renderGlow);
-            case 7 -> renderFrostDiademHalo(pose, vc, centerY, ageTicks, renderSolid, renderGlow);
-            case 8 -> renderDemonHornsHalo(pose, vc, floatY, ageTicks, renderSolid, renderGlow);
-            case 9 -> renderCyberVisorHalo(pose, vc, centerY, ageTicks, renderSolid, renderGlow);
+            case 1 -> renderDemonHornsHalo(pose, vc, floatY, ageTicks, renderSolid, renderGlow);
+            case 2 -> renderSolarFlareHalo(pose, vc, centerY, ageTicks, renderSolid, renderGlow);
+            case 3 -> renderAngelRingHalo(pose, vc, centerY, ageTicks, renderSolid, renderGlow);
+            case 4 -> renderRunicSigilHalo(pose, vc, centerY, ageTicks, renderSolid, renderGlow);
+            case 5 -> renderFrostDiademHalo(pose, vc, centerY, ageTicks, renderSolid, renderGlow);
+            case 6 -> renderCyberVisorHalo(pose, vc, centerY, ageTicks, renderSolid, renderGlow);
+            case 7 -> renderVoidCrownHalo(pose, vc, centerY, ageTicks, renderSolid, renderGlow);
+            case 8 -> renderSakuraWreathHalo(pose, vc, centerY, ageTicks, renderSolid, renderGlow);
+            case 9 -> renderStarlightAstrolabeHalo(pose, vc, centerY, ageTicks, renderSolid, renderGlow);
             case 10 -> renderEclipseHalo(pose, vc, centerY, ageTicks, renderSolid, renderGlow);
             default -> {}
         }
@@ -60,13 +60,13 @@ final class CosmeticHaloRenderer {
             }
         }
         if (renderGlow) {
-            emitVolumetricTorus(pose, vc, 0.0f, centerY, 0.0f, 0.27f, 0.042f, 24, spin, 0.08f, 255, 246, 175, 92);
+            emitGlowTorusAura(pose, vc, 0.0f, centerY, 0.0f, 0.27f, 0.020f, 24, spin, 0.08f, 255, 246, 175, 165);
             for (int i = 0; i < 8; i++) {
                 float a = spin * 1.4f + (i * TAU) / 8.0f;
                 float mx = Mth.cos(a) * 0.34f;
                 float mz = Mth.sin(a) * 0.34f;
                 float my = centerY - 0.025f + Mth.sin(ageTicks * 0.16f + i * 0.9f) * 0.030f;
-                emitGlowBillboard(pose, vc, mx, my, mz, 0.042f, ageTicks * 0.05f + i, orbUv, sparkUv, 255, 240, 145, 210);
+                emitGlowBillboard(pose, vc, mx, my, mz, 0.052f, ageTicks * 0.05f + i, orbUv, sparkUv, 255, 242, 155, 245);
             }
         }
     }
@@ -83,7 +83,7 @@ final class CosmeticHaloRenderer {
             emitVolumetricTorus(pose, vc, 0.0f, crownY, 0.0f, 0.23f, 0.024f, 16, spin, 0.0f, 52, 18, 92, 255);
         }
         if (renderGlow) {
-            emitVolumetricTorus(pose, vc, 0.0f, crownY, 0.0f, 0.23f, 0.044f, 16, spin, 0.0f, 178, 76, 255, 96);
+            emitGlowTorusAura(pose, vc, 0.0f, crownY, 0.0f, 0.23f, 0.024f, 16, spin, 0.0f, 185, 86, 255, 165);
         }
 
         int peaks = 8;
@@ -131,15 +131,15 @@ final class CosmeticHaloRenderer {
         CosmeticAtlasMath.getCellUv(CosmeticAtlasMath.CELL_SPARK, sparkUv);
 
         if (renderSolid) {
-            emitVolumetricTorus(pose, vc, 0.0f, centerY, 0.0f, 0.30f, 0.015f, 24, spinA, 0.28f, 110, 228, 232, 245);
-            emitVolumetricTorus(pose, vc, 0.0f, centerY, 0.0f, 0.25f, 0.014f, 24, spinB, -0.32f, 200, 245, 255, 240);
-            emitVolumetricTorus(pose, vc, 0.0f, centerY, 0.0f, 0.20f, 0.011f, 20, spinA * 1.4f, 0.14f, 155, 248, 255, 238);
+            emitVolumetricTorus(pose, vc, 0.0f, centerY, 0.0f, 0.30f, 0.015f, 24, spinA, 0.44f, 242, 247, 255, 250);
+            emitVolumetricTorus(pose, vc, 0.0f, centerY, 0.0f, 0.25f, 0.014f, 24, spinB, -0.46f, 210, 226, 252, 245);
+            emitVolumetricTorus(pose, vc, 0.0f, centerY, 0.0f, 0.20f, 0.011f, 20, spinA * 1.4f, 0.16f, 248, 252, 255, 242);
         }
         if (renderGlow) {
-            emitVolumetricTorus(pose, vc, 0.0f, centerY, 0.0f, 0.30f, 0.032f, 24, spinA, 0.28f, 125, 245, 255, 82);
-            emitVolumetricTorus(pose, vc, 0.0f, centerY, 0.0f, 0.25f, 0.028f, 24, spinB, -0.32f, 180, 250, 255, 76);
+            emitGlowTorusAura(pose, vc, 0.0f, centerY, 0.0f, 0.30f, 0.015f, 24, spinA, 0.28f, 232, 242, 255, 165);
+            emitGlowTorusAura(pose, vc, 0.0f, centerY, 0.0f, 0.25f, 0.014f, 24, spinB, -0.32f, 205, 222, 250, 152);
 
-            emitGlowBillboard(pose, vc, 0.0f, centerY - 0.02f, 0.0f, 0.070f, ageTicks * 0.04f, orbUv, sparkUv, 200, 255, 255, 235);
+            emitGlowBillboard(pose, vc, 0.0f, centerY - 0.02f, 0.0f, 0.088f, ageTicks * 0.04f, orbUv, sparkUv, 245, 250, 255, 255);
 
             int starCount = 10;
             for (int i = 0; i < starCount; i++) {
@@ -148,8 +148,8 @@ final class CosmeticHaloRenderer {
                 float rx = Mth.cos(a) * ringR;
                 float rz = Mth.sin(a) * ringR;
                 float ry = centerY + Mth.sin(a + spinB) * 0.09f;
-                float pulse = 0.046f + 0.018f * Mth.sin(ageTicks * 0.22f + i * 1.3f);
-                emitGlowBillboard(pose, vc, rx, ry, rz, pulse, ageTicks * 0.08f + i, orbUv, sparkUv, 165, 252, 255, 240);
+                float pulse = 0.056f + 0.020f * Mth.sin(ageTicks * 0.22f + i * 1.3f);
+                emitGlowBillboard(pose, vc, rx, ry, rz, pulse, ageTicks * 0.08f + i, orbUv, sparkUv, 235, 245, 255, 250);
             }
         }
     }
@@ -166,7 +166,7 @@ final class CosmeticHaloRenderer {
             emitVolumetricTorus(pose, vc, 0.0f, wreathY, 0.0f, 0.26f, 0.018f, 20, spin, 0.05f, 130, 82, 95, 255);
         }
         if (renderGlow) {
-            emitVolumetricTorus(pose, vc, 0.0f, wreathY, 0.0f, 0.26f, 0.036f, 20, spin, 0.05f, 255, 165, 210, 88);
+            emitGlowTorusAura(pose, vc, 0.0f, wreathY, 0.0f, 0.26f, 0.018f, 20, spin, 0.05f, 255, 165, 215, 165);
         }
 
         int flowerCount = 8;
@@ -198,7 +198,7 @@ final class CosmeticHaloRenderer {
             }
             if (renderGlow) {
                 CosmeticGeometryHelper.emitCameraBillboardQuad(pose, vc, FULL_BRIGHT,
-                        fx, fy - 0.012f, fz, 0.058f, 0.0f, orbUv, 255, 185, 220, 120);
+                        fx, fy - 0.012f, fz, 0.078f, 0.0f, orbUv, 255, 185, 225, 195);
             }
         }
 
@@ -221,8 +221,8 @@ final class CosmeticHaloRenderer {
         CosmeticAtlasMath.getCellUv(CosmeticAtlasMath.CELL_SPARK, sparkUv);
 
         if (renderSolid) {
-            emitVolumetricTorus(pose, vc, 0.0f, centerY, 0.0f, 0.34f, 0.014f, 24, spin, 0.0f, 0, 245, 212, 248);
-            emitVolumetricTorus(pose, vc, 0.0f, centerY, 0.0f, 0.22f, 0.011f, 24, -spin, 0.0f, 155, 255, 240, 240);
+            emitVolumetricTorus(pose, vc, 0.0f, centerY, 0.0f, 0.34f, 0.014f, 24, spin, 0.0f, 46, 242, 157, 248);
+            emitVolumetricTorus(pose, vc, 0.0f, centerY, 0.0f, 0.22f, 0.011f, 24, -spin, 0.0f, 130, 255, 200, 240);
 
             for (int i = 0; i < 8; i++) {
                 float a0 = spin + (i * TAU) / 8.0f;
@@ -230,13 +230,13 @@ final class CosmeticHaloRenderer {
                 CosmeticGeometryHelper.emit3DBoneSegment(pose, vc, FULL_BRIGHT,
                         Mth.cos(a0) * 0.33f, centerY, Mth.sin(a0) * 0.33f, 0.007f,
                         Mth.cos(a1) * 0.33f, centerY, Mth.sin(a1) * 0.33f, 0.007f,
-                        110, 255, 230, 238);
+                        95, 252, 185, 238);
             }
         }
 
         if (renderGlow) {
-            emitVolumetricTorus(pose, vc, 0.0f, centerY, 0.0f, 0.34f, 0.032f, 24, spin, 0.0f, 35, 255, 225, 92);
-            emitVolumetricTorus(pose, vc, 0.0f, centerY, 0.0f, 0.22f, 0.025f, 24, -spin, 0.0f, 120, 255, 238, 86);
+            emitGlowTorusAura(pose, vc, 0.0f, centerY, 0.0f, 0.34f, 0.014f, 24, spin, 0.0f, 65, 250, 175, 165);
+            emitGlowTorusAura(pose, vc, 0.0f, centerY, 0.0f, 0.22f, 0.011f, 24, -spin, 0.0f, 130, 255, 205, 155);
         }
 
         for (int c = 0; c < 4; c++) {
@@ -245,12 +245,12 @@ final class CosmeticHaloRenderer {
             float cz = Mth.sin(ca) * 0.40f;
             float cy = centerY + Mth.sin(ageTicks * 0.18f + c) * 0.025f;
             if (renderSolid) {
-                CosmeticGeometryHelper.emit3DBoneSegment(pose, vc, FULL_BRIGHT, cx, cy, cz, 0.024f, cx, cy - 0.045f, cz, 0.001f, 0, 245, 212, 255);
-                CosmeticGeometryHelper.emit3DBoneSegment(pose, vc, FULL_BRIGHT, cx, cy, cz, 0.024f, cx, cy + 0.045f, cz, 0.001f, 180, 255, 245, 255);
+                CosmeticGeometryHelper.emit3DBoneSegment(pose, vc, FULL_BRIGHT, cx, cy, cz, 0.024f, cx, cy - 0.045f, cz, 0.001f, 46, 242, 157, 255);
+                CosmeticGeometryHelper.emit3DBoneSegment(pose, vc, FULL_BRIGHT, cx, cy, cz, 0.024f, cx, cy + 0.045f, cz, 0.001f, 165, 255, 215, 255);
             }
             if (renderGlow) {
                 CosmeticGeometryHelper.emitCameraBillboardQuad(pose, vc, FULL_BRIGHT,
-                        cx, cy, cz, 0.072f, 0.0f, orbUv, 75, 255, 232, 130);
+                        cx, cy, cz, 0.072f, 0.0f, orbUv, 82, 255, 185, 130);
             }
         }
         if (renderGlow) {
@@ -258,7 +258,7 @@ final class CosmeticHaloRenderer {
                 float a = -spin * 1.3f + (i * TAU) / 8.0f;
                 float sy = centerY + Mth.sin(ageTicks * 0.20f + i) * 0.032f;
                 emitGlowBillboard(pose, vc, Mth.cos(a) * 0.39f, sy, Mth.sin(a) * 0.39f,
-                        0.040f, ageTicks * 0.09f + i, orbUv, sparkUv, 110, 255, 235, 215);
+                        0.040f, ageTicks * 0.09f + i, orbUv, sparkUv, 110, 255, 198, 215);
             }
         }
     }
@@ -275,7 +275,7 @@ final class CosmeticHaloRenderer {
             emitVolumetricTorus(pose, vc, 0.0f, centerY - 0.02f, 0.0f, 0.21f, 0.012f, 20, -spin, -0.06f, 255, 224, 96, 245);
         }
         if (renderGlow) {
-            emitVolumetricTorus(pose, vc, 0.0f, centerY, 0.0f, 0.28f, 0.040f, 24, spin, 0.06f, 255, 162, 42, 92);
+            emitGlowTorusAura(pose, vc, 0.0f, centerY, 0.0f, 0.28f, 0.019f, 24, spin, 0.06f, 255, 162, 42, 168);
         }
 
         int rays = 12;
@@ -285,10 +285,10 @@ final class CosmeticHaloRenderer {
             float rx = Mth.cos(a) * 0.28f;
             float rz = Mth.sin(a) * 0.28f;
             float ry = centerY + Mth.sin(a) * 0.28f * Mth.sin(0.06f);
-            float outR = major ? 0.43f : 0.36f;
+            float outR = major ? 0.49f : 0.38f;
             float tx = Mth.cos(a) * outR;
             float tz = Mth.sin(a) * outR;
-            float ty = ry - (major ? 0.045f : 0.020f);
+            float ty = ry - (major ? 0.11f : 0.04f);
 
             if (renderSolid) {
                 CosmeticGeometryHelper.emit3DBoneSegment(pose, vc, FULL_BRIGHT,
@@ -314,7 +314,7 @@ final class CosmeticHaloRenderer {
             emitVolumetricTorus(pose, vc, 0.0f, diademY, 0.0f, 0.25f, 0.017f, 20, spin, 0.0f, 155, 232, 255, 252);
         }
         if (renderGlow) {
-            emitVolumetricTorus(pose, vc, 0.0f, diademY, 0.0f, 0.25f, 0.036f, 20, spin, 0.0f, 175, 245, 255, 86);
+            emitGlowTorusAura(pose, vc, 0.0f, diademY, 0.0f, 0.25f, 0.017f, 20, spin, 0.0f, 175, 245, 255, 162);
         }
 
         int spires = 6;
@@ -352,7 +352,7 @@ final class CosmeticHaloRenderer {
             emitVolumetricTorus(pose, vc, 0.0f, ringY, 0.06f, 0.20f, 0.011f, 20, hornSpin, -0.18f, 220, 28, 72, 240);
         }
         if (renderGlow) {
-            emitVolumetricTorus(pose, vc, 0.0f, ringY, 0.06f, 0.20f, 0.025f, 20, hornSpin, -0.18f, 255, 58, 110, 95);
+            emitGlowTorusAura(pose, vc, 0.0f, ringY, 0.06f, 0.20f, 0.011f, 20, hornSpin, -0.18f, 255, 58, 110, 172);
         }
 
         for (int s = -1; s <= 1; s += 2) {
@@ -387,11 +387,12 @@ final class CosmeticHaloRenderer {
         CosmeticAtlasMath.getCellUv(CosmeticAtlasMath.CELL_SPARK, sparkUv);
 
         if (renderSolid) {
-            emitVolumetricTorus(pose, vc, 0.0f, centerY, 0.0f, 0.31f, 0.014f, 6, spin, 0.14f, 0, 240, 255, 252);
-            emitVolumetricTorus(pose, vc, 0.0f, centerY - 0.03f, 0.0f, 0.24f, 0.010f, 6, -spin * 1.2f, -0.10f, 220, 68, 255, 245);
+            emitVolumetricTorus(pose, vc, 0.0f, centerY, 0.0f, 0.32f, 0.015f, 6, spin, 0.42f, 77, 136, 255, 252);
+            emitVolumetricTorus(pose, vc, 0.0f, centerY - 0.02f, 0.0f, 0.26f, 0.012f, 6, -spin * 1.2f, -0.42f, 145, 200, 255, 245);
         }
         if (renderGlow) {
-            emitVolumetricTorus(pose, vc, 0.0f, centerY, 0.0f, 0.31f, 0.030f, 6, spin, 0.14f, 45, 248, 255, 92);
+            emitGlowTorusAura(pose, vc, 0.0f, centerY, 0.0f, 0.32f, 0.015f, 6, spin, 0.42f, 92, 158, 255, 172);
+            emitGlowTorusAura(pose, vc, 0.0f, centerY - 0.02f, 0.0f, 0.26f, 0.012f, 6, -spin * 1.2f, -0.42f, 145, 205, 255, 155);
         }
 
         for (int i = 0; i < 4; i++) {
@@ -404,31 +405,34 @@ final class CosmeticHaloRenderer {
             if (renderSolid) {
                 CosmeticGeometryHelper.emit3DBoneSegment(pose, vc, FULL_BRIGHT,
                         rx, ry, rz, 0.012f, tx, ry - 0.025f, tz, 0.004f,
-                        (i % 2 == 0) ? 0 : 225, (i % 2 == 0) ? 245 : 75, 255, 255);
+                        (i % 2 == 0) ? 77 : 145, (i % 2 == 0) ? 136 : 200, 255, 255);
             }
             if (renderGlow) {
                 emitGlowBillboard(pose, vc, rx, ry, rz, 0.044f, ageTicks * 0.09f + i, orbUv, sparkUv,
-                        (i % 2 == 0) ? 80 : 235, (i % 2 == 0) ? 250 : 95, 255, 225);
+                        (i % 2 == 0) ? 95 : 165, (i % 2 == 0) ? 155 : 215, 255, 225);
             }
         }
     }
 
     private static void renderEclipseHalo(PoseStack.Pose pose, VertexConsumer vc, float centerY, float ageTicks, boolean renderSolid, boolean renderGlow) {
         float spin = ageTicks * 0.028f;
-        float[] diamondUv = HALO_AUX_UV_SCRATCH.get();
+        float[] crescentUv = HALO_AUX_UV_SCRATCH.get();
         float[] orbUv = HALO_ORB_UV_SCRATCH.get();
         float[] sparkUv = HALO_SPARK_UV_SCRATCH.get();
-        CosmeticAtlasMath.getCellUv(CosmeticAtlasMath.CELL_DIAMOND, diamondUv);
+        CosmeticAtlasMath.getCellUv(CosmeticAtlasMath.CELL_CRESCENT, crescentUv);
         CosmeticAtlasMath.getCellUv(CosmeticAtlasMath.CELL_ORB, orbUv);
         CosmeticAtlasMath.getCellUv(CosmeticAtlasMath.CELL_SPARK, sparkUv);
 
         if (renderSolid) {
-            emitVolumetricTorus(pose, vc, 0.0f, centerY, 0.0f, 0.29f, 0.020f, 24, spin, 0.10f, 36, 18, 56, 255);
-            emitVolumetricTorus(pose, vc, 0.0f, centerY - 0.02f, 0.0f, 0.33f, 0.010f, 24, -spin * 1.2f, -0.14f, 255, 215, 110, 248);
+            emitVolumetricTorus(pose, vc, 0.0f, centerY, 0.0f, 0.29f, 0.020f, 24, spin, 0.10f, 22, 18, 30, 255);
+            emitVolumetricTorus(pose, vc, 0.0f, centerY - 0.02f, 0.0f, 0.33f, 0.010f, 24, -spin * 1.2f, -0.14f, 138, 128, 172, 248);
+            CosmeticGeometryHelper.emitCameraBillboardQuad(pose, vc, FULL_BRIGHT,
+                    0.0f, centerY - 0.14f, 0.0f, 0.115f, spin * 0.5f, crescentUv, 152, 142, 186, 255);
         }
         if (renderGlow) {
-            emitVolumetricTorus(pose, vc, 0.0f, centerY, 0.0f, 0.29f, 0.040f, 24, spin, 0.10f, 185, 110, 255, 96);
-            emitVolumetricTorus(pose, vc, 0.0f, centerY - 0.02f, 0.0f, 0.33f, 0.026f, 24, -spin * 1.2f, -0.14f, 255, 225, 130, 86);
+            emitGlowTorusAura(pose, vc, 0.0f, centerY, 0.0f, 0.29f, 0.020f, 24, spin, 0.10f, 96, 86, 130, 165);
+            emitGlowTorusAura(pose, vc, 0.0f, centerY - 0.02f, 0.0f, 0.33f, 0.010f, 24, -spin * 1.2f, -0.14f, 152, 142, 186, 150);
+            emitGlowBillboard(pose, vc, 0.0f, centerY - 0.14f, 0.0f, 0.095f, 0.0f, orbUv, crescentUv, 145, 135, 182, 215);
         }
 
         for (int i = 0; i < 6; i++) {
@@ -436,17 +440,33 @@ final class CosmeticHaloRenderer {
             float rx = Mth.cos(a) * 0.37f;
             float rz = Mth.sin(a) * 0.37f;
             float ry = centerY - 0.02f + Mth.sin(ageTicks * 0.14f + i) * 0.032f;
-            boolean gold = (i % 2 == 0);
+            boolean silver = (i % 2 == 0);
             if (renderSolid) {
                 CosmeticGeometryHelper.emitCameraBillboardQuad(pose, vc, FULL_BRIGHT, rx, ry, rz,
-                        0.048f, ageTicks * 0.06f + i, diamondUv,
-                        gold ? 255 : 195, gold ? 218 : 118, gold ? 115 : 255, 245);
+                        0.048f, ageTicks * 0.06f + i, crescentUv,
+                        silver ? 152 : 42, silver ? 142 : 36, silver ? 186 : 58, 245);
             }
             if (renderGlow) {
                 emitGlowBillboard(pose, vc, rx, ry, rz, 0.046f, ageTicks * 0.08f + i, orbUv, sparkUv,
-                        gold ? 255 : 205, gold ? 225 : 128, gold ? 135 : 255, 215);
+                        silver ? 168 : 96, silver ? 158 : 86, silver ? 202 : 130, 210);
             }
         }
+    }
+
+    private static void emitGlowTorusAura(
+            PoseStack.Pose pose,
+            VertexConsumer vc,
+            float cx, float cy, float cz,
+            float majorR,
+            float baseTubeR,
+            int segments,
+            float spinRad,
+            float tiltRad,
+            int r, int g, int b, int alpha
+    ) {
+        emitVolumetricTorus(pose, vc, cx, cy, cz, majorR, baseTubeR * 2.1f, segments, spinRad, tiltRad, r, g, b, alpha);
+        emitVolumetricTorus(pose, vc, cx, cy, cz, majorR, baseTubeR * 3.3f, segments, spinRad, tiltRad,
+                r, g, b, Math.max(40, Math.round(alpha * 0.48f)));
     }
 
     static void emitGlowBillboard(
@@ -460,11 +480,11 @@ final class CosmeticHaloRenderer {
             int r, int g, int b, int alpha
     ) {
         CosmeticGeometryHelper.emitCameraBillboardQuad(
-                pose, vc, FULL_BRIGHT, x, y, z, halfSize * 1.65f, 0.0f,
-                orbUv, r, g, b, Math.min(255, Math.round(alpha * 0.45f)));
+                pose, vc, FULL_BRIGHT, x, y, z, halfSize * 2.15f, 0.0f,
+                orbUv, r, g, b, Math.min(255, Math.round(alpha * 0.65f)));
         CosmeticGeometryHelper.emitCameraBillboardQuad(
-                pose, vc, FULL_BRIGHT, x, y, z, halfSize, rollRad,
-                spriteUv, Math.min(255, r + 40), Math.min(255, g + 40), Math.min(255, b + 40), alpha);
+                pose, vc, FULL_BRIGHT, x, y, z, halfSize * 1.15f, rollRad,
+                spriteUv, Math.min(255, r + 45), Math.min(255, g + 45), Math.min(255, b + 45), Math.min(255, alpha + 20));
     }
 
     static void emitVolumetricTorus(

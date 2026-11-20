@@ -9,64 +9,77 @@ import java.util.List;
 
 public final class PlayerCosmeticsManager {
     public static final int COUNT_PER_CATEGORY = 10;
+    public static final int TRAIL_COUNT = 10;
     public static final int DEFAULT_ACCENT_RGB = 0xFF55FF;
 
     public static final List<String> WING_NAMES = List.of(
             "None",
-            "Demon Wings",
-            "Eclipse Seraph",
-            "Dragon Wings",
-            "Butterfly Wings",
-            "Cyber Neon",
-            "Frost Crystal",
+            "Crimson Demon",
             "Phoenix Flame",
+            "Golden Valkyrie",
+            "Emerald Runic",
+            "Frost Crystal",
+            "Sapphire Cyber",
             "Void Rift",
             "Sakura Spirit",
-            "Mecha Valkyrie"
+            "Celestial Pearl",
+            "Shadow Obsidian"
     );
 
     public static final List<String> HALO_NAMES = List.of(
             "None",
-            "Angel Ring",
-            "Void Crown",
-            "Starlight",
-            "Sakura Wreath",
-            "Runic Sigil",
+            "Crimson Horns",
             "Solar Flare",
+            "Golden Ring",
+            "Emerald Sigil",
             "Frost Diadem",
-            "Demon Horns",
-            "Cyber Visor",
-            "Eclipse Halo"
+            "Sapphire Orbit",
+            "Void Crown",
+            "Sakura Wreath",
+            "Celestial Halo",
+            "Shadow Eclipse"
     );
 
     public static final List<String> PARTICLE_NAMES = List.of(
             "None",
-            "Arcane Orbs",
-            "Sakura Petals",
-            "Void Flames",
-            "Starlight Sparks",
-            "Musical Notes",
-            "Frost Crystals",
-            "Heart Aura",
-            "Storm Sparks",
+            "Crimson Hearts",
             "Solar Embers",
-            "Emerald Shards"
+            "Golden Notes",
+            "Emerald Shards",
+            "Frost Crystals",
+            "Sapphire Bolts",
+            "Void Flames",
+            "Sakura Petals",
+            "Celestial Stars",
+            "Shadow Orbs"
     );
 
-    private static final int[] WING_DEFAULT_RGB = {
+    public static final List<String> TRAIL_NAMES = List.of(
+            "None",
+            "Crimson Claws",
+            "Flame Steps",
+            "Golden Stars",
+            "Emerald Runes",
+            "Frost Steps",
+            "Sapphire Bolts",
+            "Void Steps",
+            "Sakura Paws",
+            "Celestial Wings",
+            "Shadow Crescents"
+    );
+
+    private static final int[] COLOR_PALETTE_RGB = {
             DEFAULT_ACCENT_RGB,
-            0xE0245E, 0x8A5CFF, 0xFF6B1A, 0x55E6FF, 0xB845FF,
-            0x7DF3FF, 0xFF4E1A, 0xA64DFF, 0xFF7EB6, 0xFFD147
-    };
-    private static final int[] HALO_DEFAULT_RGB = {
-            DEFAULT_ACCENT_RGB,
-            0xFFE66D, 0x9D4EDD, 0x64DFDF, 0xFF85B3, 0x00F5D4,
-            0xFF9F1C, 0x80EDFF, 0xFF2A55, 0x00F0FF, 0xB980FF
-    };
-    private static final int[] PARTICLE_DEFAULT_RGB = {
-            DEFAULT_ACCENT_RGB,
-            0xB86BFF, 0xFF99C8, 0xC04DFF, 0x72F2EB, 0xFF65A3,
-            0x8CF4FF, 0xFF5C93, 0x5CE1FF, 0xFF8C24, 0x2EF29D
+            0xFF2A55, // 1: Crimson (Red)
+            0xFF6B1A, // 2: Flame (Orange)
+            0xFFD147, // 3: Golden (Gold)
+            0x2EF29D, // 4: Emerald (Green)
+            0x66EEFF, // 5: Frost (Cyan)
+            0x4D88FF, // 6: Sapphire (Blue)
+            0xA64DFF, // 7: Void (Purple)
+            0xFF7EB6, // 8: Sakura (Pink)
+            0xF2F7FF, // 9: Celestial (White)
+            0x524B69  // 10: Shadow (Black/Obsidian)
     };
 
     private static final ThreadLocal<int[]> PREVIEW_IGNORE_SIZE_DEPTH = ThreadLocal.withInitial(() -> new int[1]);
@@ -107,6 +120,10 @@ public final class PlayerCosmeticsManager {
         return Math.max(0, Math.min(COUNT_PER_CATEGORY, rawId));
     }
 
+    public static int clampTrailId(int rawId) {
+        return Math.max(0, Math.min(TRAIL_COUNT, rawId));
+    }
+
     public static String getWingName(int id) {
         return WING_NAMES.get(clampId(id));
     }
@@ -120,24 +137,28 @@ public final class PlayerCosmeticsManager {
     }
 
     public static int getWingDefaultRgb(int wingId) {
-        return WING_DEFAULT_RGB[clampId(wingId)];
+        return COLOR_PALETTE_RGB[clampId(wingId)];
     }
 
     public static int getHaloDefaultRgb(int haloId) {
-        return HALO_DEFAULT_RGB[clampId(haloId)];
+        return COLOR_PALETTE_RGB[clampId(haloId)];
     }
 
     public static int getParticleDefaultRgb(int particleId) {
-        return PARTICLE_DEFAULT_RGB[clampId(particleId)];
+        return COLOR_PALETTE_RGB[clampId(particleId)];
+    }
+
+    public static int getTrailDefaultRgb(int trailId) {
+        return COLOR_PALETTE_RGB[clampTrailId(trailId)];
     }
 
     public static int getDefaultAccentRgb(int wingId, int haloId, int particleId) {
         int w = clampId(wingId);
-        if (w > 0) return WING_DEFAULT_RGB[w];
+        if (w > 0) return COLOR_PALETTE_RGB[w];
         int h = clampId(haloId);
-        if (h > 0) return HALO_DEFAULT_RGB[h];
+        if (h > 0) return COLOR_PALETTE_RGB[h];
         int p = clampId(particleId);
-        if (p > 0) return PARTICLE_DEFAULT_RGB[p];
+        if (p > 0) return COLOR_PALETTE_RGB[p];
         return DEFAULT_ACCENT_RGB;
     }
 
@@ -194,33 +215,30 @@ public final class PlayerCosmeticsManager {
         }
         float speedFactor = Math.min(1.5f, Math.max(0.0f, walkSpeed));
         float freq = switch (id) {
-            case 4, 9 -> 0.34f + speedFactor * 0.20f;
-            case 5, 10 -> 0.14f + speedFactor * 0.08f;
-            case 2, 8 -> 0.16f + speedFactor * 0.10f;
-            case 6 -> 0.17f + speedFactor * 0.10f;
-            case 3, 7 -> 0.19f + speedFactor * 0.15f;
-            default -> 0.21f + speedFactor * 0.16f;
+            case 8 -> 0.24f;
+            case 3, 4, 6 -> 0.14f;
+            case 5, 7, 9 -> 0.16f;
+            case 2 -> 0.19f;
+            default -> 0.18f;
         };
         float amp = switch (id) {
-            case 4 -> 0.42f + speedFactor * 0.20f;
-            case 9 -> 0.34f + speedFactor * 0.18f;
-            case 5, 10 -> 0.10f + speedFactor * 0.06f;
-            case 2, 6, 8 -> 0.16f + speedFactor * 0.10f;
-            case 3, 7 -> 0.30f + speedFactor * 0.22f;
-            default -> 0.24f + speedFactor * 0.18f;
+            case 8 -> 0.16f + speedFactor * 0.10f;
+            case 3, 4, 6 -> 0.07f + speedFactor * 0.05f;
+            case 5, 7, 9 -> 0.10f + speedFactor * 0.07f;
+            case 2 -> 0.14f + speedFactor * 0.10f;
+            default -> 0.12f + speedFactor * 0.08f;
         };
         if (fallFlying) {
-            freq *= 0.65f;
-            amp *= 0.45f;
+            amp *= 0.55f;
         } else if (crouching) {
             amp *= 0.72f;
         }
         float sweepBase = switch (id) {
-            case 5, 10 -> 0.32f;
-            case 2, 6, 8 -> 0.38f;
-            case 3, 7 -> 0.48f;
-            default -> 0.42f;
+            case 3, 4, 6 -> 0.38f;
+            case 5, 7, 9 -> 0.42f;
+            default -> 0.44f;
         };
+        sweepBase += speedFactor * 0.10f;
         if (fallFlying) {
             sweepBase += 0.35f;
         }
@@ -229,12 +247,12 @@ public final class PlayerCosmeticsManager {
 
     public static float computeWingTipFoldRad(int wingId, float baseFlapRad, float ageInTicks) {
         int id = clampId(wingId);
-        float lagFreq = (id == 4 || id == 9) ? 0.34f : 0.21f;
+        float lagFreq = (id == 8) ? 0.30f : 0.21f;
         float lagPhase = Mth.sin(ageInTicks * lagFreq - 0.75f);
         return switch (id) {
-            case 5, 10 -> 0.12f + lagPhase * 0.06f;
-            case 2, 6, 8 -> 0.16f + lagPhase * 0.10f;
-            case 4, 9 -> 0.26f + lagPhase * 0.24f;
+            case 3, 4, 6 -> 0.12f + lagPhase * 0.06f;
+            case 5, 7, 9 -> 0.16f + lagPhase * 0.10f;
+            case 8 -> 0.24f + lagPhase * 0.20f;
             default -> 0.24f + Math.max(-0.20f, lagPhase * 0.22f) + (baseFlapRad - 0.4f) * 0.25f;
         };
     }
@@ -244,11 +262,11 @@ public final class PlayerCosmeticsManager {
         if (id == 0) {
             return 0.0f;
         }
-        if (id == 8) {
+        if (id == 1) {
             return Mth.sin(ageInTicks * 0.09f) * 0.008f;
         }
-        float speed = (id == 5 || id == 9 || id == 10) ? 0.16f : 0.11f;
-        float amp = (id == 2 || id == 7) ? 0.022f : 0.032f;
+        float speed = (id == 4 || id == 6 || id == 10) ? 0.16f : 0.11f;
+        float amp = (id == 5 || id == 7) ? 0.022f : 0.032f;
         return Mth.sin(ageInTicks * speed) * amp;
     }
 
@@ -272,61 +290,7 @@ public final class PlayerCosmeticsManager {
         float phase = (float) index / (float) totalCount;
         float tau = (float) (Math.PI * 2.0);
         switch (id) {
-            case 1 -> {
-                float dir = (index % 2 == 0) ? 1.0f : -1.0f;
-                float angle = phase * tau * 2.0f + ageInTicks * 0.10f * dir;
-                float radius = 0.62f + 0.14f * Mth.sin(ageInTicks * 0.12f + index * 1.1f);
-                outXyzAlpha[0] = Mth.cos(angle) * radius;
-                outXyzAlpha[1] = 0.24f + Mth.sin(ageInTicks * 0.09f + phase * tau * 2.0f) * 0.56f;
-                outXyzAlpha[2] = Mth.sin(angle) * radius;
-                outXyzAlpha[3] = 0.88f;
-            }
-            case 2 -> {
-                float fallCycle = (phase + ageInTicks * 0.016f) % 1.0f;
-                float angle = phase * tau * 2.0f + ageInTicks * 0.055f + Mth.sin(ageInTicks * 0.08f + index) * 0.40f;
-                float radius = 0.58f + 0.24f * Mth.sin(fallCycle * (float) Math.PI + index * 0.4f);
-                outXyzAlpha[0] = Mth.cos(angle) * radius;
-                outXyzAlpha[1] = -0.45f + fallCycle * 1.38f;
-                outXyzAlpha[2] = Mth.sin(angle) * radius;
-                outXyzAlpha[3] = Math.max(0.0f, Math.min(1.0f, Mth.sin(fallCycle * (float) Math.PI) * 0.94f));
-            }
-            case 3 -> {
-                float rise = (phase + ageInTicks * 0.024f) % 1.0f;
-                float angle = phase * tau * 3.0f + ageInTicks * 0.12f;
-                float radius = 0.56f + (1.0f - rise) * 0.24f;
-                outXyzAlpha[0] = Mth.cos(angle) * radius;
-                outXyzAlpha[1] = 0.88f - rise * 1.32f;
-                outXyzAlpha[2] = Mth.sin(angle) * radius;
-                outXyzAlpha[3] = Math.max(0.0f, Math.min(1.0f, Mth.sin(rise * (float) Math.PI) * 0.96f));
-            }
-            case 4 -> {
-                float angle = phase * tau * 2.0f + ageInTicks * 0.075f;
-                float pulse = 0.5f + 0.5f * Mth.sin(ageInTicks * 0.24f + index * 1.7f);
-                float radius = 0.64f + 0.18f * Mth.cos(phase * tau * 3.0f + ageInTicks * 0.05f);
-                outXyzAlpha[0] = Mth.cos(angle) * radius;
-                outXyzAlpha[1] = 0.20f + 0.58f * Mth.sin(phase * tau * 4.0f + ageInTicks * 0.065f);
-                outXyzAlpha[2] = Mth.sin(angle) * radius;
-                outXyzAlpha[3] = 0.30f + 0.70f * pulse;
-            }
-            case 5 -> {
-                float beat = (phase + ageInTicks * 0.015f) % 1.0f;
-                float angle = phase * tau * 2.0f + ageInTicks * 0.085f;
-                float radius = 0.64f + 0.12f * Mth.sin(phase * tau * 3.0f + ageInTicks * 0.1f);
-                outXyzAlpha[0] = Mth.cos(angle) * radius;
-                outXyzAlpha[1] = 0.80f - beat * 1.22f + Mth.abs(Mth.sin(ageInTicks * 0.20f + index)) * 0.07f;
-                outXyzAlpha[2] = Mth.sin(angle) * radius;
-                outXyzAlpha[3] = Math.max(0.0f, Math.min(1.0f, Mth.sin(beat * (float) Math.PI) * 0.95f));
-            }
-            case 6 -> {
-                float fallCycle = (phase + ageInTicks * 0.014f) % 1.0f;
-                float angle = phase * tau * 2.0f - ageInTicks * 0.048f + Mth.cos(ageInTicks * 0.07f + index) * 0.32f;
-                float radius = 0.60f + 0.20f * Mth.cos(fallCycle * (float) Math.PI + index * 0.6f);
-                outXyzAlpha[0] = Mth.cos(angle) * radius;
-                outXyzAlpha[1] = -0.48f + fallCycle * 1.42f;
-                outXyzAlpha[2] = Mth.sin(angle) * radius;
-                outXyzAlpha[3] = Math.max(0.0f, Math.min(1.0f, Mth.sin(fallCycle * (float) Math.PI) * 0.95f));
-            }
-            case 7 -> {
+            case 1 -> { // Crimson Hearts: rising crimson hearts
                 float rise = (phase + ageInTicks * 0.015f) % 1.0f;
                 float angle = phase * tau * 2.0f + ageInTicks * 0.055f;
                 float sway = Mth.sin(ageInTicks * 0.14f + index * 1.3f) * 0.10f;
@@ -336,7 +300,44 @@ public final class PlayerCosmeticsManager {
                 outXyzAlpha[2] = Mth.sin(angle) * radius;
                 outXyzAlpha[3] = Math.max(0.0f, Math.min(1.0f, Mth.sin(rise * (float) Math.PI) * 0.96f));
             }
-            case 8 -> {
+            case 2 -> { // Solar Embers: rising orange flame embers
+                float rise = (phase + ageInTicks * 0.022f) % 1.0f;
+                float angle = phase * tau * 2.0f + ageInTicks * 0.10f;
+                float radius = 0.52f + rise * 0.28f;
+                outXyzAlpha[0] = Mth.cos(angle) * radius;
+                outXyzAlpha[1] = 0.86f - rise * 1.36f;
+                outXyzAlpha[2] = Mth.sin(angle) * radius;
+                outXyzAlpha[3] = Math.max(0.0f, Math.min(1.0f, Mth.sin(rise * (float) Math.PI) * 0.96f));
+            }
+            case 3 -> { // Golden Notes: soaring golden melody
+                float beat = (phase + ageInTicks * 0.015f) % 1.0f;
+                float angle = phase * tau * 2.0f + ageInTicks * 0.085f;
+                float radius = 0.64f + 0.12f * Mth.sin(phase * tau * 3.0f + ageInTicks * 0.1f);
+                outXyzAlpha[0] = Mth.cos(angle) * radius;
+                outXyzAlpha[1] = 0.80f - beat * 1.22f + Mth.abs(Mth.sin(ageInTicks * 0.20f + index)) * 0.07f;
+                outXyzAlpha[2] = Mth.sin(angle) * radius;
+                outXyzAlpha[3] = Math.max(0.0f, Math.min(1.0f, Mth.sin(beat * (float) Math.PI) * 0.95f));
+            }
+            case 4 -> { // Emerald Shards: tilted dual-ring crystal orbit
+                boolean upperRing = (index % 2 == 0);
+                float angle = phase * tau * 2.0f + ageInTicks * (upperRing ? 0.09f : -0.075f);
+                float radius = upperRing ? 0.66f : 0.58f;
+                float tiltY = Mth.sin(angle + (upperRing ? 0.4f : -0.6f)) * 0.38f;
+                outXyzAlpha[0] = Mth.cos(angle) * radius;
+                outXyzAlpha[1] = (upperRing ? 0.06f : 0.46f) + tiltY;
+                outXyzAlpha[2] = Mth.sin(angle) * radius;
+                outXyzAlpha[3] = 0.84f + 0.14f * Mth.sin(ageInTicks * 0.18f + index);
+            }
+            case 5 -> { // Frost Crystals: gentle falling snowfall spiral
+                float fallCycle = (phase + ageInTicks * 0.014f) % 1.0f;
+                float angle = phase * tau * 2.0f - ageInTicks * 0.048f + Mth.cos(ageInTicks * 0.07f + index) * 0.32f;
+                float radius = 0.60f + 0.20f * Mth.cos(fallCycle * (float) Math.PI + index * 0.6f);
+                outXyzAlpha[0] = Mth.cos(angle) * radius;
+                outXyzAlpha[1] = -0.48f + fallCycle * 1.42f;
+                outXyzAlpha[2] = Mth.sin(angle) * radius;
+                outXyzAlpha[3] = Math.max(0.0f, Math.min(1.0f, Mth.sin(fallCycle * (float) Math.PI) * 0.95f));
+            }
+            case 6 -> { // Sapphire Bolts: brisk crackling lightning orbit
                 float dir = (index % 2 == 0) ? 1.0f : -1.0f;
                 float jitter = Mth.sin(ageInTicks * 0.45f + index * 2.3f) * 0.24f;
                 float angle = phase * tau * 3.0f + ageInTicks * 0.15f * dir + jitter;
@@ -346,24 +347,41 @@ public final class PlayerCosmeticsManager {
                 outXyzAlpha[2] = Mth.sin(angle) * radius;
                 outXyzAlpha[3] = 0.45f + 0.55f * (0.5f + 0.5f * Mth.sin(ageInTicks * 0.40f + index * 2.1f));
             }
-            case 9 -> {
-                float rise = (phase + ageInTicks * 0.022f) % 1.0f;
-                float angle = phase * tau * 2.0f + ageInTicks * 0.10f;
-                float radius = 0.52f + rise * 0.28f;
+            case 7 -> { // Void Flames: rising violet wisps
+                float rise = (phase + ageInTicks * 0.024f) % 1.0f;
+                float angle = phase * tau * 3.0f + ageInTicks * 0.12f;
+                float radius = 0.56f + (1.0f - rise) * 0.24f;
                 outXyzAlpha[0] = Mth.cos(angle) * radius;
-                outXyzAlpha[1] = 0.86f - rise * 1.36f;
+                outXyzAlpha[1] = 0.88f - rise * 1.32f;
                 outXyzAlpha[2] = Mth.sin(angle) * radius;
                 outXyzAlpha[3] = Math.max(0.0f, Math.min(1.0f, Mth.sin(rise * (float) Math.PI) * 0.96f));
             }
-            case 10 -> {
-                boolean upperRing = (index % 2 == 0);
-                float angle = phase * tau * 2.0f + ageInTicks * (upperRing ? 0.09f : -0.075f);
-                float radius = upperRing ? 0.66f : 0.58f;
-                float tiltY = Mth.sin(angle + (upperRing ? 0.4f : -0.6f)) * 0.38f;
+            case 8 -> { // Sakura Petals: falling blossom curtain
+                float fallCycle = (phase + ageInTicks * 0.016f) % 1.0f;
+                float angle = phase * tau * 2.0f + ageInTicks * 0.055f + Mth.sin(ageInTicks * 0.08f + index) * 0.40f;
+                float radius = 0.58f + 0.24f * Mth.sin(fallCycle * (float) Math.PI + index * 0.4f);
                 outXyzAlpha[0] = Mth.cos(angle) * radius;
-                outXyzAlpha[1] = (upperRing ? 0.06f : 0.46f) + tiltY;
+                outXyzAlpha[1] = -0.45f + fallCycle * 1.38f;
                 outXyzAlpha[2] = Mth.sin(angle) * radius;
-                outXyzAlpha[3] = 0.84f + 0.14f * Mth.sin(ageInTicks * 0.18f + index);
+                outXyzAlpha[3] = Math.max(0.0f, Math.min(1.0f, Mth.sin(fallCycle * (float) Math.PI) * 0.94f));
+            }
+            case 9 -> { // Celestial Stars: radiant pearl constellation
+                float angle = phase * tau * 2.0f + ageInTicks * 0.075f;
+                float pulse = 0.5f + 0.5f * Mth.sin(ageInTicks * 0.24f + index * 1.7f);
+                float radius = 0.64f + 0.18f * Mth.cos(phase * tau * 3.0f + ageInTicks * 0.05f);
+                outXyzAlpha[0] = Mth.cos(angle) * radius;
+                outXyzAlpha[1] = 0.20f + 0.58f * Mth.sin(phase * tau * 4.0f + ageInTicks * 0.065f);
+                outXyzAlpha[2] = Mth.sin(angle) * radius;
+                outXyzAlpha[3] = 0.35f + 0.65f * pulse;
+            }
+            case 10 -> { // Shadow Orbs: dark double-helix obsidian wisps
+                float dir = (index % 2 == 0) ? 1.0f : -1.0f;
+                float angle = phase * tau * 2.0f + ageInTicks * 0.10f * dir;
+                float radius = 0.62f + 0.14f * Mth.sin(ageInTicks * 0.12f + index * 1.1f);
+                outXyzAlpha[0] = Mth.cos(angle) * radius;
+                outXyzAlpha[1] = 0.24f + Mth.sin(ageInTicks * 0.09f + phase * tau * 2.0f) * 0.56f;
+                outXyzAlpha[2] = Mth.sin(angle) * radius;
+                outXyzAlpha[3] = 0.92f;
             }
             default -> {
                 outXyzAlpha[0] = 0.0f;

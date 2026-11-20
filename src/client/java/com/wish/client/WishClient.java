@@ -8,6 +8,7 @@ import com.wish.client.features.FunChatCommands;
 import com.wish.client.features.GhostBlockManager;
 import com.wish.client.features.JerryModeManager;
 import com.wish.client.features.MineshaftPortalManager;
+import com.wish.client.features.MiningAbilityManager;
 import com.wish.client.features.PrecursorCityLocator;
 import com.wish.client.features.SkyblockDetector;
 import com.wish.client.features.SlayerCarryManager;
@@ -68,6 +69,7 @@ public class WishClient implements ClientModInitializer {
 			PrecursorCityLocator.onClientTick(mc);
 			AutomatonManager.onClientTick(mc);
 			MineshaftPortalManager.onClientTick(mc);
+			MiningAbilityManager.onClientTick(mc);
 			CatPawTrailManager.onClientTick(mc);
 			com.wish.client.color.CustomPlayerManager.onClientTick();
 			com.wish.client.features.cosmetic.CosmeticSyncManager.onClientTick(mc);
@@ -99,6 +101,7 @@ public class WishClient implements ClientModInitializer {
 			SkyblockDetector.reset();
 			AutomatonManager.onDisconnect();
 			MineshaftPortalManager.reset();
+			MiningAbilityManager.reset();
 			PrecursorCityLocator.reset();
 			SlayerCarryManager.reset();
 			com.wish.client.features.SlayerOwnBossTracker.INSTANCE.reset();
@@ -158,6 +161,7 @@ public class WishClient implements ClientModInitializer {
 			if (text != null && !text.contains("[Wish]")) {
 				DungeonLagTracker.onChatMessage(text);
 				SlayerCarryManager.onChatMessage(text);
+				MiningAbilityManager.onChatMessage(text);
 				if (ModConfig.INSTANCE.enableMiningAutomaton) {
 					AutomatonManager.onChatMessage(message);
 					if (ModConfig.INSTANCE.enablePrecursorCityScanner) {
@@ -173,6 +177,7 @@ public class WishClient implements ClientModInitializer {
 			if (text != null && !text.contains("[Wish]")) {
 				DungeonLagTracker.onChatMessage(text);
 				SlayerCarryManager.onChatMessage(text);
+				MiningAbilityManager.onChatMessage(text);
 				if (ModConfig.INSTANCE.enableMiningAutomaton) {
 					AutomatonManager.onChatMessage(message);
 					if (ModConfig.INSTANCE.enablePrecursorCityScanner) {

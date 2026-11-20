@@ -103,13 +103,19 @@ class CosmeticPreviewRendererTest {
                 atlasAbgr[y * CosmeticAtlasMath.ATLAS_WIDTH + x] = CosmeticAtlasMath.sampleAtlasPixelAbgr(x, y);
             }
         }
+        int[] wingAtlasAbgr = new int[CosmeticWingAtlasMath.ATLAS_WIDTH * CosmeticWingAtlasMath.ATLAS_HEIGHT];
+        for (int y = 0; y < CosmeticWingAtlasMath.ATLAS_HEIGHT; y++) {
+            for (int x = 0; x < CosmeticWingAtlasMath.ATLAS_WIDTH; x++) {
+                wingAtlasAbgr[y * CosmeticWingAtlasMath.ATLAS_WIDTH + x] = CosmeticWingAtlasMath.sampleWingAtlasAbgr(x, y);
+            }
+        }
 
         Path outDir = Path.of("build", "cosmetic-previews");
         Files.createDirectories(outDir);
 
-        BufferedImage wingsSheet = renderCategoryGrid("WINGS (10 Models - Back 3/4 View)", PlayerCosmeticsManager.WING_NAMES, 0, atlasAbgr);
-        BufferedImage halosSheet = renderCategoryGrid("HALOS (10 Models - Front 3/4 View)", PlayerCosmeticsManager.HALO_NAMES, 1, atlasAbgr);
-        BufferedImage particlesSheet = renderCategoryGrid("PARTICLES (10 Models - Front 3/4 View)", PlayerCosmeticsManager.PARTICLE_NAMES, 2, atlasAbgr);
+        BufferedImage wingsSheet = renderCategoryGrid("WINGS (10 Models - Back 3/4 View)", PlayerCosmeticsManager.WING_NAMES, 0, atlasAbgr, wingAtlasAbgr);
+        BufferedImage halosSheet = renderCategoryGrid("HALOS (10 Models - Front 3/4 View)", PlayerCosmeticsManager.HALO_NAMES, 1, atlasAbgr, wingAtlasAbgr);
+        BufferedImage particlesSheet = renderCategoryGrid("PARTICLES (10 Models - Front 3/4 View)", PlayerCosmeticsManager.PARTICLE_NAMES, 2, atlasAbgr, wingAtlasAbgr);
 
         ImageIO.write(wingsSheet, "png", outDir.resolve("wings_preview.png").toFile());
         ImageIO.write(halosSheet, "png", outDir.resolve("halos_preview.png").toFile());
@@ -128,7 +134,7 @@ class CosmeticPreviewRendererTest {
         ImageIO.write(combined, "png", outDir.resolve("cosmetics_preview.png").toFile());
     }
 
-    private static BufferedImage renderCategoryGrid(String rowHeader, List<String> names, int kind, int[] atlasAbgr) {
+    private static BufferedImage renderCategoryGrid(String rowHeader, List<String> names, int kind, int[] atlasAbgr, int[] wingAtlasAbgr) {
         int count = PlayerCosmeticsManager.COUNT_PER_CATEGORY;
         int rows = (count + COLS - 1) / COLS;
         int pad = 12;
@@ -149,14 +155,14 @@ class CosmeticPreviewRendererTest {
             int row = (id - 1) / COLS;
             int cx = pad + col * (CARD_W + pad);
             int cy = headerH + pad + row * (CARD_H + pad);
-            BufferedImage card = renderSingleCard(names.get(id), kind, id, atlasAbgr);
+            BufferedImage card = renderSingleCard(names.get(id), kind, id, atlasAbgr, wingAtlasAbgr);
             g.drawImage(card, cx, cy, null);
         }
         g.dispose();
         return sheet;
     }
 
-    private static BufferedImage renderSingleCard(String title, int kind, int id, int[] atlasAbgr) {
+    private static BufferedImage renderSingleCard(String title, int kind, int id, int[] atlasAbgr, int[] wingAtlasAbgr) {
         BufferedImage img = new BufferedImage(CARD_W, CARD_H, BufferedImage.TYPE_INT_ARGB);
         float[] zBuf = new float[CARD_W * CARD_H];
         Arrays.fill(zBuf, Float.NEGATIVE_INFINITY);
@@ -194,8 +200,11 @@ class CosmeticPreviewRendererTest {
             CosmeticHaloParticleRenderer.renderParticles(cosPose.last(), glowVc, id, ageTicks);
         }
 
-        int solidPixels = rasterizeQuads(img, zBuf, solidVc.vertices, atlasAbgr, true, true);
-        int glowPixels = rasterizeQuads(img, zBuf, glowVc.vertices, atlasAbgr, true, false);
+        int[] solidTex = (kind == 0) ? wingAtlasAbgr : atlasAbgr;
+        int solidW = (kind == 0) ? CosmeticWingAtlasMath.ATLAS_WIDTH : CosmeticAtlasMath.ATLAS_WIDTH;
+        int solidH = (kind == 0) ? CosmeticWingAtlasMath.ATLAS_HEIGHT : CosmeticAtlasMath.ATLAS_HEIGHT;
+        int solidPixels = rasterizeQuads(img, zBuf, solidVc.vertices, solidTex, solidW, solidH, true, true);
+        int glowPixels = rasterizeQuads(img, zBuf, glowVc.vertices, atlasAbgr, CosmeticAtlasMath.ATLAS_WIDTH, CosmeticAtlasMath.ATLAS_HEIGHT, true, false);
         int renderedPixels = solidPixels + glowPixels;
         assertTrue(renderedPixels > 80,
                 "Cosmetic kind=" + kind + " id=" + id + " (" + title + ") must render visible pixels, got " + renderedPixels);
@@ -251,14 +260,27 @@ class CosmeticPreviewRendererTest {
             boolean alphaBlend,
             boolean writeDepth
     ) {
+        return rasterizeQuads(img, zBuf, verts, atlasAbgr, CosmeticAtlasMath.ATLAS_WIDTH, CosmeticAtlasMath.ATLAS_HEIGHT, alphaBlend, writeDepth);
+    }
+
+    private static int rasterizeQuads(
+            BufferedImage img,
+            float[] zBuf,
+            List<VertexData> verts,
+            int[] atlasAbgr,
+            int atlasW,
+            int atlasH,
+            boolean alphaBlend,
+            boolean writeDepth
+    ) {
         int drawn = 0;
         for (int i = 0; i + 3 < verts.size(); i += 4) {
             VertexData v0 = verts.get(i);
             VertexData v1 = verts.get(i + 1);
             VertexData v2 = verts.get(i + 2);
             VertexData v3 = verts.get(i + 3);
-            drawn += rasterizeTri(img, zBuf, v0, v1, v2, atlasAbgr, alphaBlend, writeDepth);
-            drawn += rasterizeTri(img, zBuf, v0, v2, v3, atlasAbgr, alphaBlend, writeDepth);
+            drawn += rasterizeTri(img, zBuf, v0, v1, v2, atlasAbgr, atlasW, atlasH, alphaBlend, writeDepth);
+            drawn += rasterizeTri(img, zBuf, v0, v2, v3, atlasAbgr, atlasW, atlasH, alphaBlend, writeDepth);
         }
         return drawn;
     }
@@ -270,6 +292,8 @@ class CosmeticPreviewRendererTest {
             VertexData b,
             VertexData c,
             int[] atlasAbgr,
+            int atlasW,
+            int atlasH,
             boolean alphaBlend,
             boolean writeDepth
     ) {
@@ -299,9 +323,9 @@ class CosmeticPreviewRendererTest {
                 }
                 float u = Math.max(0.0f, Math.min(0.9999f, w0 * a.u + w1 * b.u + w2 * c.u));
                 float v = Math.max(0.0f, Math.min(0.9999f, w0 * a.v + w1 * b.v + w2 * c.v));
-                int tx = (int) (u * CosmeticAtlasMath.ATLAS_WIDTH);
-                int ty = (int) (v * CosmeticAtlasMath.ATLAS_HEIGHT);
-                int texAbgr = atlasAbgr[ty * CosmeticAtlasMath.ATLAS_WIDTH + tx];
+                int tx = (int) (u * atlasW);
+                int ty = (int) (v * atlasH);
+                int texAbgr = atlasAbgr[ty * atlasW + tx];
                 int texA = (texAbgr >>> 24) & 0xFF;
                 int texR = texAbgr & 0xFF;
                 int texG = (texAbgr >>> 8) & 0xFF;

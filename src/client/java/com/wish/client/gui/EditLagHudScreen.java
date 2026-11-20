@@ -15,6 +15,9 @@ public class EditLagHudScreen extends Screen {
     private int dragOffsetX = 0;
     private int dragOffsetY = 0;
     private static final String MOCK_TEXT = "1000ms";
+    private static final String MOCK_MINING_ABILITY_PREFIX = "\u26CF Speed Boost: ";
+    private static final String MOCK_MINING_ABILITY_STATUS = "84s Cooldown";
+    private static final String MOCK_MINING_ABILITY_TEXT = MOCK_MINING_ABILITY_PREFIX + MOCK_MINING_ABILITY_STATUS;
     private static final String MOCK_BOSS_OWNER = "Player";
     private static final String[] MOCK_AUTO_LINES = {
         "Automaton Tracker",
@@ -61,8 +64,47 @@ public class EditLagHudScreen extends Screen {
         g.text(font, hint, (this.width - hintW) / 2, 20, 0xFFFFFF);
 
         renderHudBox(g, font, mx, my, ModConfig.INSTANCE.lagHudX, ModConfig.INSTANCE.lagHudY, ModConfig.INSTANCE.lagHudScale, MOCK_TEXT, 0);
+        renderMiningHudBox(g, font, mx, my, ModConfig.INSTANCE.miningAbilityHudX, ModConfig.INSTANCE.miningAbilityHudY, ModConfig.INSTANCE.miningAbilityHudScale);
         renderAutoHudBox(g, font, mx, my, ModConfig.INSTANCE.automatonHudX, ModConfig.INSTANCE.automatonHudY, ModConfig.INSTANCE.automatonHudScale);
         renderBossHudBox(g, font, mx, my, ModConfig.INSTANCE.bossHudX, ModConfig.INSTANCE.bossHudY, ModConfig.INSTANCE.bossHudScale);
+    }
+
+    private void renderMiningHudBox(GuiGraphicsExtractor g, net.minecraft.client.gui.Font font, int mx, int my, int x, int y, float scale) {
+        if (scale <= 0.1f) scale = 1.0f;
+        int padX = 4;
+        int padY = 3;
+        int w1 = font.width(HudStateContainer.MINING_ABILITY_HEADER);
+        int w2 = font.width(MOCK_MINING_ABILITY_TEXT);
+        int cardW = Math.max(w1, w2) + padX * 2;
+        int cardH = font.lineHeight * 2 + 2 + padY * 2;
+        int boxW = (int) (cardW * scale);
+        int boxH = (int) (cardH * scale);
+
+        boolean hovering = mx >= x - 2 && mx <= x + boxW + 2 && my >= y - 2 && my <= y + boxH + 2;
+        if (hovering || draggingId == 4) {
+            int colHudGuide = 0x33AAAAAA;
+            g.fill(x, 0, x + 1, g.guiHeight(), colHudGuide);
+            g.fill(x + boxW, 0, x + boxW + 1, g.guiHeight(), colHudGuide);
+            g.fill(0, y, g.guiWidth(), y + 1, colHudGuide);
+            g.fill(0, y + boxH, g.guiWidth(), y + boxH + 1, colHudGuide);
+            g.fill(x - 2, y - 2, x + boxW + 2, y + boxH + 2, 0x44FFFFFF);
+        }
+
+        g.pose().pushMatrix();
+        g.pose().translate(x, y);
+        g.pose().scale(scale, scale);
+
+        g.text(font, HudStateContainer.MINING_ABILITY_HEADER, padX, padY, 0xFFFFFFFF);
+        int statusX = padX + font.width(MOCK_MINING_ABILITY_PREFIX);
+        g.text(font, MOCK_MINING_ABILITY_PREFIX, padX, padY + font.lineHeight + 2, 0xFFFFFFFF);
+        g.text(font, MOCK_MINING_ABILITY_STATUS, statusX, padY + font.lineHeight + 2, 0xFFFF5555);
+
+        g.pose().popMatrix();
+
+        if (hovering || draggingId == 4) {
+            String scaleHint = String.format(java.util.Locale.US, "Scale: %.1fx", scale);
+            g.text(font, scaleHint, x, y + boxH + 4, 0xFFAAAAAA);
+        }
     }
 
     private void renderBossHudBox(GuiGraphicsExtractor g, net.minecraft.client.gui.Font font, int mx, int my, int x, int y, float scale) {
@@ -190,6 +232,7 @@ public class EditLagHudScreen extends Screen {
                 if (hoveredId == 0) scale = ModConfig.INSTANCE.lagHudScale;
                 else if (hoveredId == 2) scale = ModConfig.INSTANCE.automatonHudScale;
                 else if (hoveredId == 3) scale = ModConfig.INSTANCE.bossHudScale;
+                else if (hoveredId == 4) scale = ModConfig.INSTANCE.miningAbilityHudScale;
 
                 if (scale <= 0.1f) scale = 1.0f;
                 scale += (scrollY > 0) ? 0.1f : -0.1f;
@@ -200,6 +243,7 @@ public class EditLagHudScreen extends Screen {
                 if (hoveredId == 0) ModConfig.INSTANCE.lagHudScale = scale;
                 else if (hoveredId == 2) ModConfig.INSTANCE.automatonHudScale = scale;
                 else if (hoveredId == 3) ModConfig.INSTANCE.bossHudScale = scale;
+                else if (hoveredId == 4) ModConfig.INSTANCE.miningAbilityHudScale = scale;
 
                 return true;
             }
@@ -221,6 +265,12 @@ public class EditLagHudScreen extends Screen {
         int autoW = (int)((maxW2 + 4) * s2);
         int autoH = (int)((MOCK_AUTO_LINES.length * font.lineHeight + (MOCK_AUTO_LINES.length - 1)) * s2);
         if (mx >= x2 - 2 && mx <= x2 + autoW + 2 && my >= y2 - 2 && my <= y2 + autoH + 2) return 2;
+
+        float s4 = ModConfig.INSTANCE.miningAbilityHudScale; if (s4 <= 0.1f) s4 = 1.0f;
+        int x4 = ModConfig.INSTANCE.miningAbilityHudX; int y4 = ModConfig.INSTANCE.miningAbilityHudY;
+        int miningW = (int) ((Math.max(font.width(HudStateContainer.MINING_ABILITY_HEADER), font.width(MOCK_MINING_ABILITY_TEXT)) + 8) * s4);
+        int miningH = (int) ((font.lineHeight * 2 + 8) * s4);
+        if (mx >= x4 - 2 && mx <= x4 + miningW + 2 && my >= y4 - 2 && my <= y4 + miningH + 2) return 4;
 
         float s0 = ModConfig.INSTANCE.lagHudScale; if (s0 <= 0.1f) s0 = 1.0f;
         int x0 = ModConfig.INSTANCE.lagHudX; int y0 = ModConfig.INSTANCE.lagHudY;
@@ -248,6 +298,7 @@ public class EditLagHudScreen extends Screen {
             if (hoveredId == 0) { x = ModConfig.INSTANCE.lagHudX; y = ModConfig.INSTANCE.lagHudY; }
             else if (hoveredId == 2) { x = ModConfig.INSTANCE.automatonHudX; y = ModConfig.INSTANCE.automatonHudY; }
             else if (hoveredId == 3) { x = ModConfig.INSTANCE.bossHudX; y = ModConfig.INSTANCE.bossHudY; }
+            else if (hoveredId == 4) { x = ModConfig.INSTANCE.miningAbilityHudX; y = ModConfig.INSTANCE.miningAbilityHudY; }
             dragOffsetX = (int) (mx - x);
             dragOffsetY = (int) (my - y);
             return true;
@@ -270,6 +321,9 @@ public class EditLagHudScreen extends Screen {
             } else if (draggingId == 3) {
                 ModConfig.INSTANCE.bossHudX = (int) (mx - dragOffsetX);
                 ModConfig.INSTANCE.bossHudY = (int) (my - dragOffsetY);
+            } else if (draggingId == 4) {
+                ModConfig.INSTANCE.miningAbilityHudX = (int) (mx - dragOffsetX);
+                ModConfig.INSTANCE.miningAbilityHudY = (int) (my - dragOffsetY);
             }
             return true;
         }
